@@ -131,7 +131,7 @@ tbody tr:hover{background:#fafbfe}
       <a href="#/query">订单</a>
       <a href="#/member">会员</a>
       <a href="#/admin">管理</a>
-      <a id="nav-tg" class="tg-btn" href="https://t.me/U345666" target="_blank" rel="noopener">
+      <a id="nav-tg" class="tg-btn hidden" href="#" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
         客服
       </a>
@@ -139,9 +139,9 @@ tbody tr:hover{background:#fafbfe}
   </div>
 </header>
 
-<main id="app"><div class="loading">加载中…</div></main>
+<main id="app"><div class="loading">正在同步数据…</div></main>
 
-<a id="float-tg" class="tg-float" href="https://t.me/U345666" target="_blank" rel="noopener" title="Telegram 客服">
+<a id="float-tg" class="tg-float hidden" href="#" target="_blank" rel="noopener" title="Telegram 客服">
   <svg viewBox="0 0 24 24"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
 </a>
 
@@ -150,7 +150,7 @@ tbody tr:hover{background:#fafbfe}
 
 <script>
 /* ==================================================================
-   云发卡 v7：管理密码可修改 + 多设备同步
+   云发卡 v8：管理密码可修改 + Cloudflare KV 同步
    ================================================================== */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -182,7 +182,6 @@ function fallbackCopy(text, cb) {
   document.body.removeChild(ta);
 }
 
-/* 密码哈希（前端演示级） */
 function hashPwd(pwd) {
   const salt = 'yfk2024salt';
   const str = salt + '::' + pwd + '::' + salt;
@@ -195,8 +194,8 @@ function hashPwd(pwd) {
   return h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
 }
 
-/* ---------------- 数据层（同步补丁会覆盖 loadDB/saveDB） ---------------- */
-const STORE_KEY = 'yunfaka_db_v7';
+/* ---------------- 数据层 ---------------- */
+const STORE_KEY = 'yunfaka_db_v8';
 const MY_KEY = 'yunfaka_my_orders';
 const MEMBER_KEY = 'yunfaka_member_user';
 const LS_SECRET = 'yunfaka_last_secret';
@@ -220,7 +219,7 @@ function genRechargeId() { return 'R'+Date.now()+Math.floor(Math.random()*900+10
 
 const DEFAULT_CONFIG = {
   site_name:'云发卡', tg_username:'U345666',
-  admin_pwd_hash: hashPwd('admin888'),   // ← 管理密码（默认 admin888，可在后台修改）
+  admin_pwd_hash: hashPwd('admin888'),
   pay_alipay_enabled:true, pay_alipay_qr:'',
   pay_alipay_note:'请使用支付宝扫码支付，支付后点击下方按钮',
   pay_usdt_enabled:true,
@@ -273,12 +272,10 @@ function loadDB() {
 function saveDB(db) { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
 function getConfig(db) { return db.config || DEFAULT_CONFIG; }
 
-/* 管理密码读取 */
 function getAdminPwdHash(db) {
   const cfg = db.config || {};
   return cfg.admin_pwd_hash || DEFAULT_CONFIG.admin_pwd_hash;
 }
-
 function stockOf(db, pid) { return db.cards.filter(c=>c.product_id===pid && c.status==='unused').length; }
 
 function saveMyOrder(no, secret) {
@@ -1111,7 +1108,7 @@ function renderStats() {
     </div>
     <div class="card panel" style="margin-top:20px">
       <h2>数据管理</h2>
-      <p class="muted" style="font-size:13px;margin-top:-8px">重置将清空所有商品、分类、卡密、订单、会员数据（服务器端同步数据也会重置）。</p>
+      <p class="muted" style="font-size:13px;margin-top:-8px">重置将清空所有商品、分类、卡密、订单、会员数据（云端数据也会重置）。</p>
       <button class="btn danger" onclick="resetData()">重置为演示数据</button>
     </div>`;
 }
@@ -1529,7 +1526,6 @@ function deleteMember(username) {
   renderMembers();
 }
 
-/* ---------------- 设置（含管理密码修改） ---------------- */
 function renderSettings() {
   const db = loadDB();
   const cfg = getConfig(db);
@@ -1663,7 +1659,6 @@ function saveSettings() {
   renderSettings();
 }
 
-/* 暴露给内联事件 */
 Object.assign(window, {
   closeModal, copyText, toast,
   setHomeCategory, openBuy, submitBuy, doQuery,
@@ -1681,7 +1676,7 @@ Object.assign(window, {
 });
 </script>
 
-<!-- ================= 多设备同步补丁 ================= -->
+<!-- ================= 多设备同步补丁（已修复刷新） ================= -->
 <script>
 (function () {
   const API = '/api/state';
@@ -1701,12 +1696,14 @@ Object.assign(window, {
   const _saveDB = window.saveDB;
   const _route  = window.route;
 
+  // 修复：数据就绪后，先刷新站点配置（品牌名+客服按钮），再渲染路由
   window.route = function () {
     if (!window.__ready) {
       const app = document.getElementById('app');
       if (app) app.innerHTML = '<div class="loading">正在同步数据…</div>';
       return;
     }
+    if (typeof applySiteConfig === 'function') applySiteConfig();
     return _route.apply(this, arguments);
   };
 
@@ -1733,7 +1730,7 @@ Object.assign(window, {
       if (r.status === 409) {
         const d = await r.json();
         rev = d.rev; window.__DB = d.db;
-        _route.call(window);
+        window.route();
         toast('检测到其他设备的修改，已同步最新数据','error');
       } else {
         const d = await r.json();
@@ -1755,7 +1752,7 @@ Object.assign(window, {
         window.__DB = local;
         window.saveDB(local);
         window.__ready = true;
-        _route.call(window);
+        window.route();
         return;
       }
 
@@ -1763,17 +1760,17 @@ Object.assign(window, {
       if (d.rev !== rev) {
         rev = d.rev; window.__DB = d.db;
         if (first) window.__ready = true;
-        _route.call(window);
+        window.route();
       } else if (first) {
         window.__ready = true;
-        _route.call(window);
+        window.route();
       }
     } catch (e) {
       if (first) {
         const local = _loadDB();
         window.__DB = local;
         window.__ready = true;
-        _route.call(window);
+        window.route();
         toast('无法连接服务器，正在使用本地数据','error');
       }
     }

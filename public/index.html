@@ -58,6 +58,7 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .badge{font-size:12px;padding:3px 9px;border-radius:99px;font-weight:600;white-space:nowrap}
 .badge.ok{background:#dcfce7;color:#15803d}.badge.no{background:#fee2e2;color:#b91c1c}
 .badge.gray{background:#eef0f6;color:#6b7280}.badge.cat{background:#eef2ff;color:#4f46e5}
+.badge.warn{background:#fef3c7;color:#b45309}
 .pay-methods{display:flex;gap:10px;flex-wrap:wrap}
 .pay-method{flex:1;min-width:100px;display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid var(--line);border-radius:12px;cursor:pointer;transition:.15s;background:#fff;font-weight:600;font-size:14px;user-select:none}
 .pay-method:hover{border-color:#c7cbe0}.pay-method input{width:auto;margin:0}
@@ -118,6 +119,7 @@ tbody tr:hover{background:#fafbfe}
 .field-err{color:#b91c1c;font-size:12px;margin-top:6px;display:block;min-height:14px}
 .find-pwd-link{text-align:center;font-size:13px;margin:10px 0 0}
 .find-pwd-link a{color:#6366f1;font-weight:600}
+.pending-badge{background:#fef3c7;color:#b45309;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700}
 @media (max-width:600px){.nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}.hero h1{font-size:21px}.tg-float{right:16px;bottom:18px;width:50px;height:50px}.pay-method{min-width:80px;padding:10px 12px;font-size:13px}.member-card .amt{font-size:28px}}
 </style>
 </head>
@@ -150,7 +152,7 @@ tbody tr:hover{background:#fafbfe}
 
 <script>
 /* ==================================================================
-   云发卡 v8：管理密码可修改 + Cloudflare KV 同步
+   云发卡 v9：半自动审核 + USDT 自动检测
    ================================================================== */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -195,7 +197,7 @@ function hashPwd(pwd) {
 }
 
 /* ---------------- 数据层 ---------------- */
-const STORE_KEY = 'yunfaka_db_v8';
+const STORE_KEY = 'yunfaka_db_v9';
 const MY_KEY = 'yunfaka_my_orders';
 const MEMBER_KEY = 'yunfaka_member_user';
 const LS_SECRET = 'yunfaka_last_secret';
@@ -225,7 +227,7 @@ const DEFAULT_CONFIG = {
   pay_usdt_enabled:true,
   pay_usdt_address:'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE',
   pay_usdt_network:'TRC20', pay_usdt_rate:7.2,
-  pay_usdt_note:'请使用 TRC20 网络转账，转账后点击下方按钮',
+  pay_usdt_note:'请使用 TRC20 网络转账，到账后自动发货',
   pay_usdt_qr:'',
   balance_enabled:true, recharge_min:1000
 };
@@ -345,8 +347,8 @@ function applySiteConfig() {
   });
 }
 
-const STATUS_TEXT = { pending:'待支付', delivered:'已发货', out_of_stock:'缺货待补发' };
-const STATUS_CLASS = { pending:'gray', delivered:'ok', out_of_stock:'no' };
+const STATUS_TEXT = { pending:'待支付', pending_review:'待审核', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回' };
+const STATUS_CLASS = { pending:'gray', pending_review:'warn', delivered:'ok', out_of_stock:'no', rejected:'no' };
 const RECHARGE_TEXT = { pending:'待支付', success:'已到账' };
 const RECHARGE_CLASS = { pending:'gray', success:'ok' };
 
@@ -591,7 +593,7 @@ function showPayModal(type, id) {
   if (type === 'order') {
     const o = db.orders.find(x => x.order_no === id);
     if (!o) { toast('订单不存在','error'); return; }
-    if (o.status !== 'pending') { toast('该订单已支付','success'); location.hash='#/order/'+id; return; }
+    if (o.status !== 'pending') { toast('该订单已提交或已发货','success'); location.hash='#/order/'+id; return; }
     amount = o.amount_due; orderNo = o.order_no; payMethod = o.pay_method;
     extra = `<div class="kv"><span class="k">商品</span><span class="v">${esc(o.product_name)} × ${o.quantity}</span></div>
       ${o.balance_used>0?`<div class="kv"><span class="k">余额已抵扣</span><span class="v" style="color:#b45309">-¥${yuan(o.balance_used)}</span></div>`:''}`;
@@ -612,6 +614,9 @@ function showPayModal(type, id) {
       ${qr?`<div class="qr-wrap"><img src="${esc(qr)}" alt="支付宝收款码"><div class="qr-tip">请使用支付宝扫描上方收款码支付</div></div>`
         :`<div class="qr-wrap"><div class="muted" style="padding:20px">商家未配置支付宝收款码</div></div>`}
       <p class="muted" style="font-size:13px;text-align:center;margin:8px 0 14px">${esc(cfg.pay_alipay_note||'扫码支付后点击下方按钮')}</p>
+      <div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">
+        <b>⚠️ 重要提示：</b>点击「我已完成支付」后订单将进入<b>人工审核</b>，管理员核对收款后才会发货，通常几分钟内完成。
+      </div>
       <div class="row" style="justify-content:flex-end">
         <button class="btn ghost" onclick="closeModal()">取消</button>
         <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已完成支付</button>
@@ -632,10 +637,13 @@ function showPayModal(type, id) {
         <span class="mono">${esc(cfg.pay_usdt_address||'未配置')}</span>
         ${cfg.pay_usdt_address?`<button data-v="${esc(cfg.pay_usdt_address)}" onclick="copyText(this.dataset.v,this)">复制</button>`:''}
       </div>
-      <p class="muted" style="font-size:13px;text-align:center;margin:8px 0 14px">${esc(cfg.pay_usdt_note||'转账后点击下方按钮')}</p>
+      <div style="background:#dbeafe;border:1px dashed #93c5fd;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#1e40af;line-height:1.6">
+        <b>ℹ️ 说明：</b>请务必转账<b>${usdtAmount} USDT</b>（允许 ±1% 误差），系统每 30 秒自动检测链上转账，到账后自动发货。
+      </div>
+      <p class="muted" style="font-size:13px;text-align:center;margin:8px 0 14px">${esc(cfg.pay_usdt_note||'转账后无需操作，系统自动识别')}</p>
       <div class="row" style="justify-content:flex-end">
-        <button class="btn ghost" onclick="closeModal()">取消</button>
-        <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已完成支付</button>
+        <button class="btn ghost" onclick="closeModal()">关闭</button>
+        <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已转账</button>
       </div>`;
   } else {
     html = `<h3>支付方式错误</h3><button class="btn ghost" onclick="closeModal()">关闭</button>`;
@@ -645,9 +653,22 @@ function showPayModal(type, id) {
 
 function confirmPay(type, id) {
   if (type === 'order') {
-    payOrder(id);
+    const db = loadDB();
+    const o = db.orders.find(x => x.order_no === id);
+    if (!o) return;
+
+    if (o.pay_method === 'usdt') {
+      toast('USDT 到账将自动检测，请等待…', 'success');
+      closeModal();
+      if (location.hash === '#/order/'+id) route(); else location.hash = '#/order/'+id;
+      return;
+    }
+
+    o.status = 'pending_review';
+    o.submitted_at = now();
+    saveDB(db);
     closeModal();
-    toast('支付成功，已自动发货 🎉','success');
+    toast('已提交，管理员审核后自动发货', 'success');
     if (location.hash === '#/order/'+id) route(); else location.hash = '#/order/'+id;
   } else if (type === 'recharge') {
     const db = loadDB();
@@ -675,6 +696,90 @@ function payOrder(orderNo) {
     o.status = 'delivered'; o.delivered_at = now();
   } else o.status = 'out_of_stock';
   saveDB(db);
+}
+
+/* ---------------- USDT 自动检测 ---------------- */
+let _usdtPollTimer = null;
+function startUsdtPolling(orderNo) {
+  if (_usdtPollTimer) clearInterval(_usdtPollTimer);
+  const check = async () => {
+    try {
+      const r = await fetch('/api/usdt-check?order=' + encodeURIComponent(orderNo));
+      const d = await r.json();
+      if (d.ok && d.status && d.status !== 'pending') {
+        clearInterval(_usdtPollTimer);
+        _usdtPollTimer = null;
+        toast('USDT 已到账，系统已自动发货 🎉', 'success');
+        const r2 = await fetch('/api/state?t=' + Date.now());
+        const d2 = await r2.json();
+        if (d2.ok && d2.db) { window.__DB = d2.db; }
+        route();
+      }
+    } catch (e) {}
+  };
+  check();
+  _usdtPollTimer = setInterval(check, 30000);
+}
+
+async function forceCheckUsdt(orderNo) {
+  toast('正在检测…');
+  try {
+    const r = await fetch('/api/usdt-check?order=' + encodeURIComponent(orderNo));
+    const d = await r.json();
+    if (d.ok && d.status && d.status !== 'pending') {
+      toast('USDT 已到账，系统已自动发货 🎉', 'success');
+      const r2 = await fetch('/api/state?t=' + Date.now());
+      const d2 = await r2.json();
+      if (d2.ok && d2.db) { window.__DB = d2.db; }
+      route();
+    } else if (d.ok) {
+      toast('暂未检测到匹配的转账，请稍后重试', 'error');
+    } else {
+      toast(d.msg || '检测失败', 'error');
+    }
+  } catch (e) {
+    toast('网络错误', 'error');
+  }
+}
+
+/* ---------------- 管理员审核 ---------------- */
+function approveOrder(orderNo) {
+  const db = loadDB();
+  const o = db.orders.find(x => x.order_no === orderNo);
+  if (!o) return;
+  if (o.status !== 'pending_review') { toast('订单状态不对', 'error'); return; }
+  if (!confirm(`确认已收款 ¥${yuan(o.amount_due)}，为客户发货？`)) return;
+
+  const available = db.cards.filter(c => c.product_id === o.product_id && c.status === 'unused');
+  if (available.length < o.quantity) {
+    toast(`库存不足，需要 ${o.quantity} 条，只有 ${available.length} 条`, 'error');
+    return;
+  }
+
+  available.slice(0, o.quantity).forEach(c => {
+    c.status = 'used';
+    c.order_no = o.order_no;
+    c.used_at = now();
+    o.cards.push(c.content);
+  });
+  o.status = 'delivered';
+  o.delivered_at = now();
+  o.approved_at = now();
+  saveDB(db);
+  toast('已确认发货 ✅', 'success');
+  renderOrders();
+}
+
+function rejectOrder(orderNo) {
+  const db = loadDB();
+  const o = db.orders.find(x => x.order_no === orderNo);
+  if (!o) return;
+  if (!confirm(`确定驳回订单 ${orderNo}？客户将看到"订单已驳回"。`)) return;
+  o.status = 'rejected';
+  o.rejected_at = now();
+  saveDB(db);
+  toast('订单已驳回', 'success');
+  renderOrders();
 }
 
 /* ---------------- 会员 ---------------- */
@@ -973,10 +1078,35 @@ function renderOrderView(orderNo, secret) {
       <p class="muted" style="font-size:13px;margin-bottom:0">管理员补货后会自动补发。</p></div>`;
   } else if (o.status === 'pending') {
     const payName = o.pay_method==='balance'?'余额':(o.pay_method==='alipay'?'支付宝':'USDT');
-    body = `<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">
-      <b>⏳ 待支付</b>
-      <p class="muted" style="font-size:13px;margin:6px 0 12px">支付方式：${payName}</p>
-      <button class="btn primary" onclick="showPayModal('order','${esc(o.order_no)}')">去支付 ¥${yuan(o.amount_due)}</button>
+    if (o.pay_method === 'usdt') {
+      body = `<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">
+        <b>⏳ 等待 USDT 到账</b>
+        <p class="muted" style="font-size:13px;margin:6px 0 12px">
+          系统每 30 秒自动检测一次链上转账，到账后自动发货，请勿关闭本页面。
+        </p>
+        <button class="btn ghost" onclick="showPayModal('order','${esc(o.order_no)}')">查看收款信息</button>
+        <button class="btn primary" style="margin-left:8px" onclick="forceCheckUsdt('${esc(o.order_no)}')">立即检测</button>
+      </div>`;
+    } else {
+      body = `<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">
+        <b>⏳ 待支付</b>
+        <p class="muted" style="font-size:13px;margin:6px 0 12px">支付方式：${payName}</p>
+        <button class="btn primary" onclick="showPayModal('order','${esc(o.order_no)}')">去支付 ¥${yuan(o.amount_due)}</button>
+      </div>`;
+    }
+  } else if (o.status === 'pending_review') {
+    body = `<div class="card panel" style="background:#fef3c7;border-color:#fcd34d">
+      <b>🕐 订单已提交，待管理员审核</b>
+      <p class="muted" style="font-size:13px;margin:6px 0 0">
+        管理员核对收款后会为您发货，通常几分钟内完成。请稍后刷新本页面查看。
+      </p>
+    </div>`;
+  } else if (o.status === 'rejected') {
+    body = `<div class="card panel" style="background:#fee2e2;border-color:#fca5a5">
+      <b>❌ 订单已驳回</b>
+      <p class="muted" style="font-size:13px;margin:6px 0 0">
+        管理员未收到您的付款，如有疑问请联系客服。
+      </p>
     </div>`;
   }
   const helpBox = tgUrl ? `<div class="card panel" style="max-width:640px;margin:16px auto 0;text-align:center">
@@ -999,9 +1129,17 @@ function renderOrderView(orderNo, secret) {
       <div class="kv"><span class="k">暗号</span><span class="v">${esc(o.secret)}</span></div>
       <div class="kv"><span class="k">下单时间</span><span class="v">${esc(o.created_at)}</span></div>
       ${o.delivered_at?`<div class="kv"><span class="k">发货时间</span><span class="v">${esc(o.delivered_at)}</span></div>`:''}
+      ${o.pay_tx?`<div class="kv"><span class="k">链上交易</span><span class="v mono" style="font-size:11px">${esc(o.pay_tx)}</span></div>`:''}
     </div>
     <div style="max-width:640px;margin:0 auto">${body}</div>
     ${helpBox}`;
+
+  if (o.pay_method === 'usdt' && o.status === 'pending') {
+    startUsdtPolling(o.order_no);
+  } else if (_usdtPollTimer) {
+    clearInterval(_usdtPollTimer);
+    _usdtPollTimer = null;
+  }
 }
 function renderQueryPage() {
   const db = loadDB();
@@ -1063,6 +1201,7 @@ function renderAdminPanel() {
     </div>
     <div class="tabs">
       <button data-tab="stats" onclick="switchTab('stats')">概览</button>
+      <button data-tab="pending" onclick="switchTab('pending')">待审核</button>
       <button data-tab="products" onclick="switchTab('products')">商品</button>
       <button data-tab="categories" onclick="switchTab('categories')">分类</button>
       <button data-tab="cards" onclick="switchTab('cards')">卡密</button>
@@ -1079,7 +1218,7 @@ function switchTab(tab) {
   const body = $('#tab-body');
   if (!body) return;
   body.innerHTML = '<div class="loading">加载中…</div>';
-  const map = { stats:renderStats, products:renderProducts, categories:renderCategories,
+  const map = { stats:renderStats, pending:renderPending, products:renderProducts, categories:renderCategories,
     cards:renderCards, orders:renderOrders, members:renderMembers, settings:renderSettings };
   (map[tab] || renderStats)();
 }
@@ -1088,6 +1227,7 @@ function renderStats() {
   const db = loadDB();
   const orders = db.orders;
   const delivered = orders.filter(o => o.status === 'delivered').length;
+  const pendingReview = orders.filter(o => o.status === 'pending_review').length;
   const revenue = orders.filter(o => o.status === 'delivered').reduce((s,o)=>s+o.amount,0);
   const unused = db.cards.filter(c => c.status === 'unused').length;
   const used = db.cards.filter(c => c.status === 'used').length;
@@ -1099,6 +1239,7 @@ function renderStats() {
       <div class="stat"><div class="n">${db.categories.length}</div><div class="l">分类数</div></div>
       <div class="stat"><div class="n">${orders.length}</div><div class="l">总订单</div></div>
       <div class="stat"><div class="n">${delivered}</div><div class="l">已发货</div></div>
+      <div class="stat"><div class="n" style="color:#b45309">${pendingReview}</div><div class="l">待审核</div></div>
       <div class="stat"><div class="n">${unused}</div><div class="l">可用卡密</div></div>
       <div class="stat"><div class="n">${used}</div><div class="l">已售卡密</div></div>
       <div class="stat"><div class="n">¥${yuan(revenue)}</div><div class="l">累计收入</div></div>
@@ -1122,6 +1263,37 @@ function resetData() {
   applySiteConfig();
   toast('已重置为演示数据','success');
   switchTab('stats');
+}
+
+/* ---------- 待审核订单 ---------- */
+function renderPending() {
+  const db = loadDB();
+  const list = db.orders.filter(o => o.status === 'pending_review');
+  const rows = list.length ? list.map(o => `<tr>
+    <td class="mono" style="font-size:12px">${esc(o.order_no)}</td>
+    <td>${esc(o.product_name)} × ${o.quantity}</td>
+    <td style="font-weight:700;color:#e11d48">¥${yuan(o.amount_due)}</td>
+    <td>${o.pay_method==='alipay'?'支付宝':'USDT'}</td>
+    <td class="muted" style="font-size:12px">${esc(o.secret)}${o.username?`<div style="font-size:11px">@${esc(o.username)}</div>`:''}</td>
+    <td class="muted" style="font-size:12px">${esc(o.submitted_at||o.created_at)}</td>
+    <td style="text-align:right;white-space:nowrap">
+      <button class="btn sm primary" onclick="approveOrder('${esc(o.order_no)}')">确认发货</button>
+      <button class="btn sm danger" onclick="rejectOrder('${esc(o.order_no)}')">驳回</button>
+    </td>
+  </tr>`).join('') : '<tr><td colspan="7" class="empty">暂无待审核订单</td></tr>';
+  $('#tab-body').innerHTML = `<div class="card panel">
+    <div class="spread">
+      <h2 style="margin:0">待审核订单（${list.length}）</h2>
+      <button class="btn ghost sm" onclick="switchTab('pending')">刷新</button>
+    </div>
+    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#92400e;line-height:1.7">
+      <b>📌 审核流程：</b>打开你的支付宝 App → 账单 → 核对订单金额和时间 → 确认收款后点「确认发货」。
+      <br>如果客户没付款，点「驳回」，客户会看到"订单已驳回"。
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>暗号</th><th>提交时间</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+  </div>`;
 }
 
 function renderCategories() {
@@ -1396,6 +1568,7 @@ function renderOrders() {
     <td><span class="badge ${STATUS_CLASS[o.status]||'gray'}">${STATUS_TEXT[o.status]||o.status}</span></td>
     <td class="muted" style="font-size:12px">${esc(o.created_at)}</td>
     <td style="text-align:right;white-space:nowrap">
+      ${o.status==='pending_review'?`<button class="btn sm primary" onclick="approveOrder('${esc(o.order_no)}')">发货</button> <button class="btn sm danger" onclick="rejectOrder('${esc(o.order_no)}')">驳回</button>`:''}
       ${o.status==='out_of_stock'?`<button class="btn sm primary" onclick="redeliver('${esc(o.order_no)}')">补发</button>`:''}
       ${o.cards && o.cards.length?`<button class="btn sm ghost" onclick="viewOrderCards('${esc(o.order_no)}')">卡密</button>`:''}
     </td></tr>`).join('') : '<tr><td colspan="8" class="empty">暂无订单</td></tr>';
@@ -1566,6 +1739,9 @@ function renderSettings() {
       <label class="field">
         <span><input type="checkbox" id="cfg-alipay-enabled" ${cfg.pay_alipay_enabled!==false?'checked':''}> 启用支付宝支付</span>
       </label>
+      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400e;line-height:1.6">
+        支付宝订单需<b>人工审核</b>：客户提交后，你需要到「待审核」标签确认收款后发货。
+      </div>
       <label class="field"><span>收款码图片 URL（或从下方上传）</span>
         <input id="cfg-alipay-qr" value="${esc(cfg.pay_alipay_qr)}" placeholder="https://..."></label>
       <label class="field"><span>上传收款码图片</span>
@@ -1573,10 +1749,14 @@ function renderSettings() {
       <label class="field"><span>支付提示</span>
         <input id="cfg-alipay-note" value="${esc(cfg.pay_alipay_note)}"></label>
 
-      <h3 style="font-size:14px;margin:20px 0 10px">🪙 USDT</h3>
+      <h3 style="font-size:14px;margin:20px 0 10px">🪙 USDT（自动检测）</h3>
       <label class="field">
         <span><input type="checkbox" id="cfg-usdt-enabled" ${cfg.pay_usdt_enabled!==false?'checked':''}> 启用 USDT 支付</span>
       </label>
+      <div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;line-height:1.6">
+        USDT 订单<b>自动检测</b>：系统每 30 秒查一次链上转账，到账后自动发货，无需人工。<br>
+        建议去 <a href="https://www.trongrid.io" target="_blank" style="color:#1e40af;text-decoration:underline">trongrid.io</a> 注册免费 API Key，然后在 Cloudflare 环境变量加 <code>TRONGRID_API_KEY</code>。
+      </div>
       <label class="field"><span>收款地址</span>
         <input id="cfg-usdt-address" value="${esc(cfg.pay_usdt_address)}" placeholder="TRC20 地址"></label>
       <label class="field"><span>网络</span>
@@ -1651,7 +1831,7 @@ function saveSettings() {
     pay_usdt_network: $('#cfg-usdt-network').value.trim() || 'TRC20',
     pay_usdt_rate: Number($('#cfg-usdt-rate').value) || 7.2,
     pay_usdt_qr: $('#cfg-usdt-qr').value.trim(),
-    pay_usdt_note: $('#cfg-usdt-note').value.trim() || '请使用 TRC20 网络转账，转账后点击下方按钮'
+    pay_usdt_note: $('#cfg-usdt-note').value.trim() || '请使用 TRC20 网络转账，到账后自动发货'
   };
   saveDB(db);
   applySiteConfig();
@@ -1663,6 +1843,7 @@ Object.assign(window, {
   closeModal, copyText, toast,
   setHomeCategory, openBuy, submitBuy, doQuery,
   showPayModal, confirmPay,
+  forceCheckUsdt, approveOrder, rejectOrder,
   switchAuthTab, memberRegister, memberLogin, memberFindPwd, memberLogout, submitRecharge,
   saveFindPwd,
   adminLogin, adminLogout, switchTab, resetData,
@@ -1676,7 +1857,7 @@ Object.assign(window, {
 });
 </script>
 
-<!-- ================= 多设备同步补丁（已修复刷新） ================= -->
+<!-- ================= 多设备同步补丁 ================= -->
 <script>
 (function () {
   const API = '/api/state';
@@ -1696,7 +1877,6 @@ Object.assign(window, {
   const _saveDB = window.saveDB;
   const _route  = window.route;
 
-  // 修复：数据就绪后，先刷新站点配置（品牌名+客服按钮），再渲染路由
   window.route = function () {
     if (!window.__ready) {
       const app = document.getElementById('app');

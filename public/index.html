@@ -80,6 +80,16 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .addr-box{background:#0f172a;color:#7dd3fc;padding:12px 14px;border-radius:10px;font-size:13px;word-break:break-all;display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px}
 .addr-box span{flex:1;text-align:left}
 .addr-box button{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;flex-shrink:0}
+/* 口令红包大展示 */
+.redpacket-box{background:linear-gradient(135deg,#ff5722,#e91e63);color:#fff;border-radius:14px;padding:22px 20px;text-align:center;margin:14px 0;position:relative;overflow:hidden}
+.redpacket-box::before{content:"";position:absolute;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.08);right:-50px;top:-50px}
+.redpacket-box .lbl{font-size:13px;opacity:.9;margin-bottom:8px;position:relative;z-index:1}
+.redpacket-box .code{font-size:32px;font-weight:900;letter-spacing:4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin-bottom:12px;position:relative;z-index:1;text-shadow:0 2px 8px rgba(0,0,0,.2)}
+.redpacket-box .copy-btn{background:rgba(255,255,255,.24);border:1px solid rgba(255,255,255,.4);color:#fff;padding:9px 20px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s;position:relative;z-index:1;font-family:inherit}
+.redpacket-box .copy-btn:hover{background:rgba(255,255,255,.4)}
+.redpacket-steps{background:#fff5f5;border:1px dashed #fc8181;border-radius:10px;padding:14px 18px;font-size:13px;color:#742a2a;line-height:2;margin-bottom:14px}
+.redpacket-steps ol{margin:0;padding-left:20px}
+.redpacket-steps b{color:#c53030}
 .modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;animation:fade .18s}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 .modal{background:#fff;border-radius:18px;width:100%;max-width:440px;padding:24px;box-shadow:0 24px 60px -12px rgba(0,0,0,.35);animation:pop .2s;max-height:90vh;overflow-y:auto}
@@ -119,8 +129,8 @@ tbody tr:hover{background:#fafbfe}
 .field-err{color:#b91c1c;font-size:12px;margin-top:6px;display:block;min-height:14px}
 .find-pwd-link{text-align:center;font-size:13px;margin:10px 0 0}
 .find-pwd-link a{color:#6366f1;font-weight:600}
-.pending-badge{background:#fef3c7;color:#b45309;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700}
-@media (max-width:600px){.nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}.hero h1{font-size:21px}.tg-float{right:16px;bottom:18px;width:50px;height:50px}.pay-method{min-width:80px;padding:10px 12px;font-size:13px}.member-card .amt{font-size:28px}}
+.rp-code-cell{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:800;color:#e91e63;letter-spacing:1px;font-size:13px}
+@media (max-width:600px){.nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}.hero h1{font-size:21px}.tg-float{right:16px;bottom:18px;width:50px;height:50px}.pay-method{min-width:80px;padding:10px 12px;font-size:13px}.member-card .amt{font-size:28px}.redpacket-box .code{font-size:26px;letter-spacing:2px}}
 </style>
 </head>
 <body>
@@ -152,7 +162,7 @@ tbody tr:hover{background:#fafbfe}
 
 <script>
 /* ==================================================================
-   云发卡 v9：半自动审核 + USDT 自动检测
+   云发卡 v10：支付宝口令红包 + USDT 自动检测 + 半自动审核
    ================================================================== */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -171,7 +181,7 @@ function closeModal() { $('#modal').classList.add('hidden'); $('#modal-box').inn
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
 function copyText(text, btn) {
-  const done = () => { const o = btn.textContent; btn.textContent='已复制'; setTimeout(()=>btn.textContent=o,1400); };
+  const done = () => { const o = btn.textContent; btn.textContent='已复制 ✓'; setTimeout(()=>btn.textContent=o,1400); };
   if (navigator.clipboard && window.isSecureContext)
     navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));
   else fallbackCopy(text, done);
@@ -197,7 +207,7 @@ function hashPwd(pwd) {
 }
 
 /* ---------------- 数据层 ---------------- */
-const STORE_KEY = 'yunfaka_db_v9';
+const STORE_KEY = 'yunfaka_db_v10';
 const MY_KEY = 'yunfaka_my_orders';
 const MEMBER_KEY = 'yunfaka_member_user';
 const LS_SECRET = 'yunfaka_last_secret';
@@ -218,11 +228,19 @@ function genOrderNo() {
   return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`+Math.floor(Math.random()*9000+1000);
 }
 function genRechargeId() { return 'R'+Date.now()+Math.floor(Math.random()*900+100); }
+/* 生成唯一红包口令：前缀 + 6位大写字母数字（排除易混淆字符） */
+function genRedpacketCode(prefix) {
+  const p = String(prefix || 'YFK').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'YFK';
+  return p + randStr(6);
+}
 
 const DEFAULT_CONFIG = {
   site_name:'云发卡', tg_username:'U345666',
   admin_pwd_hash: hashPwd('admin888'),
-  pay_alipay_enabled:true, pay_alipay_qr:'',
+  pay_alipay_enabled:true,
+  pay_alipay_mode:'redpacket',  // 'redpacket' | 'qr'
+  pay_alipay_redpacket_prefix:'YFK',
+  pay_alipay_qr:'',
   pay_alipay_note:'请使用支付宝扫码支付，支付后点击下方按钮',
   pay_usdt_enabled:true,
   pay_usdt_address:'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE',
@@ -568,12 +586,17 @@ function submitBuy(id) {
     payMethod = radio.value;
   }
   const orderNo = genOrderNo();
-  db.orders.unshift({
+  const order = {
     order_no: orderNo, product_id: id, product_name: p.name,
     category_id: p.category_id || 0, quantity: qty, amount, balance_used: deduct,
     amount_due: due, secret, username: member?member.username:'', status: 'pending',
     pay_method: payMethod, cards: [], note: p.note || '', created_at: now(), delivered_at: ''
-  });
+  };
+  // 如果是支付宝订单，生成唯一红包口令
+  if (payMethod === 'alipay') {
+    order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
+  }
+  db.orders.unshift(order);
   saveDB(db);
   saveMyOrder(orderNo, secret);
   localStorage.setItem(LS_SECRET, secret);
@@ -589,12 +612,12 @@ function submitBuy(id) {
 function showPayModal(type, id) {
   const db = loadDB();
   const cfg = getConfig(db);
-  let amount, orderNo, payMethod, extra = '';
+  let amount, orderNo, payMethod, extra = '', rpCode = '';
   if (type === 'order') {
     const o = db.orders.find(x => x.order_no === id);
     if (!o) { toast('订单不存在','error'); return; }
     if (o.status !== 'pending') { toast('该订单已提交或已发货','success'); location.hash='#/order/'+id; return; }
-    amount = o.amount_due; orderNo = o.order_no; payMethod = o.pay_method;
+    amount = o.amount_due; orderNo = o.order_no; payMethod = o.pay_method; rpCode = o.redpacket_code || '';
     extra = `<div class="kv"><span class="k">商品</span><span class="v">${esc(o.product_name)} × ${o.quantity}</span></div>
       ${o.balance_used>0?`<div class="kv"><span class="k">余额已抵扣</span><span class="v" style="color:#b45309">-¥${yuan(o.balance_used)}</span></div>`:''}`;
   } else if (type === 'recharge') {
@@ -603,24 +626,58 @@ function showPayModal(type, id) {
     if (r.status === 'success') { toast('该充值已到账','success'); return; }
     amount = r.amount; orderNo = r.id; payMethod = r.method;
     extra = `<div class="kv"><span class="k">充值账号</span><span class="v">${esc(r.username)}</span></div>`;
+    if (payMethod === 'alipay') rpCode = r.redpacket_code || '';
   }
   let html = '';
   if (payMethod === 'alipay') {
-    const qr = cfg.pay_alipay_qr;
-    html = `<h3>💰 支付宝支付</h3>
-      <div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">${esc(orderNo)}</span></div>
-      ${extra}
-      <div class="kv"><span class="k">应付金额</span><span class="v" style="color:#e11d48;font-size:18px">¥${yuan(amount)}</span></div>
-      ${qr?`<div class="qr-wrap"><img src="${esc(qr)}" alt="支付宝收款码"><div class="qr-tip">请使用支付宝扫描上方收款码支付</div></div>`
-        :`<div class="qr-wrap"><div class="muted" style="padding:20px">商家未配置支付宝收款码</div></div>`}
-      <p class="muted" style="font-size:13px;text-align:center;margin:8px 0 14px">${esc(cfg.pay_alipay_note||'扫码支付后点击下方按钮')}</p>
-      <div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">
-        <b>⚠️ 重要提示：</b>点击「我已完成支付」后订单将进入<b>人工审核</b>，管理员核对收款后才会发货，通常几分钟内完成。
-      </div>
-      <div class="row" style="justify-content:flex-end">
-        <button class="btn ghost" onclick="closeModal()">取消</button>
-        <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已完成支付</button>
-      </div>`;
+    const mode = cfg.pay_alipay_mode || 'redpacket';
+    const useRp = mode === 'redpacket';
+
+    if (useRp && rpCode) {
+      html = `<h3>💰 支付宝口令红包</h3>
+        <div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">${esc(orderNo)}</span></div>
+        ${extra}
+        <div class="kv"><span class="k">应付金额</span><span class="v" style="color:#e11d48;font-size:18px">¥${yuan(amount)}</span></div>
+        <div class="redpacket-box">
+          <div class="lbl">请记住下方口令，在支付宝中发送红包</div>
+          <div class="code">${esc(rpCode)}</div>
+          <button class="copy-btn" data-v="${esc(rpCode)}" onclick="copyText(this.dataset.v,this)">📋 复制口令</button>
+        </div>
+        <div class="redpacket-steps">
+          <b>操作步骤：</b>
+          <ol>
+            <li>打开支付宝 App</li>
+            <li>点「发红包」→ 选「口令红包」</li>
+            <li>输入上方口令：<b>${esc(rpCode)}</b></li>
+            <li>金额填：<b>¥${yuan(amount)}</b></li>
+            <li>发给任意好友（或自己），完成发送</li>
+          </ol>
+        </div>
+        <div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">
+          ⚠️ 口令<b>只能发送一次</b>，请勿修改金额。发送后请点击下方按钮，商家核对后会为你发货。
+        </div>
+        <div class="row" style="justify-content:flex-end">
+          <button class="btn ghost" onclick="closeModal()">取消</button>
+          <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已完成发送</button>
+        </div>`;
+    } else {
+      // 兼容旧版收款码模式
+      const qr = cfg.pay_alipay_qr;
+      html = `<h3>💰 支付宝支付</h3>
+        <div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">${esc(orderNo)}</span></div>
+        ${extra}
+        <div class="kv"><span class="k">应付金额</span><span class="v" style="color:#e11d48;font-size:18px">¥${yuan(amount)}</span></div>
+        ${qr?`<div class="qr-wrap"><img src="${esc(qr)}" alt="支付宝收款码"><div class="qr-tip">请使用支付宝扫描上方收款码支付</div></div>`
+          :`<div class="qr-wrap"><div class="muted" style="padding:20px">商家未配置支付宝收款码</div></div>`}
+        <p class="muted" style="font-size:13px;text-align:center;margin:8px 0 14px">${esc(cfg.pay_alipay_note||'扫码支付后点击下方按钮')}</p>
+        <div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">
+          <b>⚠️ 重要提示：</b>点击后订单进入<b>人工审核</b>，管理员核对收款后才会发货。
+        </div>
+        <div class="row" style="justify-content:flex-end">
+          <button class="btn ghost" onclick="closeModal()">取消</button>
+          <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已完成支付</button>
+        </div>`;
+    }
   } else if (payMethod === 'usdt') {
     const rate = Number(cfg.pay_usdt_rate) || 7.2;
     const usdtAmount = (amount / 100 / rate).toFixed(2);
@@ -940,11 +997,13 @@ function renderMemberDashboard(member) {
   const alipayEnabled = cfg.pay_alipay_enabled !== false;
   const usdtEnabled = cfg.pay_usdt_enabled !== false;
   const defaultMethod = alipayEnabled ? 'alipay' : 'usdt';
+  const alipayMode = cfg.pay_alipay_mode || 'redpacket';
+  const alipayLabel = alipayMode === 'redpacket' ? '支付宝' : '支付宝';
 
   const rechargeRows = myRecharges.length ? myRecharges.map(r => `<tr>
     <td class="mono" style="font-size:12px">${esc(r.id)}</td>
     <td>¥${yuan(r.amount)}</td>
-    <td>${r.method==='alipay'?'支付宝':'USDT'}</td>
+    <td>${r.method==='alipay'?alipayLabel:'USDT'}</td>
     <td><span class="badge ${RECHARGE_CLASS[r.status]||'gray'}">${RECHARGE_TEXT[r.status]||r.status}</span></td>
     <td class="muted" style="font-size:12px">${esc(r.created_at)}</td>
     <td style="text-align:right">${r.status==='pending'?`<button class="btn sm primary" onclick="showPayModal('recharge','${esc(r.id)}')">去支付</button>`:''}</td>
@@ -979,7 +1038,7 @@ function renderMemberDashboard(member) {
       <label class="field"><span>自定义金额（元）</span><input id="rc-amount" type="number" min="0.01" step="0.01" value="100.00"></label>
       <label class="field"><span>支付方式</span>
         <div class="pay-methods" id="rc-methods">
-          ${alipayEnabled?`<label class="pay-method ${defaultMethod==='alipay'?'active':''}" data-method="alipay"><input type="radio" name="rc-method" value="alipay" ${defaultMethod==='alipay'?'checked':''}><span class="logo">💰</span> 支付宝</label>`:''}
+          ${alipayEnabled?`<label class="pay-method ${defaultMethod==='alipay'?'active':''}" data-method="alipay"><input type="radio" name="rc-method" value="alipay" ${defaultMethod==='alipay'?'checked':''}><span class="logo">💰</span> ${alipayLabel}</label>`:''}
           ${usdtEnabled?`<label class="pay-method ${defaultMethod==='usdt'?'active':''}" data-method="usdt"><input type="radio" name="rc-method" value="usdt" ${defaultMethod==='usdt'?'checked':''}><span class="logo">🪙</span> USDT</label>`:''}
         </div>
       </label>
@@ -1031,10 +1090,14 @@ function submitRecharge() {
   const radio = document.querySelector('input[name="rc-method"]:checked');
   if (!radio) { toast('请选择支付方式','error'); return; }
   const id = genRechargeId();
-  db.recharges.unshift({
+  const rc = {
     id, username: member.username, secret: member.secret || '',
     amount, method: radio.value, status: 'pending', created_at: now(), completed_at: ''
-  });
+  };
+  if (radio.value === 'alipay') {
+    rc.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
+  }
+  db.recharges.unshift(rc);
   saveDB(db);
   showPayModal('recharge', id);
 }
@@ -1077,7 +1140,6 @@ function renderOrderView(orderNo, secret) {
       <b>⚠️ 库存不足，暂未发货</b>
       <p class="muted" style="font-size:13px;margin-bottom:0">管理员补货后会自动补发。</p></div>`;
   } else if (o.status === 'pending') {
-    const payName = o.pay_method==='balance'?'余额':(o.pay_method==='alipay'?'支付宝':'USDT');
     if (o.pay_method === 'usdt') {
       body = `<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">
         <b>⏳ 等待 USDT 到账</b>
@@ -1087,10 +1149,18 @@ function renderOrderView(orderNo, secret) {
         <button class="btn ghost" onclick="showPayModal('order','${esc(o.order_no)}')">查看收款信息</button>
         <button class="btn primary" style="margin-left:8px" onclick="forceCheckUsdt('${esc(o.order_no)}')">立即检测</button>
       </div>`;
+    } else if (o.pay_method === 'alipay' && o.redpacket_code) {
+      body = `<div class="card panel" style="background:#fff5f5;border-color:#fc8181">
+        <b>⏳ 待发送红包</b>
+        <p class="muted" style="font-size:13px;margin:6px 0 12px">
+          请点击下方按钮查看红包口令并在支付宝中发送。
+        </p>
+        <button class="btn primary" onclick="showPayModal('order','${esc(o.order_no)}')">查看口令 ¥${yuan(o.amount_due)}</button>
+      </div>`;
     } else {
       body = `<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">
         <b>⏳ 待支付</b>
-        <p class="muted" style="font-size:13px;margin:6px 0 12px">支付方式：${payName}</p>
+        <p class="muted" style="font-size:13px;margin:6px 0 12px">支付方式：支付宝</p>
         <button class="btn primary" onclick="showPayModal('order','${esc(o.order_no)}')">去支付 ¥${yuan(o.amount_due)}</button>
       </div>`;
     }
@@ -1126,6 +1196,7 @@ function renderOrderView(orderNo, secret) {
       ${o.balance_used>0?`<div class="kv"><span class="k">余额抵扣</span><span class="v" style="color:#b45309">-¥${yuan(o.balance_used)}</span></div>`:''}
       ${o.amount_due>0?`<div class="kv"><span class="k">实付金额</span><span class="v" style="color:#e11d48">¥${yuan(o.amount_due)}</span></div>`:''}
       <div class="kv"><span class="k">支付方式</span><span class="v">${o.pay_method==='balance'?'余额':(o.pay_method==='alipay'?'支付宝':'USDT')}</span></div>
+      ${o.redpacket_code?`<div class="kv"><span class="k">红包口令</span><span class="v mono" style="color:#e91e63">${esc(o.redpacket_code)}</span></div>`:''}
       <div class="kv"><span class="k">暗号</span><span class="v">${esc(o.secret)}</span></div>
       <div class="kv"><span class="k">下单时间</span><span class="v">${esc(o.created_at)}</span></div>
       ${o.delivered_at?`<div class="kv"><span class="k">发货时间</span><span class="v">${esc(o.delivered_at)}</span></div>`:''}
@@ -1274,24 +1345,30 @@ function renderPending() {
     <td>${esc(o.product_name)} × ${o.quantity}</td>
     <td style="font-weight:700;color:#e11d48">¥${yuan(o.amount_due)}</td>
     <td>${o.pay_method==='alipay'?'支付宝':'USDT'}</td>
+    <td>${o.redpacket_code?`<span class="rp-code-cell" data-v="${esc(o.redpacket_code)}" onclick="copyText(this.dataset.v,this)" style="cursor:pointer" title="点击复制">${esc(o.redpacket_code)}</span>`:'<span class="muted">-</span>'}</td>
     <td class="muted" style="font-size:12px">${esc(o.secret)}${o.username?`<div style="font-size:11px">@${esc(o.username)}</div>`:''}</td>
     <td class="muted" style="font-size:12px">${esc(o.submitted_at||o.created_at)}</td>
     <td style="text-align:right;white-space:nowrap">
       <button class="btn sm primary" onclick="approveOrder('${esc(o.order_no)}')">确认发货</button>
       <button class="btn sm danger" onclick="rejectOrder('${esc(o.order_no)}')">驳回</button>
     </td>
-  </tr>`).join('') : '<tr><td colspan="7" class="empty">暂无待审核订单</td></tr>';
+  </tr>`).join('') : '<tr><td colspan="8" class="empty">暂无待审核订单</td></tr>';
   $('#tab-body').innerHTML = `<div class="card panel">
     <div class="spread">
       <h2 style="margin:0">待审核订单（${list.length}）</h2>
       <button class="btn ghost sm" onclick="switchTab('pending')">刷新</button>
     </div>
-    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#92400e;line-height:1.7">
-      <b>📌 审核流程：</b>打开你的支付宝 App → 账单 → 核对订单金额和时间 → 确认收款后点「确认发货」。
-      <br>如果客户没付款，点「驳回」，客户会看到"订单已驳回"。
+    <div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#742a2a;line-height:1.7">
+      <b>📌 审核流程：</b>
+      <ol style="margin:6px 0 0;padding-left:20px">
+        <li>客户发送口令红包后，订单会出现在这里</li>
+        <li>打开支付宝 → 输入订单的<b>红包口令</b>领取红包（点口令可直接复制）</li>
+        <li>核对金额 → 确认收款后点「确认发货」</li>
+        <li>未收到红包 → 点「驳回」</li>
+      </ol>
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>暗号</th><th>提交时间</th><th></th></tr></thead>
+      <thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>红包口令</th><th>暗号</th><th>提交时间</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
   </div>`;
 }
@@ -1564,6 +1641,7 @@ function renderOrders() {
     <td>${esc(o.product_name)}<div class="muted" style="font-size:12px">×${o.quantity}</div></td>
     <td>¥${yuan(o.amount)}${o.balance_used>0?`<div class="muted" style="font-size:11px">余额抵扣¥${yuan(o.balance_used)}</div>`:''}</td>
     <td>${o.pay_method==='balance'?'余额':(o.pay_method==='alipay'?'支付宝':'USDT')}</td>
+    <td>${o.redpacket_code?`<span class="rp-code-cell" data-v="${esc(o.redpacket_code)}" onclick="copyText(this.dataset.v,this)" style="cursor:pointer" title="点击复制">${esc(o.redpacket_code)}</span>`:'<span class="muted">-</span>'}</td>
     <td class="muted" style="font-size:12px">${esc(o.secret)}${o.username?`<div style="font-size:11px">@${esc(o.username)}</div>`:''}</td>
     <td><span class="badge ${STATUS_CLASS[o.status]||'gray'}">${STATUS_TEXT[o.status]||o.status}</span></td>
     <td class="muted" style="font-size:12px">${esc(o.created_at)}</td>
@@ -1571,12 +1649,12 @@ function renderOrders() {
       ${o.status==='pending_review'?`<button class="btn sm primary" onclick="approveOrder('${esc(o.order_no)}')">发货</button> <button class="btn sm danger" onclick="rejectOrder('${esc(o.order_no)}')">驳回</button>`:''}
       ${o.status==='out_of_stock'?`<button class="btn sm primary" onclick="redeliver('${esc(o.order_no)}')">补发</button>`:''}
       ${o.cards && o.cards.length?`<button class="btn sm ghost" onclick="viewOrderCards('${esc(o.order_no)}')">卡密</button>`:''}
-    </td></tr>`).join('') : '<tr><td colspan="8" class="empty">暂无订单</td></tr>';
+    </td></tr>`).join('') : '<tr><td colspan="9" class="empty">暂无订单</td></tr>';
   $('#tab-body').innerHTML = `<div class="card panel">
     <div class="spread"><h2 style="margin:0">订单列表</h2>
       <button class="btn ghost sm" onclick="switchTab('orders')">刷新</button></div>
     <div style="overflow-x:auto;margin-top:16px"><table>
-      <thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>暗号</th><th>状态</th><th>时间</th><th></th></tr></thead>
+      <thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>红包口令</th><th>暗号</th><th>状态</th><th>时间</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
   </div>`;
 }
@@ -1702,6 +1780,8 @@ function deleteMember(username) {
 function renderSettings() {
   const db = loadDB();
   const cfg = getConfig(db);
+  const alipayMode = cfg.pay_alipay_mode || 'redpacket';
+
   $('#tab-body').innerHTML = `
     <div class="card panel" style="max-width:620px">
       <h2>站点设置</h2>
@@ -1739,13 +1819,25 @@ function renderSettings() {
       <label class="field">
         <span><input type="checkbox" id="cfg-alipay-enabled" ${cfg.pay_alipay_enabled!==false?'checked':''}> 启用支付宝支付</span>
       </label>
-      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400e;line-height:1.6">
-        支付宝订单需<b>人工审核</b>：客户提交后，你需要到「待审核」标签确认收款后发货。
+      <label class="field"><span>收款方式</span>
+        <select id="cfg-alipay-mode">
+          <option value="redpacket" ${alipayMode==='redpacket'?'selected':''}>口令红包（推荐，无需上传收款码）</option>
+          <option value="qr" ${alipayMode==='qr'?'selected':''}>收款码（旧方式，需上传图片）</option>
+        </select>
+      </label>
+      <div id="rp-settings" style="${alipayMode==='redpacket'?'':'display:none'}">
+        <div style="background:#fff5f5;border:1px solid #fc8181;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#742a2a;line-height:1.7">
+          <b>口令红包原理：</b>每笔订单生成一个唯一口令，客户在支付宝发红包时输入该口令，你在支付宝凭口令领取。无需上传收款码，无需人工输入金额。
+        </div>
+        <label class="field"><span>口令前缀（2-6 位字母，会拼在口令开头）</span>
+          <input id="cfg-rp-prefix" value="${esc(cfg.pay_alipay_redpacket_prefix||'YFK')}" maxlength="6" placeholder="YFK"></label>
       </div>
-      <label class="field"><span>收款码图片 URL（或从下方上传）</span>
-        <input id="cfg-alipay-qr" value="${esc(cfg.pay_alipay_qr)}" placeholder="https://..."></label>
-      <label class="field"><span>上传收款码图片</span>
-        <input type="file" id="cfg-alipay-file" accept="image/*"></label>
+      <div id="qr-settings" style="${alipayMode==='qr'?'':'display:none'}">
+        <label class="field"><span>收款码图片 URL（或从下方上传）</span>
+          <input id="cfg-alipay-qr" value="${esc(cfg.pay_alipay_qr)}" placeholder="https://..."></label>
+        <label class="field"><span>上传收款码图片</span>
+          <input type="file" id="cfg-alipay-file" accept="image/*"></label>
+      </div>
       <label class="field"><span>支付提示</span>
         <input id="cfg-alipay-note" value="${esc(cfg.pay_alipay_note)}"></label>
 
@@ -1779,8 +1871,17 @@ function renderSettings() {
     const v = tgInput.value.trim().replace(/^@/,'');
     $('#tg-preview').textContent = v ? 'https://t.me/'+v : '未设置';
   });
+
+  const modeSelect = $('#cfg-alipay-mode');
+  modeSelect.addEventListener('change', () => {
+    const m = modeSelect.value;
+    $('#rp-settings').style.display = m === 'redpacket' ? '' : 'none';
+    $('#qr-settings').style.display = m === 'qr' ? '' : 'none';
+  });
+
   const bindUpload = (inputId, targetId, label) => {
     const fi = $('#'+inputId);
+    if (!fi) return;
     fi.addEventListener('change', () => {
       const file = fi.files[0];
       if (!file) return;
@@ -1817,6 +1918,7 @@ function saveSettings() {
   const db = loadDB();
   const name = $('#cfg-name').value.trim() || '云发卡';
   const tg = $('#cfg-tg').value.trim().replace(/^@/,'');
+  const alipayMode = $('#cfg-alipay-mode').value;
   db.config = {
     ...db.config,
     site_name: name,
@@ -1824,7 +1926,9 @@ function saveSettings() {
     balance_enabled: $('#cfg-balance-enabled').checked,
     recharge_min: Math.round(parseFloat($('#cfg-recharge-min').value || '10') * 100) || 1000,
     pay_alipay_enabled: $('#cfg-alipay-enabled').checked,
-    pay_alipay_qr: $('#cfg-alipay-qr').value.trim(),
+    pay_alipay_mode: alipayMode,
+    pay_alipay_redpacket_prefix: ($('#cfg-rp-prefix').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'') || 'YFK').slice(0,6),
+    pay_alipay_qr: $('#cfg-alipay-qr') ? $('#cfg-alipay-qr').value.trim() : (db.config.pay_alipay_qr || ''),
     pay_alipay_note: $('#cfg-alipay-note').value.trim() || '请使用支付宝扫码支付，支付后点击下方按钮',
     pay_usdt_enabled: $('#cfg-usdt-enabled').checked,
     pay_usdt_address: $('#cfg-usdt-address').value.trim(),

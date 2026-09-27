@@ -24,7 +24,6 @@ export async function onRequest(context) {
   const order = state.db.orders.find(o => o.order_no === orderNo);
   if (!order) return Response.json({ ok: false, msg: '订单不存在' }, { headers: corsHeaders });
 
-  // 已发货/已驳回等，直接返回
   if (order.status !== 'pending') {
     return Response.json({ ok: true, status: order.status }, { headers: corsHeaders });
   }

@@ -7,25 +7,91 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN || '';
 
+// GitHub Gist 持久化配置
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
+const GIST_ID = process.env.GIST_ID || '';
+const GIST_FILENAME = 'yunfaka-db.json';
+const GIST_ENABLED = !!(GITHUB_TOKEN && GIST_ID);
+
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 let db = null, rev = 0;
-try {
-  if (fs.existsSync(DB_FILE)) {
-    const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    db = parsed.db || null;
-    rev = parsed.rev || 0;
-  }
-} catch (e) { console.error('读取数据失败:', e.message); }
 
-let saveTimer = null;
-function saveToDisk() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
+// 从本地文件读取
+function loadFromLocal() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      return { db: parsed.db || null, rev: parsed.rev || 0 };
+    }
+  } catch (e) { console.error('本地读取失败:', e.message); }
+  return { db: null, rev: 0 };
+}
+
+// 从 Gist 读取
+async function loadFromGist() {
+  if (!GIST_ENABLED) return null;
+  try {
+    const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'User-Agent': 'yunfaka' }
+    });
+    if (!r.ok) { console.error('Gist 读取失败:', r.status); return null; }
+    const d = await r.json();
+    const file = d.files && d.files[GIST_FILENAME];
+    if (!file || !file.content) return null;
+    const parsed = JSON.parse(file.content);
+    console.log('✅ 已从 Gist 恢复数据');
+    return { db: parsed.db || null, rev: parsed.rev || 0 };
+  } catch (e) { console.error('Gist 读取异常:', e.message); return null; }
+}
+
+// 写入 Gist
+let gistSaveTimer = null;
+function saveToGist() {
+  if (!GIST_ENABLED) return;
+  clearTimeout(gistSaveTimer);
+  gistSaveTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${GITHUB_TOKEN}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'yunfaka'
+        },
+        body: JSON.stringify({
+          files: { [GIST_FILENAME]: { content: JSON.stringify({ db, rev, updated_at: Date.now() }) } }
+        })
+      });
+      if (!r.ok) console.error('Gist 写入失败:', r.status);
+    } catch (e) { console.error('Gist 写入异常:', e.message); }
+  }, 2000);
+}
+
+// 本地写入
+let localSaveTimer = null;
+function saveToLocal() {
+  clearTimeout(localSaveTimer);
+  localSaveTimer = setTimeout(() => {
     try { fs.writeFileSync(DB_FILE, JSON.stringify({ rev, db, updated_at: Date.now() })); }
-    catch (e) { console.error('写入数据失败:', e.message); }
+    catch (e) { console.error('本地写入失败:', e.message); }
   }, 200);
 }
+
+function saveAll() { saveToLocal(); saveToGist(); }
+
+// 启动：优先从 Gist 拉，其次本地
+(async () => {
+  const fromGist = await loadFromGist();
+  if (fromGist && fromGist.db) {
+    db = fromGist.db; rev = fromGist.rev;
+  } else {
+    const fromLocal = loadFromLocal();
+    db = fromLocal.db; rev = fromLocal.rev;
+    if (db) console.log('✅ 已从本地文件恢复数据');
+  }
+  console.log(`📦 数据状态: ${db ? '已加载' : '空'}, rev=${rev}`);
+})();
 
 const MIME = {
   '.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8',
@@ -77,7 +143,7 @@ const server = http.createServer((req, res) => {
         }
         db = parsed.db;
         rev++;
-        saveToDisk();
+        saveAll();
         send(res, 200, { ok:true, rev });
       } catch (e) {
         send(res, 400, { ok:false, msg:'数据格式错误' });
@@ -86,7 +152,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (p === '/healthz') return send(res, 200, { ok:true, rev });
+  if (p === '/healthz') return send(res, 200, { ok:true, rev, gist: GIST_ENABLED });
 
   let file = p === '/' ? '/index.html' : decodeURIComponent(p);
   file = path.join(__dirname, 'public', file);
@@ -109,6 +175,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`✅ 云发卡已启动: http://localhost:${PORT}`);
-  console.log(`   数据文件: ${DB_FILE}`);
-  if (ACCESS_TOKEN) console.log('   API 访问已启用 Token 校验');
+  console.log(`   Gist 持久化: ${GIST_ENABLED ? '已启用' : '未配置'}`);
 });

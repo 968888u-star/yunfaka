@@ -55,6 +55,9 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .p-name{font-size:16px;font-weight:700}
 .p-desc{font-size:13px;color:var(--muted);line-height:1.6;min-height:21px}
 .p-price{font-size:22px;font-weight:800;color:#e11d48}.p-price small{font-size:13px;font-weight:600}
+.p-price .from{font-size:12px;font-weight:600;color:#6b7280;margin-left:2px}
+.sku-tags{display:flex;flex-wrap:wrap;gap:4px}
+.sku-tag{font-size:11px;padding:2px 8px;border-radius:6px;background:#f5f3ff;color:#6366f1;font-weight:600}
 .badge{font-size:12px;padding:3px 9px;border-radius:99px;font-weight:600;white-space:nowrap}
 .badge.ok{background:#dcfce7;color:#15803d}.badge.no{background:#fee2e2;color:#b91c1c}
 .badge.gray{background:#eef0f6;color:#6b7280}.badge.cat{background:#eef2ff;color:#4f46e5}
@@ -64,6 +67,12 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .pay-method:hover{border-color:#c7cbe0}.pay-method input{width:auto;margin:0}
 .pay-method.active{border-color:var(--primary);background:#f5f3ff;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
 .pay-method .logo{font-size:18px}
+.sku-options{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+.sku-option{padding:10px 16px;border:2px solid var(--line);border-radius:10px;cursor:pointer;transition:.15s;background:#fff;font-size:14px;font-weight:600;user-select:none;font-family:inherit}
+.sku-option:hover{border-color:#c7cbe0}
+.sku-option.active{border-color:var(--primary);background:#f5f3ff;color:var(--primary)}
+.sku-option small{display:block;font-size:11px;color:#e11d48;margin-top:2px;font-weight:700}
+.sku-option.active small{color:#6366f1}
 .balance-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#fef9e7;border:1px dashed #fcd34d;border-radius:10px;margin-bottom:14px;font-size:14px}
 .balance-row .lbl{display:flex;align-items:center;gap:8px;font-weight:600;color:#92400e}
 .balance-row .val{color:#b45309;font-weight:700}
@@ -80,7 +89,6 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .addr-box{background:#0f172a;color:#7dd3fc;padding:12px 14px;border-radius:10px;font-size:13px;word-break:break-all;display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px}
 .addr-box span{flex:1;text-align:left}
 .addr-box button{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;flex-shrink:0}
-/* 口令红包大展示 */
 .redpacket-box{background:linear-gradient(135deg,#ff5722,#e91e63);color:#fff;border-radius:14px;padding:22px 20px;text-align:center;margin:14px 0;position:relative;overflow:hidden}
 .redpacket-box::before{content:"";position:absolute;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.08);right:-50px;top:-50px}
 .redpacket-box .lbl{font-size:13px;opacity:.9;margin-bottom:8px;position:relative;z-index:1}
@@ -95,11 +103,13 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .modal{background:#fff;border-radius:18px;width:100%;max-width:440px;padding:24px;box-shadow:0 24px 60px -12px rgba(0,0,0,.35);animation:pop .2s;max-height:90vh;overflow-y:auto}
 @keyframes pop{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
 .modal h3{margin:0 0 18px;font-size:17px}
+.modal.wide{max-width:560px}
 .toast{position:fixed;left:50%;bottom:40px;transform:translate(-50%,20px);background:#1f2430;color:#fff;padding:12px 22px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:300;max-width:90vw}
 .toast.show{opacity:1;transform:translate(-50%,0)}.toast.error{background:#b91c1c}.toast.success{background:#047857}
 .tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
 .tabs button{padding:9px 16px;border-radius:10px;border:0;background:#eef0f6;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted)}
 .tabs button.active{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff}
+.tabs button .nb{background:#ef4444;color:#fff;font-size:10px;border-radius:99px;padding:1px 6px;margin-left:5px;font-weight:700}
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .stat{padding:18px;border-radius:12px;background:#fff;border:1px solid var(--line)}
 .stat .n{font-size:24px;font-weight:800;background:linear-gradient(135deg,var(--primary),var(--primary2));-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -130,7 +140,19 @@ tbody tr:hover{background:#fafbfe}
 .find-pwd-link{text-align:center;font-size:13px;margin:10px 0 0}
 .find-pwd-link a{color:#6366f1;font-weight:600}
 .rp-code-cell{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:800;color:#e91e63;letter-spacing:1px;font-size:13px}
-@media (max-width:600px){.nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}.hero h1{font-size:21px}.tg-float{right:16px;bottom:18px;width:50px;height:50px}.pay-method{min-width:80px;padding:10px 12px;font-size:13px}.member-card .amt{font-size:28px}.redpacket-box .code{font-size:26px;letter-spacing:2px}}
+/* SKU 编辑器 */
+.sku-editor{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
+.sku-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+.sku-row input{padding:8px 10px;font-size:13px}
+.sku-row .sku-name{flex:2}
+.sku-row .sku-price{flex:1}
+.sku-row .sku-del{flex:0 0 auto;background:#fee2e2;color:#b91c1c;border:0;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer;font-weight:600}
+.sku-add{margin-top:4px;background:#eef2ff;color:#4f46e5;border:1px dashed #a5b4fc;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.sku-add:hover{background:#e0e7ff}
+.sku-hint{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.6}
+.tg-hint{background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#075985;line-height:1.7}
+.tg-hint code{background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px}
+@media (max-width:600px){.nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}.hero h1{font-size:21px}.tg-float{right:16px;bottom:18px;width:50px;height:50px}.pay-method{min-width:80px;padding:10px 12px;font-size:13px}.member-card .amt{font-size:28px}.redpacket-box .code{font-size:26px;letter-spacing:2px}.modal.wide{max-width:100%}}
 </style>
 </head>
 <body>
@@ -162,7 +184,7 @@ tbody tr:hover{background:#fafbfe}
 
 <script>
 /* ==================================================================
-   云发卡 v10：支付宝口令红包 + USDT 自动检测 + 半自动审核
+   云发卡 v11：SKU 多规格 + TG 订单通知 + 口令红包 + USDT 自动检测
    ================================================================== */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -176,7 +198,11 @@ function toast(msg, type) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.className = 'toast'; }, 2600);
 }
-function openModal(html) { $('#modal-box').innerHTML = html; $('#modal').classList.remove('hidden'); }
+function openModal(html, wide) {
+  $('#modal-box').innerHTML = html;
+  $('#modal-box').classList.toggle('wide', !!wide);
+  $('#modal').classList.remove('hidden');
+}
 function closeModal() { $('#modal').classList.add('hidden'); $('#modal-box').innerHTML = ''; }
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
@@ -207,7 +233,7 @@ function hashPwd(pwd) {
 }
 
 /* ---------------- 数据层 ---------------- */
-const STORE_KEY = 'yunfaka_db_v10';
+const STORE_KEY = 'yunfaka_db_v11';
 const MY_KEY = 'yunfaka_my_orders';
 const MEMBER_KEY = 'yunfaka_member_user';
 const LS_SECRET = 'yunfaka_last_secret';
@@ -228,7 +254,7 @@ function genOrderNo() {
   return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`+Math.floor(Math.random()*9000+1000);
 }
 function genRechargeId() { return 'R'+Date.now()+Math.floor(Math.random()*900+100); }
-/* 生成唯一红包口令：前缀 + 6位大写字母数字（排除易混淆字符） */
+function genSkuId() { return Date.now() + Math.floor(Math.random()*1000); }
 function genRedpacketCode(prefix) {
   const p = String(prefix || 'YFK').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'YFK';
   return p + randStr(6);
@@ -236,9 +262,10 @@ function genRedpacketCode(prefix) {
 
 const DEFAULT_CONFIG = {
   site_name:'云发卡', tg_username:'U345666',
+  tg_bot_token:'', tg_chat_id:'', tg_notify_enabled:false,
   admin_pwd_hash: hashPwd('admin888'),
   pay_alipay_enabled:true,
-  pay_alipay_mode:'redpacket',  // 'redpacket' | 'qr'
+  pay_alipay_mode:'redpacket',
   pay_alipay_redpacket_prefix:'YFK',
   pay_alipay_qr:'',
   pay_alipay_note:'请使用支付宝扫码支付，支付后点击下方按钮',
@@ -255,19 +282,42 @@ function seedDB() {
     categories:[], products:[], cards:[], orders:[], members:[], recharges:[] };
   const addCat = name => { const id = ++db.seq.category; db.categories.push({id,name}); return id; };
   const c1 = addCat('会员卡券'), c2 = addCat('游戏点卡'), c3 = addCat('软件工具');
+
+  // 带 SKU 的商品示例
+  const addProductWithSkus = (name, desc, note, catId, skus, cardsPerSku) => {
+    const id = ++db.seq.product;
+    const product = {
+      id, name, description: desc, note, active: true,
+      category_id: catId, created_at: now(),
+      skus: skus.map((s, i) => ({ id: genSkuId() + i, name: s.name, price: s.price }))
+    };
+    db.products.push(product);
+    product.skus.forEach((sku, si) => {
+      for (let i=0;i<cardsPerSku[si];i++){
+        db.seq.card++;
+        db.cards.push({
+          id: db.seq.card, product_id: id, sku_id: sku.id,
+          content: genCard(), status:'unused', order_no:'', used_at:'', created_at: now()
+        });
+      }
+    });
+  };
+
   const addProduct = (name, price, desc, note, catId, cardCount) => {
     const id = ++db.seq.product;
-    db.products.push({id,name,price,description:desc,note,active:true,category_id:catId,created_at:now()});
+    db.products.push({ id, name, price, description: desc, note, active: true, category_id: catId, created_at: now(), skus: [] });
     for (let i=0;i<cardCount;i++){
       db.seq.card++;
-      db.cards.push({id:db.seq.card,product_id:id,content:genCard(),status:'unused',order_no:'',used_at:'',created_at:now()});
+      db.cards.push({ id: db.seq.card, product_id: id, sku_id: 0, content: genCard(), status:'unused', order_no:'', used_at:'', created_at: now() });
     }
   };
-  addProduct('视频会员月卡',990,'付款后立即显示卡密，无需等待','请前往官方 App 兑换，有效期 30 天。',c1,8);
-  addProduct('音乐会员季卡',2580,'自动发货 · 支持全网通','兑换后 90 天内有效，售出不退。',c1,5);
-  addProduct('云盘超级会员年卡',9900,'官方直充 · 秒到账','请勿泄露卡密，一个账号限用一次。',c1,3);
-  addProduct('游戏点券 1000 点',8800,'自动发货 · 全国通用','充值后立即到账，请核对区服。',c2,0);
-  addProduct('PDF 转换工具 1 年授权',4900,'官方授权 · 自动发码','激活后一年内有效，支持 3 台设备。',c3,6);
+
+  addProductWithSkus('视频会员', '多规格可选，自动发货', '请前往官方 App 兑换', c1,
+    [{name:'1个月', price:990},{name:'3个月', price:2580},{name:'1年', price:8800}], [8,5,3]);
+  addProduct('音乐会员季卡', 2580, '自动发货 · 支持全网通', '兑换后 90 天内有效', c1, 5);
+  addProduct('云盘超级会员年卡', 9900, '官方直充 · 秒到账', '请勿泄露卡密', c1, 3);
+  addProduct('游戏点券 1000 点', 8800, '自动发货 · 全国通用', '充值后立即到账', c2, 0);
+  addProduct('PDF 转换工具 1 年授权', 4900, '官方授权 · 自动发码', '激活后一年内有效', c3, 6);
   return db;
 }
 function loadDB() {
@@ -281,6 +331,10 @@ function loadDB() {
     if (!Array.isArray(d.categories)) d.categories = [];
     if (!Array.isArray(d.members)) d.members = [];
     if (!Array.isArray(d.recharges)) d.recharges = [];
+    // 兼容：确保每个商品有 skus 字段
+    d.products.forEach(p => { if (!Array.isArray(p.skus)) p.skus = []; });
+    // 兼容：卡密确保有 sku_id 字段（默认 0）
+    d.cards.forEach(c => { if (c.sku_id === undefined) c.sku_id = 0; });
     d.members = d.members.filter(m => m && m.username && m.password);
     d.members.forEach(m => { if (m.secret === undefined && m.contact !== undefined) m.secret = m.contact; });
     d.orders.forEach(o => { if (o.secret === undefined && o.contact !== undefined) o.secret = o.contact; });
@@ -292,11 +346,32 @@ function loadDB() {
 function saveDB(db) { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
 function getConfig(db) { return db.config || DEFAULT_CONFIG; }
 
+/* SKU 帮助函数 */
+function getSkus(p) { return (p && Array.isArray(p.skus)) ? p.skus : []; }
+function hasSkus(p) { return getSkus(p).length > 0; }
+function getMinPrice(p) {
+  const skus = getSkus(p);
+  if (!skus.length) return p.price;
+  return Math.min(...skus.map(s => s.price));
+}
+function getSkuById(p, skuId) { return getSkus(p).find(s => String(s.id) === String(skuId)); }
+function productStock(db, p, skuId) {
+  if (!hasSkus(p)) {
+    return db.cards.filter(c => c.product_id === p.id && c.status === 'unused' && (!c.sku_id || c.sku_id === 0)).length;
+  }
+  if (skuId === undefined) {
+    // 所有 SKU 加总
+    return db.cards.filter(c => c.product_id === p.id && c.status === 'unused').length;
+  }
+  return db.cards.filter(c => c.product_id === p.id && c.status === 'unused' && String(c.sku_id) === String(skuId)).length;
+}
 function getAdminPwdHash(db) {
   const cfg = db.config || {};
   return cfg.admin_pwd_hash || DEFAULT_CONFIG.admin_pwd_hash;
 }
-function stockOf(db, pid) { return db.cards.filter(c=>c.product_id===pid && c.status==='unused').length; }
+function stockOf(db, pid) {
+  return db.cards.filter(c=>c.product_id===pid && c.status==='unused').length;
+}
 
 function saveMyOrder(no, secret) {
   try { const m = JSON.parse(localStorage.getItem(MY_KEY)||'{}'); m[no]=secret; localStorage.setItem(MY_KEY, JSON.stringify(m)); } catch(e){}
@@ -365,6 +440,25 @@ function applySiteConfig() {
   });
 }
 
+/* 发送 TG 通知 */
+async function notifyTg(orderNo) {
+  const db = loadDB();
+  const cfg = getConfig(db);
+  if (!cfg.tg_notify_enabled) return;
+  try {
+    const r = await fetch('/api/tg-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_no: orderNo })
+    });
+    const d = await r.json();
+    if (d.ok) console.log('TG 通知已发送');
+    else console.warn('TG 通知失败:', d.msg);
+  } catch (e) {
+    console.warn('TG 通知异常:', e);
+  }
+}
+
 const STATUS_TEXT = { pending:'待支付', pending_review:'待审核', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回' };
 const STATUS_CLASS = { pending:'gray', pending_review:'warn', delivered:'ok', out_of_stock:'no', rejected:'no' };
 const RECHARGE_TEXT = { pending:'待支付', success:'已到账' };
@@ -407,20 +501,24 @@ function renderHome() {
     ${cats.map(c=>`<button class="cat-tab ${String(homeCategory)===String(c.id)?'active':''}" onclick="setHomeCategory(${c.id})">${esc(c.name)}<span class="n">${countOf(c.id)}</span></button>`).join('')}`;
 
   const cards = filtered.length ? filtered.map(p => {
-    const stock = stockOf(db, p.id);
+    const totalStock = stockOf(db, p.id);
     const cat = cats.find(c => String(c.id) === String(p.category_id));
+    const skus = getSkus(p);
+    const minPrice = getMinPrice(p);
+    const skuTags = skus.length ? `<div class="sku-tags">${skus.map(s=>`<span class="sku-tag">${esc(s.name)}</span>`).join('')}</div>` : '';
     return `<div class="card product">
       <div class="spread">
         <div class="p-name">${esc(p.name)}</div>
-        <span class="badge ${stock>0?'ok':'no'}">${stock>0?'有货':'缺货'}</span>
+        <span class="badge ${totalStock>0?'ok':'no'}">${totalStock>0?'有货':'缺货'}</span>
       </div>
       <div class="p-desc">${esc(p.description || '虚拟商品 · 付款后自动发货')}</div>
       <div class="row" style="gap:6px"><span class="badge ${cat?'cat':'gray'}">${esc(cat?cat.name:'未分类')}</span></div>
+      ${skuTags}
       <div class="spread" style="margin-top:auto">
-        <div class="p-price"><small>¥</small>${yuan(p.price)}</div>
-        <div class="muted" style="font-size:12px">库存 ${stock}</div>
+        <div class="p-price"><small>¥</small>${yuan(minPrice)}${skus.length?`<span class="from">起</span>`:''}</div>
+        <div class="muted" style="font-size:12px">库存 ${totalStock}</div>
       </div>
-      <button class="btn primary" ${stock<=0?'disabled':''} onclick="openBuy(${p.id})">${stock>0?'立即购买':'暂时缺货'}</button>
+      <button class="btn primary" ${totalStock<=0?'disabled':''} onclick="openBuy(${p.id})">${totalStock>0?'立即购买':'暂时缺货'}</button>
     </div>`;
   }).join('') : '<div class="empty" style="grid-column:1/-1">该分类下暂无商品</div>';
 
@@ -455,30 +553,58 @@ function openBuy(id) {
   const cfg = getConfig(db);
   const p = db.products.find(x => x.id === id);
   if (!p) { toast('商品不存在','error'); return; }
-  const stock = stockOf(db, id);
-  if (stock <= 0) { toast('该商品暂时缺货','error'); return; }
+  const skus = getSkus(p);
+  const hasSku = skus.length > 0;
+  const totalStock = stockOf(db, id);
+  if (totalStock <= 0) { toast('该商品暂时缺货','error'); return; }
+
+  // 默认选中第一个有货的 SKU
+  let defaultSkuId = 0;
+  if (hasSku) {
+    const firstOk = skus.find(s => productStock(db, p, s.id) > 0);
+    defaultSkuId = firstOk ? firstOk.id : skus[0].id;
+  }
+
   const alipayEnabled = cfg.pay_alipay_enabled !== false;
   const usdtEnabled = cfg.pay_usdt_enabled !== false;
   const balanceEnabled = cfg.balance_enabled !== false;
   if (!alipayEnabled && !usdtEnabled && !balanceEnabled) { toast('商家未开启支付方式','error'); return; }
-  const maxQty = Math.min(50, stock);
+
   const member = getCurrentMember(db);
   const lastSecret = (member && member.secret) || localStorage.getItem(LS_SECRET) || '';
   const cat = db.categories.find(c => String(c.id) === String(p.category_id));
+
+  // 当前选中 SKU 的库存和价格
+  const initialPrice = hasSku ? (getSkuById(p, defaultSkuId)?.price || p.price) : p.price;
+  const initialStock = hasSku ? productStock(db, p, defaultSkuId) : productStock(db, p, 0);
+  const maxQty = Math.min(50, initialStock);
 
   openModal(`
     <h3>确认购买</h3>
     <div class="kv"><span class="k">商品</span><span class="v">${esc(p.name)}</span></div>
     ${cat?`<div class="kv"><span class="k">分类</span><span class="v">${esc(cat.name)}</span></div>`:''}
-    <div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48">¥${yuan(p.price)}</span></div>
-    <label class="field"><span>购买数量（库存 ${stock}）</span><input id="buy-qty" type="number" min="1" max="${maxQty}" value="1"></label>
+    ${hasSku ? `
+      <label class="field"><span>选择规格</span>
+        <div class="sku-options" id="buy-skus">
+          ${skus.map(s => {
+            const st = productStock(db, p, s.id);
+            const dis = st <= 0;
+            return `<button class="sku-option ${String(s.id)===String(defaultSkuId)?'active':''}" data-sku="${s.id}" ${dis?'disabled style="opacity:.4;cursor:not-allowed"':''}>
+              ${esc(s.name)}<small>¥${yuan(s.price)}${dis?' · 缺货':''}</small>
+            </button>`;
+          }).join('')}
+        </div>
+      </label>
+    ` : ''}
+    <div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="buy-unit">¥${yuan(initialPrice)}</span></div>
+    <label class="field"><span>购买数量（库存 <span id="buy-stock-label">${initialStock}</span>）</span><input id="buy-qty" type="number" min="1" max="${maxQty}" value="1"></label>
     <label class="field"><span>暗号（用于查询订单 / 找回会员密码）</span><input id="buy-secret" type="text" placeholder="自定义内容，请务必牢记" maxlength="60" value="${esc(lastSecret)}"></label>
     <div id="balance-box"></div>
     <div class="spread" style="margin:14px 0;padding-top:14px;border-top:1px dashed var(--line)">
-      <span class="muted" style="font-size:13px">订单金额</span><span id="buy-amount" style="font-size:18px;font-weight:800;color:#e11d48">¥${yuan(p.price)}</span>
+      <span class="muted" style="font-size:13px">订单金额</span><span id="buy-amount" style="font-size:18px;font-weight:800;color:#e11d48">¥${yuan(initialPrice)}</span>
     </div>
     <div class="spread" style="margin-bottom:8px"><span class="muted" style="font-size:13px">余额抵扣</span><span id="buy-deduct" style="font-weight:700;color:#b45309">-¥0.00</span></div>
-    <div class="spread" style="margin-bottom:16px"><span class="muted" style="font-size:13px">还需支付</span><span id="buy-due" style="font-size:20px;font-weight:800;color:#e11d48">¥${yuan(p.price)}</span></div>
+    <div class="spread" style="margin-bottom:16px"><span class="muted" style="font-size:13px">还需支付</span><span id="buy-due" style="font-size:20px;font-weight:800;color:#e11d48">¥${yuan(initialPrice)}</span></div>
     <div id="pay-method-wrap">
       <label class="field" style="margin-bottom:14px"><span>支付方式</span>
         <div class="pay-methods" id="pay-methods">
@@ -490,10 +616,19 @@ function openBuy(id) {
     <div class="row" style="justify-content:flex-end;margin-top:8px">
       <button class="btn ghost" onclick="closeModal()">取消</button>
       <button class="btn primary" id="buy-submit" onclick="submitBuy(${p.id})">确认订单</button>
-    </div>`);
+    </div>
+  `);
 
   const qty = $('#buy-qty');
   const secretEl = $('#buy-secret');
+  let currentSkuId = hasSku ? defaultSkuId : 0;
+
+  const getCurrentPrice = () => {
+    if (!hasSku) return p.price;
+    const sku = getSkuById(p, currentSkuId);
+    return sku ? sku.price : p.price;
+  };
+  const getCurrentStock = () => productStock(loadDB(), p, currentSkuId);
 
   const refreshBalance = () => {
     const box = $('#balance-box');
@@ -521,13 +656,15 @@ function openBuy(id) {
   };
   const refreshTotals = () => {
     const q = parseInt(qty.value) || 1;
-    const amount = p.price * q;
+    const price = getCurrentPrice();
+    const amount = price * q;
     const m = getCurrentMember(loadDB());
     const balance = m ? (m.balance||0) : 0;
     const cb = $('#use-balance');
     const useBalance = cb && cb.checked && balanceEnabled && m;
     let deduct = useBalance ? Math.min(balance, amount) : 0;
     const due = amount - deduct;
+    $('#buy-unit').textContent = '¥' + yuan(price);
     $('#buy-amount').textContent = '¥' + yuan(amount);
     $('#buy-deduct').textContent = '-¥' + yuan(deduct);
     $('#buy-due').textContent = '¥' + yuan(due);
@@ -535,9 +672,39 @@ function openBuy(id) {
     if (due === 0) { wrap.style.opacity='0.4'; wrap.style.pointerEvents='none'; }
     else { wrap.style.opacity='1'; wrap.style.pointerEvents='auto'; }
   };
+  const refreshStock = () => {
+    const st = getCurrentStock();
+    const maxQ = Math.min(50, st);
+    qty.setAttribute('max', maxQ);
+    if (parseInt(qty.value) > maxQ) qty.value = maxQ;
+    $('#buy-stock-label').textContent = st;
+    const submitBtn = $('#buy-submit');
+    if (st <= 0) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '该规格缺货';
+    } else {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '确认订单';
+    }
+    refreshTotals();
+  };
+
+  if (hasSku) {
+    document.querySelectorAll('#buy-skus .sku-option').forEach(el => {
+      el.addEventListener('click', () => {
+        if (el.disabled) return;
+        document.querySelectorAll('#buy-skus .sku-option').forEach(x => x.classList.remove('active'));
+        el.classList.add('active');
+        currentSkuId = parseInt(el.dataset.sku);
+        refreshStock();
+      });
+    });
+  }
+
   qty.addEventListener('input', () => {
     let v = parseInt(qty.value) || 1;
-    v = Math.max(1, Math.min(maxQty, v));
+    const maxQ = Math.min(50, getCurrentStock());
+    v = Math.max(1, Math.min(maxQ, v));
     qty.value = v; refreshTotals();
   });
   secretEl.addEventListener('keydown', e => { if (e.key==='Enter') submitBuy(p.id); });
@@ -549,6 +716,9 @@ function openBuy(id) {
       if (r) r.checked = true;
     });
   });
+
+  // 把当前选中的 SKU 存到全局变量供 submitBuy 使用
+  window.__buyCurrentSkuId = () => currentSkuId;
   refreshBalance();
   qty.focus(); qty.select();
 }
@@ -558,16 +728,24 @@ function submitBuy(id) {
   const cfg = getConfig(db);
   const p = db.products.find(x => x.id === id);
   if (!p) { toast('商品不存在','error'); return; }
+  const hasSku = hasSkus(p);
+  const currentSkuId = (typeof window.__buyCurrentSkuId === 'function') ? window.__buyCurrentSkuId() : 0;
+
   const qtyEl = $('#buy-qty'), secretEl = $('#buy-secret');
   let qty = parseInt(qtyEl.value) || 1;
   const secret = secretEl.value.trim();
-  const stock = stockOf(db, id);
   const sErr = validateSecret(secret);
   if (sErr) { toast(sErr,'error'); secretEl.focus(); return; }
-  if (qty < 1) { toast('数量至少为 1','error'); return; }
-  if (qty > stock) { toast('库存不足，当前仅剩 '+stock+' 件','error'); return; }
 
-  const amount = p.price * qty;
+  const sku = hasSku ? getSkuById(p, currentSkuId) : null;
+  if (hasSku && !sku) { toast('请选择规格','error'); return; }
+  const price = hasSku ? sku.price : p.price;
+  const stock = productStock(db, p, hasSku ? sku.id : 0);
+
+  if (qty < 1) { toast('数量至少为 1','error'); return; }
+  if (qty > stock) { toast('库存不足，当前仅剩 ' + stock + ' 件','error'); return; }
+
+  const amount = price * qty;
   const balanceEnabled = cfg.balance_enabled !== false;
   const member = getCurrentMember(db);
   const cb = $('#use-balance');
@@ -588,11 +766,12 @@ function submitBuy(id) {
   const orderNo = genOrderNo();
   const order = {
     order_no: orderNo, product_id: id, product_name: p.name,
+    sku_id: hasSku ? sku.id : 0,
+    sku_name: hasSku ? sku.name : '',
     category_id: p.category_id || 0, quantity: qty, amount, balance_used: deduct,
     amount_due: due, secret, username: member?member.username:'', status: 'pending',
     pay_method: payMethod, cards: [], note: p.note || '', created_at: now(), delivered_at: ''
   };
-  // 如果是支付宝订单，生成唯一红包口令
   if (payMethod === 'alipay') {
     order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
   }
@@ -618,7 +797,7 @@ function showPayModal(type, id) {
     if (!o) { toast('订单不存在','error'); return; }
     if (o.status !== 'pending') { toast('该订单已提交或已发货','success'); location.hash='#/order/'+id; return; }
     amount = o.amount_due; orderNo = o.order_no; payMethod = o.pay_method; rpCode = o.redpacket_code || '';
-    extra = `<div class="kv"><span class="k">商品</span><span class="v">${esc(o.product_name)} × ${o.quantity}</span></div>
+    extra = `<div class="kv"><span class="k">商品</span><span class="v">${esc(o.product_name)}${o.sku_name?' · '+esc(o.sku_name):''} × ${o.quantity}</span></div>
       ${o.balance_used>0?`<div class="kv"><span class="k">余额已抵扣</span><span class="v" style="color:#b45309">-¥${yuan(o.balance_used)}</span></div>`:''}`;
   } else if (type === 'recharge') {
     const r = db.recharges.find(x => x.id === id);
@@ -632,7 +811,6 @@ function showPayModal(type, id) {
   if (payMethod === 'alipay') {
     const mode = cfg.pay_alipay_mode || 'redpacket';
     const useRp = mode === 'redpacket';
-
     if (useRp && rpCode) {
       html = `<h3>💰 支付宝口令红包</h3>
         <div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">${esc(orderNo)}</span></div>
@@ -661,7 +839,6 @@ function showPayModal(type, id) {
           <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已完成发送</button>
         </div>`;
     } else {
-      // 兼容旧版收款码模式
       const qr = cfg.pay_alipay_qr;
       html = `<h3>💰 支付宝支付</h3>
         <div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">${esc(orderNo)}</span></div>
@@ -670,9 +847,6 @@ function showPayModal(type, id) {
         ${qr?`<div class="qr-wrap"><img src="${esc(qr)}" alt="支付宝收款码"><div class="qr-tip">请使用支付宝扫描上方收款码支付</div></div>`
           :`<div class="qr-wrap"><div class="muted" style="padding:20px">商家未配置支付宝收款码</div></div>`}
         <p class="muted" style="font-size:13px;text-align:center;margin:8px 0 14px">${esc(cfg.pay_alipay_note||'扫码支付后点击下方按钮')}</p>
-        <div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">
-          <b>⚠️ 重要提示：</b>点击后订单进入<b>人工审核</b>，管理员核对收款后才会发货。
-        </div>
         <div class="row" style="justify-content:flex-end">
           <button class="btn ghost" onclick="closeModal()">取消</button>
           <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已完成支付</button>
@@ -697,7 +871,6 @@ function showPayModal(type, id) {
       <div style="background:#dbeafe;border:1px dashed #93c5fd;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#1e40af;line-height:1.6">
         <b>ℹ️ 说明：</b>请务必转账<b>${usdtAmount} USDT</b>（允许 ±1% 误差），系统每 30 秒自动检测链上转账，到账后自动发货。
       </div>
-      <p class="muted" style="font-size:13px;text-align:center;margin:8px 0 14px">${esc(cfg.pay_usdt_note||'转账后无需操作，系统自动识别')}</p>
       <div class="row" style="justify-content:flex-end">
         <button class="btn ghost" onclick="closeModal()">关闭</button>
         <button class="btn primary" onclick="confirmPay('${type}','${esc(orderNo)}')">我已转账</button>
@@ -713,19 +886,19 @@ function confirmPay(type, id) {
     const db = loadDB();
     const o = db.orders.find(x => x.order_no === id);
     if (!o) return;
-
     if (o.pay_method === 'usdt') {
       toast('USDT 到账将自动检测，请等待…', 'success');
       closeModal();
       if (location.hash === '#/order/'+id) route(); else location.hash = '#/order/'+id;
       return;
     }
-
     o.status = 'pending_review';
     o.submitted_at = now();
     saveDB(db);
     closeModal();
-    toast('已提交，管理员审核后自动发货', 'success');
+    toast('已提交，正在通知商家审核', 'success');
+    // 异步发送 TG 通知
+    notifyTg(o.order_no);
     if (location.hash === '#/order/'+id) route(); else location.hash = '#/order/'+id;
   } else if (type === 'recharge') {
     const db = loadDB();
@@ -744,7 +917,15 @@ function payOrder(orderNo) {
   const db = loadDB();
   const o = db.orders.find(x => x.order_no === orderNo);
   if (!o || o.status !== 'pending') return;
-  const available = db.cards.filter(c => c.product_id === o.product_id && c.status === 'unused');
+  // 按 SKU 匹配卡密
+  const available = db.cards.filter(c => {
+    if (c.product_id !== o.product_id) return false;
+    if (c.status !== 'unused') return false;
+    // SKU 匹配：如果订单有 sku_id，则卡密 sku_id 必须一致；否则卡密 sku_id 必须是 0
+    const orderSku = o.sku_id || 0;
+    const cardSku = c.sku_id || 0;
+    return String(orderSku) === String(cardSku);
+  });
   if (available.length >= o.quantity) {
     available.slice(0, o.quantity).forEach(c => {
       c.status='used'; c.order_no=o.order_no; c.used_at=now();
@@ -807,12 +988,17 @@ function approveOrder(orderNo) {
   if (o.status !== 'pending_review') { toast('订单状态不对', 'error'); return; }
   if (!confirm(`确认已收款 ¥${yuan(o.amount_due)}，为客户发货？`)) return;
 
-  const available = db.cards.filter(c => c.product_id === o.product_id && c.status === 'unused');
+  const orderSku = o.sku_id || 0;
+  const available = db.cards.filter(c => {
+    if (c.product_id !== o.product_id) return false;
+    if (c.status !== 'unused') return false;
+    const cardSku = c.sku_id || 0;
+    return String(cardSku) === String(orderSku);
+  });
   if (available.length < o.quantity) {
-    toast(`库存不足，需要 ${o.quantity} 条，只有 ${available.length} 条`, 'error');
+    toast(`该规格库存不足，需要 ${o.quantity} 条，只有 ${available.length} 条`, 'error');
     return;
   }
-
   available.slice(0, o.quantity).forEach(c => {
     c.status = 'used';
     c.order_no = o.order_no;
@@ -837,6 +1023,29 @@ function rejectOrder(orderNo) {
   saveDB(db);
   toast('订单已驳回', 'success');
   renderOrders();
+}
+
+/* 手动重新发送 TG 通知 */
+async function resendTg(orderNo) {
+  const db = loadDB();
+  const cfg = getConfig(db);
+  if (!cfg.tg_bot_token || !cfg.tg_chat_id) {
+    toast('请先在「设置」里配置 TG Bot Token 和 Chat ID', 'error');
+    return;
+  }
+  toast('正在发送…');
+  try {
+    const r = await fetch('/api/tg-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_no: orderNo })
+    });
+    const d = await r.json();
+    if (d.ok) toast('TG 通知已发送 ✅', 'success');
+    else toast(d.msg || '发送失败', 'error');
+  } catch (e) {
+    toast('网络错误', 'error');
+  }
 }
 
 /* ---------------- 会员 ---------------- */
@@ -997,13 +1206,11 @@ function renderMemberDashboard(member) {
   const alipayEnabled = cfg.pay_alipay_enabled !== false;
   const usdtEnabled = cfg.pay_usdt_enabled !== false;
   const defaultMethod = alipayEnabled ? 'alipay' : 'usdt';
-  const alipayMode = cfg.pay_alipay_mode || 'redpacket';
-  const alipayLabel = alipayMode === 'redpacket' ? '支付宝' : '支付宝';
 
   const rechargeRows = myRecharges.length ? myRecharges.map(r => `<tr>
     <td class="mono" style="font-size:12px">${esc(r.id)}</td>
     <td>¥${yuan(r.amount)}</td>
-    <td>${r.method==='alipay'?alipayLabel:'USDT'}</td>
+    <td>${r.method==='alipay'?'支付宝':'USDT'}</td>
     <td><span class="badge ${RECHARGE_CLASS[r.status]||'gray'}">${RECHARGE_TEXT[r.status]||r.status}</span></td>
     <td class="muted" style="font-size:12px">${esc(r.created_at)}</td>
     <td style="text-align:right">${r.status==='pending'?`<button class="btn sm primary" onclick="showPayModal('recharge','${esc(r.id)}')">去支付</button>`:''}</td>
@@ -1011,7 +1218,7 @@ function renderMemberDashboard(member) {
 
   const orderRows = myOrders.length ? myOrders.map(o => `<tr>
     <td class="mono" style="font-size:12px">${esc(o.order_no)}</td>
-    <td>${esc(o.product_name)} × ${o.quantity}</td>
+    <td>${esc(o.product_name)}${o.sku_name?' · '+esc(o.sku_name):''} × ${o.quantity}</td>
     <td>¥${yuan(o.amount)}</td>
     <td><span class="badge ${STATUS_CLASS[o.status]||'gray'}">${STATUS_TEXT[o.status]||o.status}</span></td>
     <td class="muted" style="font-size:12px">${esc(o.created_at)}</td>
@@ -1038,7 +1245,7 @@ function renderMemberDashboard(member) {
       <label class="field"><span>自定义金额（元）</span><input id="rc-amount" type="number" min="0.01" step="0.01" value="100.00"></label>
       <label class="field"><span>支付方式</span>
         <div class="pay-methods" id="rc-methods">
-          ${alipayEnabled?`<label class="pay-method ${defaultMethod==='alipay'?'active':''}" data-method="alipay"><input type="radio" name="rc-method" value="alipay" ${defaultMethod==='alipay'?'checked':''}><span class="logo">💰</span> ${alipayLabel}</label>`:''}
+          ${alipayEnabled?`<label class="pay-method ${defaultMethod==='alipay'?'active':''}" data-method="alipay"><input type="radio" name="rc-method" value="alipay" ${defaultMethod==='alipay'?'checked':''}><span class="logo">💰</span> 支付宝</label>`:''}
           ${usdtEnabled?`<label class="pay-method ${defaultMethod==='usdt'?'active':''}" data-method="usdt"><input type="radio" name="rc-method" value="usdt" ${defaultMethod==='usdt'?'checked':''}><span class="logo">🪙</span> USDT</label>`:''}
         </div>
       </label>
@@ -1152,9 +1359,7 @@ function renderOrderView(orderNo, secret) {
     } else if (o.pay_method === 'alipay' && o.redpacket_code) {
       body = `<div class="card panel" style="background:#fff5f5;border-color:#fc8181">
         <b>⏳ 待发送红包</b>
-        <p class="muted" style="font-size:13px;margin:6px 0 12px">
-          请点击下方按钮查看红包口令并在支付宝中发送。
-        </p>
+        <p class="muted" style="font-size:13px;margin:6px 0 12px">请点击下方按钮查看红包口令并在支付宝中发送。</p>
         <button class="btn primary" onclick="showPayModal('order','${esc(o.order_no)}')">查看口令 ¥${yuan(o.amount_due)}</button>
       </div>`;
     } else {
@@ -1174,9 +1379,7 @@ function renderOrderView(orderNo, secret) {
   } else if (o.status === 'rejected') {
     body = `<div class="card panel" style="background:#fee2e2;border-color:#fca5a5">
       <b>❌ 订单已驳回</b>
-      <p class="muted" style="font-size:13px;margin:6px 0 0">
-        管理员未收到您的付款，如有疑问请联系客服。
-      </p>
+      <p class="muted" style="font-size:13px;margin:6px 0 0">管理员未收到您的付款，如有疑问请联系客服。</p>
     </div>`;
   }
   const helpBox = tgUrl ? `<div class="card panel" style="max-width:640px;margin:16px auto 0;text-align:center">
@@ -1190,7 +1393,7 @@ function renderOrderView(orderNo, secret) {
         <span class="badge ${STATUS_CLASS[o.status]||'gray'}">${STATUS_TEXT[o.status]||o.status}</span>
       </div>
       <div class="kv"><span class="k">订单号</span><span class="v mono">${esc(o.order_no)}</span></div>
-      <div class="kv"><span class="k">商品</span><span class="v">${esc(o.product_name)}</span></div>
+      <div class="kv"><span class="k">商品</span><span class="v">${esc(o.product_name)}${o.sku_name?` <span class="badge cat" style="margin-left:6px">${esc(o.sku_name)}</span>`:''}</span></div>
       <div class="kv"><span class="k">数量</span><span class="v">${o.quantity}</span></div>
       <div class="kv"><span class="k">订单金额</span><span class="v">¥${yuan(o.amount)}</span></div>
       ${o.balance_used>0?`<div class="kv"><span class="k">余额抵扣</span><span class="v" style="color:#b45309">-¥${yuan(o.balance_used)}</span></div>`:''}
@@ -1266,13 +1469,15 @@ function adminLogout() {
   location.hash = '#/';
 }
 function renderAdminPanel() {
+  const db = loadDB();
+  const pendingCount = db.orders.filter(o => o.status === 'pending_review').length;
   $('#app').innerHTML = `<div class="spread" style="margin-bottom:18px">
       <h2 style="margin:0;font-size:20px">管理后台</h2>
       <button class="btn ghost sm" onclick="adminLogout()">退出登录</button>
     </div>
     <div class="tabs">
       <button data-tab="stats" onclick="switchTab('stats')">概览</button>
-      <button data-tab="pending" onclick="switchTab('pending')">待审核</button>
+      <button data-tab="pending" onclick="switchTab('pending')">待审核${pendingCount>0?`<span class="nb">${pendingCount}</span>`:''}</button>
       <button data-tab="products" onclick="switchTab('products')">商品</button>
       <button data-tab="categories" onclick="switchTab('categories')">分类</button>
       <button data-tab="cards" onclick="switchTab('cards')">卡密</button>
@@ -1339,16 +1544,19 @@ function resetData() {
 /* ---------- 待审核订单 ---------- */
 function renderPending() {
   const db = loadDB();
+  const cfg = getConfig(db);
   const list = db.orders.filter(o => o.status === 'pending_review');
+  const tgOk = cfg.tg_notify_enabled && cfg.tg_bot_token && cfg.tg_chat_id;
   const rows = list.length ? list.map(o => `<tr>
     <td class="mono" style="font-size:12px">${esc(o.order_no)}</td>
-    <td>${esc(o.product_name)} × ${o.quantity}</td>
+    <td>${esc(o.product_name)}${o.sku_name?`<div class="muted" style="font-size:11px">${esc(o.sku_name)}</div>`:''}<div class="muted" style="font-size:12px">×${o.quantity}</div></td>
     <td style="font-weight:700;color:#e11d48">¥${yuan(o.amount_due)}</td>
     <td>${o.pay_method==='alipay'?'支付宝':'USDT'}</td>
     <td>${o.redpacket_code?`<span class="rp-code-cell" data-v="${esc(o.redpacket_code)}" onclick="copyText(this.dataset.v,this)" style="cursor:pointer" title="点击复制">${esc(o.redpacket_code)}</span>`:'<span class="muted">-</span>'}</td>
     <td class="muted" style="font-size:12px">${esc(o.secret)}${o.username?`<div style="font-size:11px">@${esc(o.username)}</div>`:''}</td>
     <td class="muted" style="font-size:12px">${esc(o.submitted_at||o.created_at)}</td>
     <td style="text-align:right;white-space:nowrap">
+      <button class="btn sm ghost" onclick="resendTg('${esc(o.order_no)}')" title="重新发送 TG 通知">📤</button>
       <button class="btn sm primary" onclick="approveOrder('${esc(o.order_no)}')">确认发货</button>
       <button class="btn sm danger" onclick="rejectOrder('${esc(o.order_no)}')">驳回</button>
     </td>
@@ -1358,6 +1566,9 @@ function renderPending() {
       <h2 style="margin:0">待审核订单（${list.length}）</h2>
       <button class="btn ghost sm" onclick="switchTab('pending')">刷新</button>
     </div>
+    ${tgOk ? '' : `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#92400e;line-height:1.7">
+      ⚠️ <b>尚未配置 TG 通知</b>，新订单不会自动推送到你的 TG。请到「设置」里配置 TG Bot Token 和 Chat ID。
+    </div>`}
     <div style="background:#fff5f5;border:1px solid #fc8181;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#742a2a;line-height:1.7">
       <b>📌 审核流程：</b>
       <ol style="margin:6px 0 0;padding-left:20px">
@@ -1365,6 +1576,7 @@ function renderPending() {
         <li>打开支付宝 → 输入订单的<b>红包口令</b>领取红包（点口令可直接复制）</li>
         <li>核对金额 → 确认收款后点「确认发货」</li>
         <li>未收到红包 → 点「驳回」</li>
+        <li>没收到 TG 通知 → 点订单右侧的 📤 手动重发</li>
       </ol>
     </div>
     <div style="overflow-x:auto"><table>
@@ -1466,15 +1678,73 @@ function categoryOptions(db, selectedId) {
   db.categories.forEach(c => opts.push(`<option value="${c.id}" ${sel===String(c.id)?'selected':''}>${esc(c.name)}</option>`));
   return opts.join('');
 }
+
+/* SKU 编辑器 HTML */
+function skuEditorHtml(skus) {
+  const list = Array.isArray(skus) ? skus : [];
+  const rows = list.length ? list.map(s => `
+    <div class="sku-row" data-sku-id="${s.id}">
+      <input class="sku-name" type="text" value="${esc(s.name)}" placeholder="规格名，如：1个月" maxlength="20">
+      <input class="sku-price" type="number" step="0.01" value="${(s.price/100).toFixed(2)}" placeholder="价格">
+      <button class="sku-del" type="button" onclick="removeSkuRow(this)">删除</button>
+    </div>`).join('');
+  return `
+    <div class="sku-editor" id="sku-editor">
+      <div class="sku-hint">💡 不添加规格 = 单价格商品；添加多条 = 客户购买时选择规格（每条规格独立价格和卡密池）</div>
+      <div id="sku-rows">${rows}</div>
+      <button class="sku-add" type="button" onclick="addSkuRow()">+ 添加规格</button>
+    </div>`;
+}
+
+function addSkuRow() {
+  const box = document.getElementById('sku-rows');
+  if (!box) return;
+  const div = document.createElement('div');
+  div.className = 'sku-row';
+  div.dataset.skuId = String(genSkuId());
+  div.innerHTML = `
+    <input class="sku-name" type="text" placeholder="规格名，如：3个月" maxlength="20">
+    <input class="sku-price" type="number" step="0.01" placeholder="价格">
+    <button class="sku-del" type="button" onclick="removeSkuRow(this)">删除</button>`;
+  box.appendChild(div);
+  const nameInput = div.querySelector('.sku-name');
+  nameInput && nameInput.focus();
+}
+function removeSkuRow(btn) {
+  const row = btn.closest('.sku-row');
+  if (row) row.remove();
+}
+function collectSkusFromEditor() {
+  const rows = document.querySelectorAll('#sku-rows .sku-row');
+  const skus = [];
+  const seen = new Set();
+  rows.forEach(r => {
+    const name = r.querySelector('.sku-name').value.trim();
+    const priceStr = r.querySelector('.sku-price').value;
+    const price = Math.round(parseFloat(priceStr || '0') * 100);
+    if (!name) return;
+    if (seen.has(name)) return;
+    seen.add(name);
+    let id = parseInt(r.dataset.skuId);
+    if (!id) id = genSkuId();
+    r.dataset.skuId = String(id);
+    skus.push({ id, name, price: price >= 0 ? price : 0 });
+  });
+  return skus;
+}
+
 function renderProducts() {
   const db = loadDB();
   adminProducts = db.products;
   const rows = adminProducts.length ? adminProducts.map(p => {
     const stock = stockOf(db, p.id);
     const cat = db.categories.find(c => String(c.id) === String(p.category_id));
-    return `<tr><td><b>${esc(p.name)}</b><div class="muted" style="font-size:12px">${esc(p.description||'')}</div></td>
+    const skus = getSkus(p);
+    const skuInfo = skus.length ? `<div class="sku-tags" style="margin-top:4px">${skus.map(s=>`<span class="sku-tag">${esc(s.name)} ¥${yuan(s.price)}</span>`).join('')}</div>` : '';
+    const priceDisplay = skus.length ? `¥${yuan(getMinPrice(p))} 起` : `¥${yuan(p.price)}`;
+    return `<tr><td><b>${esc(p.name)}</b><div class="muted" style="font-size:12px">${esc(p.description||'')}</div>${skuInfo}</td>
       <td><span class="badge ${cat?'cat':'gray'}">${esc(cat?cat.name:'未分类')}</span></td>
-      <td>¥${yuan(p.price)}</td>
+      <td>${priceDisplay}</td>
       <td><span class="badge ${stock>0?'ok':'no'}">${stock}</span></td>
       <td><span class="badge ${p.active?'ok':'gray'}">${p.active?'上架':'下架'}</span></td>
       <td style="text-align:right;white-space:nowrap">
@@ -1482,16 +1752,20 @@ function renderProducts() {
         <button class="btn sm danger" onclick="deleteProduct(${p.id})">删除</button>
       </td></tr>`;
   }).join('') : '<tr><td colspan="6" class="empty">暂无商品</td></tr>';
+
   $('#tab-body').innerHTML = `
     <div class="card panel">
       <h2>新增商品</h2>
       <div class="row" style="align-items:flex-start;flex-wrap:wrap">
-        <div style="flex:1;min-width:180px"><label class="field"><span>商品名称</span><input id="np-name" placeholder="如：某视频会员月卡"></label></div>
-        <div style="width:140px"><label class="field"><span>价格（元）</span><input id="np-price" type="number" min="0" step="0.01" placeholder="9.90"></label></div>
+        <div style="flex:1;min-width:180px"><label class="field"><span>商品名称</span><input id="np-name" placeholder="如：某视频会员"></label></div>
+        <div style="width:140px"><label class="field"><span>基础价格（元）</span><input id="np-price" type="number" min="0" step="0.01" placeholder="9.90"></label></div>
       </div>
       <label class="field"><span>所属分类</span><select id="np-cat">${categoryOptions(db, 0)}</select></label>
       <label class="field"><span>商品描述</span><input id="np-desc" placeholder="自动发货，付款后立即显示卡密"></label>
       <label class="field"><span>发货说明（会随卡密一起展示给买家）</span><input id="np-note" placeholder="请在 24 小时内激活"></label>
+      <label class="field"><span>规格（可选）</span>
+        ${skuEditorHtml([])}
+      </label>
       <button class="btn primary" onclick="createProduct()">创建商品</button>
     </div>
     <div class="card panel">
@@ -1503,27 +1777,38 @@ function renderProducts() {
 function createProduct() {
   const name = $('#np-name').value.trim();
   const price = Math.round(parseFloat($('#np-price').value || '0') * 100);
+  const skus = collectSkusFromEditor();
   if (!name) { toast('请填写商品名称','error'); return; }
-  if (!(price >= 0)) { toast('请填写正确的价格','error'); return; }
+  if (!skus.length && !(price >= 0)) { toast('请填写正确的价格','error'); return; }
   const db = loadDB();
   db.seq.product++;
-  db.products.push({ id: db.seq.product, name, price,
-    description: $('#np-desc').value.trim(), note: $('#np-note').value.trim(),
-    category_id: parseInt($('#np-cat').value) || 0, active: true, created_at: now() });
+  db.products.push({
+    id: db.seq.product, name,
+    price: skus.length ? skus[0].price : price,
+    description: $('#np-desc').value.trim(),
+    note: $('#np-note').value.trim(),
+    category_id: parseInt($('#np-cat').value) || 0,
+    active: true, created_at: now(),
+    skus
+  });
   saveDB(db);
-  toast('创建成功','success');
+  toast(skus.length ? `创建成功，已添加 ${skus.length} 个规格` : '创建成功','success');
   renderProducts();
 }
 function editProduct(id) {
   const db = loadDB();
   const p = db.products.find(x => x.id === id);
   if (!p) return;
+  const skus = getSkus(p);
   openModal(`<h3>编辑商品</h3>
     <label class="field"><span>商品名称</span><input id="ep-name" value="${esc(p.name)}"></label>
-    <label class="field"><span>价格（元）</span><input id="ep-price" type="number" step="0.01" value="${(p.price/100).toFixed(2)}"></label>
+    <label class="field"><span>基础价格（元）</span><input id="ep-price" type="number" step="0.01" value="${(p.price/100).toFixed(2)}"></label>
     <label class="field"><span>所属分类</span><select id="ep-cat">${categoryOptions(db, p.category_id)}</select></label>
     <label class="field"><span>商品描述</span><input id="ep-desc" value="${esc(p.description||'')}"></label>
     <label class="field"><span>发货说明</span><input id="ep-note" value="${esc(p.note||'')}"></label>
+    <label class="field"><span>规格（可选）</span>
+      ${skuEditorHtml(skus)}
+    </label>
     <label class="field"><span>状态</span><select id="ep-active">
       <option value="1" ${p.active?'selected':''}>上架</option>
       <option value="0" ${!p.active?'selected':''}>下架</option>
@@ -1531,7 +1816,7 @@ function editProduct(id) {
     <div class="row" style="justify-content:flex-end">
       <button class="btn ghost" onclick="closeModal()">取消</button>
       <button class="btn primary" onclick="saveProduct(${id})">保存</button>
-    </div>`);
+    </div>`, true);
 }
 function saveProduct(id) {
   const db = loadDB();
@@ -1539,11 +1824,14 @@ function saveProduct(id) {
   if (!p) return;
   const name = $('#ep-name').value.trim();
   if (!name) { toast('商品名称不能为空','error'); return; }
+  const skus = collectSkusFromEditor();
+  const basePrice = Math.round(parseFloat($('#ep-price').value || '0') * 100);
   p.name = name;
-  p.price = Math.round(parseFloat($('#ep-price').value || '0') * 100);
+  p.price = skus.length ? skus[0].price : basePrice;
   p.category_id = parseInt($('#ep-cat').value) || 0;
   p.description = $('#ep-desc').value.trim();
   p.note = $('#ep-note').value.trim();
+  p.skus = skus;
   p.active = $('#ep-active').value === '1';
   saveDB(db); closeModal();
   toast('已保存','success');
@@ -1559,13 +1847,19 @@ function deleteProduct(id) {
   renderProducts();
 }
 
+/* ---------- 卡密管理 ---------- */
 function renderCards() {
   const db = loadDB();
-  const opts = db.products.map(p => `<option value="${p.id}">${esc(p.name)}（可用 ${stockOf(db, p.id)}）</option>`).join('');
+  const opts = db.products.map(p => {
+    const skus = getSkus(p);
+    const label = skus.length ? `${esc(p.name)}（多规格）` : `${esc(p.name)}（可用 ${stockOf(db, p.id)}）`;
+    return `<option value="${p.id}">${label}</option>`;
+  }).join('');
   $('#tab-body').innerHTML = `
     <div class="card panel">
       <h2>批量导入卡密</h2>
-      <label class="field"><span>选择商品</span><select id="ic-pid" onchange="loadCards()">${opts||'<option value="">请先创建商品</option>'}</select></label>
+      <label class="field"><span>选择商品</span><select id="ic-pid" onchange="onCardProductChange()">${opts||'<option value="">请先创建商品</option>'}</select></label>
+      <div id="ic-sku-wrap"></div>
       <label class="field"><span>卡密内容（一行一条，自动去重）</span>
         <textarea id="ic-text" rows="6" placeholder="CARD-0001-XXXX-YYYY&#10;CARD-0002-AAAA-BBBB"></textarea>
       </label>
@@ -1580,6 +1874,29 @@ function renderCards() {
       </div>
       <div id="cards-list" style="margin-top:16px"><div class="loading">加载中…</div></div>
     </div>`;
+  onCardProductChange();
+}
+function onCardProductChange() {
+  const db = loadDB();
+  const pid = parseInt($('#ic-pid').value);
+  const wrap = $('#ic-sku-wrap');
+  if (!wrap) return;
+  if (!pid) { wrap.innerHTML = ''; loadCards(); return; }
+  const p = db.products.find(x => x.id === pid);
+  if (!p) { wrap.innerHTML = ''; loadCards(); return; }
+  const skus = getSkus(p);
+  if (!skus.length) {
+    wrap.innerHTML = '';
+  } else {
+    wrap.innerHTML = `<label class="field"><span>选择规格（导入的卡密会归到这个规格下）</span>
+      <select id="ic-skuid">
+        ${skus.map(s => {
+          const cnt = db.cards.filter(c => c.product_id === pid && String(c.sku_id)===String(s.id) && c.status==='unused').length;
+          return `<option value="${s.id}">${esc(s.name)} ¥${yuan(s.price)}（可用 ${cnt}）</option>`;
+        }).join('')}
+      </select>
+    </label>`;
+  }
   loadCards();
 }
 function importCards() {
@@ -1588,14 +1905,22 @@ function importCards() {
   const text = $('#ic-text').value;
   if (!pid) { toast('请先创建商品','error'); return; }
   if (!text.trim()) { toast('请输入卡密内容','error'); return; }
+  const p = db.products.find(x => x.id === pid);
+  const skus = getSkus(p);
+  let skuId = 0;
+  if (skus.length) {
+    const skuEl = $('#ic-skuid');
+    if (!skuEl) { toast('请选择规格','error'); return; }
+    skuId = parseInt(skuEl.value);
+  }
   const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
-  const exist = new Set(db.cards.filter(c => c.product_id === pid).map(c => c.content));
+  const exist = new Set(db.cards.filter(c => c.product_id === pid && String(c.sku_id||0)===String(skuId)).map(c => c.content));
   let added = 0, skipped = 0;
   lines.forEach(line => {
     if (exist.has(line)) { skipped++; return; }
     exist.add(line);
     db.seq.card++;
-    db.cards.push({ id: db.seq.card, product_id: pid, content: line, status: 'unused', order_no: '', used_at: '', created_at: now() });
+    db.cards.push({ id: db.seq.card, product_id: pid, sku_id: skuId, content: line, status: 'unused', order_no: '', used_at: '', created_at: now() });
     added++;
   });
   saveDB(db);
@@ -1611,7 +1936,16 @@ function loadCards() {
   const pid = parseInt(pidEl.value);
   const filter = $('#ic-filter').value;
   if (!pid) { box.innerHTML = '<div class="empty">请先创建商品</div>'; return; }
+  const p = db.products.find(x => x.id === pid);
   let list = db.cards.filter(c => c.product_id === pid);
+  // SKU 过滤
+  if (p && hasSkus(p)) {
+    const skuEl = $('#ic-skuid');
+    if (skuEl) {
+      const sid = parseInt(skuEl.value);
+      list = list.filter(c => String(c.sku_id||0) === String(sid));
+    }
+  }
   if (filter !== 'all') list = list.filter(c => c.status === filter);
   if (!list.length) { box.innerHTML = '<div class="empty">暂无卡密</div>'; return; }
   box.innerHTML = `<div style="overflow-x:auto"><table>
@@ -1633,12 +1967,13 @@ function deleteCard(id) {
   loadCards();
 }
 
+/* ---------- 订单管理 ---------- */
 function renderOrders() {
   const db = loadDB();
   const orders = db.orders;
   const rows = orders.length ? orders.map(o => `<tr>
     <td class="mono" style="font-size:12px">${esc(o.order_no)}</td>
-    <td>${esc(o.product_name)}<div class="muted" style="font-size:12px">×${o.quantity}</div></td>
+    <td>${esc(o.product_name)}${o.sku_name?`<div class="muted" style="font-size:11px">${esc(o.sku_name)}</div>`:''}<div class="muted" style="font-size:12px">×${o.quantity}</div></td>
     <td>¥${yuan(o.amount)}${o.balance_used>0?`<div class="muted" style="font-size:11px">余额抵扣¥${yuan(o.balance_used)}</div>`:''}</td>
     <td>${o.pay_method==='balance'?'余额':(o.pay_method==='alipay'?'支付宝':'USDT')}</td>
     <td>${o.redpacket_code?`<span class="rp-code-cell" data-v="${esc(o.redpacket_code)}" onclick="copyText(this.dataset.v,this)" style="cursor:pointer" title="点击复制">${esc(o.redpacket_code)}</span>`:'<span class="muted">-</span>'}</td>
@@ -1663,8 +1998,9 @@ function redeliver(orderNo) {
   const o = db.orders.find(x => x.order_no === orderNo);
   if (!o) { toast('订单不存在','error'); return; }
   const need = o.quantity - o.cards.length;
-  const available = db.cards.filter(c => c.product_id === o.product_id && c.status === 'unused');
-  if (available.length < need) { toast(`库存仍不足，还需 ${need - available.length} 条`,'error'); return; }
+  const orderSku = o.sku_id || 0;
+  const available = db.cards.filter(c => c.product_id === o.product_id && c.status === 'unused' && String(c.sku_id||0)===String(orderSku));
+  if (available.length < need) { toast(`该规格库存仍不足，还需 ${need - available.length} 条`,'error'); return; }
   available.slice(0, need).forEach(c => {
     c.status='used'; c.order_no=o.order_no; c.used_at=now();
     o.cards.push(c.content);
@@ -1795,6 +2131,28 @@ function renderSettings() {
     </div>
 
     <div class="card panel" style="max-width:620px">
+      <h2>🔔 订单 TG 通知</h2>
+      <div class="tg-hint">
+        <b>作用：</b>客户提交订单后，自动发送消息到你的 TG，让你第一时间去审核。<br>
+        <b>配置步骤：</b>
+        <ol style="margin:6px 0 0;padding-left:20px">
+          <li>TG 里找 <code>@BotFather</code> → 发 <code>/newbot</code> → 按提示创建，拿到 <b>Bot Token</b></li>
+          <li>把 bot 拉进一个群（或直接和 bot 私聊）</li>
+          <li>浏览器访问 <code>https://api.telegram.org/bot你的Token/getUpdates</code>，找到 <code>chat.id</code> 那个数字</li>
+          <li>把 Token 和 Chat ID 填到下方，勾选启用</li>
+        </ol>
+      </div>
+      <label class="field">
+        <span><input type="checkbox" id="cfg-tg-notify" ${cfg.tg_notify_enabled?'checked':''}> 启用新订单 TG 通知</span>
+      </label>
+      <label class="field"><span>Bot Token（从 BotFather 获取）</span>
+        <input id="cfg-tg-bot-token" value="${esc(cfg.tg_bot_token||'')}" placeholder="123456:ABC-DEF..."></label>
+      <label class="field"><span>Chat ID（数字，可能是负数）</span>
+        <input id="cfg-tg-chat-id" value="${esc(cfg.tg_chat_id||'')}" placeholder="-1001234567890 或 123456789"></label>
+      <button class="btn ghost sm" onclick="testTgNotify()">🧪 发送测试消息</button>
+    </div>
+
+    <div class="card panel" style="max-width:620px">
       <h2>🔐 管理密码</h2>
       <p class="muted" style="font-size:13px;margin-top:-8px">修改后会同步到所有设备。忘记密码时将无法在后台修改，请谨慎操作。</p>
       <label class="field"><span>当前管理密码</span>
@@ -1827,7 +2185,7 @@ function renderSettings() {
       </label>
       <div id="rp-settings" style="${alipayMode==='redpacket'?'':'display:none'}">
         <div style="background:#fff5f5;border:1px solid #fc8181;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#742a2a;line-height:1.7">
-          <b>口令红包原理：</b>每笔订单生成一个唯一口令，客户在支付宝发红包时输入该口令，你在支付宝凭口令领取。无需上传收款码，无需人工输入金额。
+          <b>口令红包原理：</b>每笔订单生成一个唯一口令，客户在支付宝发红包时输入该口令，你在支付宝凭口令领取。
         </div>
         <label class="field"><span>口令前缀（2-6 位字母，会拼在口令开头）</span>
           <input id="cfg-rp-prefix" value="${esc(cfg.pay_alipay_redpacket_prefix||'YFK')}" maxlength="6" placeholder="YFK"></label>
@@ -1846,8 +2204,8 @@ function renderSettings() {
         <span><input type="checkbox" id="cfg-usdt-enabled" ${cfg.pay_usdt_enabled!==false?'checked':''}> 启用 USDT 支付</span>
       </label>
       <div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;line-height:1.6">
-        USDT 订单<b>自动检测</b>：系统每 30 秒查一次链上转账，到账后自动发货，无需人工。<br>
-        建议去 <a href="https://www.trongrid.io" target="_blank" style="color:#1e40af;text-decoration:underline">trongrid.io</a> 注册免费 API Key，然后在 Cloudflare 环境变量加 <code>TRONGRID_API_KEY</code>。
+        USDT 订单<b>自动检测</b>：系统每 30 秒查一次链上转账，到账后自动发货。<br>
+        建议去 <a href="https://www.trongrid.io" target="_blank" style="color:#1e40af;text-decoration:underline">trongrid.io</a> 注册免费 API Key，在 Cloudflare 环境变量加 <code>TRONGRID_API_KEY</code>。
       </div>
       <label class="field"><span>收款地址</span>
         <input id="cfg-usdt-address" value="${esc(cfg.pay_usdt_address)}" placeholder="TRC20 地址"></label>
@@ -1898,6 +2256,25 @@ function renderSettings() {
   bindUpload('cfg-usdt-file', 'cfg-usdt-qr', 'USDT 收款码');
 }
 
+async function testTgNotify() {
+  const token = $('#cfg-tg-bot-token').value.trim();
+  const chatId = $('#cfg-tg-chat-id').value.trim();
+  if (!token || !chatId) { toast('请先填写 Bot Token 和 Chat ID', 'error'); return; }
+  toast('正在发送测试…');
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: '✅ 云发卡 TG 通知测试成功！\n\n收到这条消息说明配置正确。' })
+    });
+    const d = await r.json();
+    if (d.ok) toast('测试消息已发送 ✅', 'success');
+    else toast('失败：' + (d.description || '未知错误'), 'error');
+  } catch (e) {
+    toast('网络错误，可能是 TG 无法访问', 'error');
+  }
+}
+
 function saveAdminPwd() {
   const oldPwd = $('#pwd-old').value;
   const newPwd = $('#pwd-new').value;
@@ -1923,6 +2300,9 @@ function saveSettings() {
     ...db.config,
     site_name: name,
     tg_username: tg,
+    tg_notify_enabled: $('#cfg-tg-notify').checked,
+    tg_bot_token: $('#cfg-tg-bot-token').value.trim(),
+    tg_chat_id: $('#cfg-tg-chat-id').value.trim(),
     balance_enabled: $('#cfg-balance-enabled').checked,
     recharge_min: Math.round(parseFloat($('#cfg-recharge-min').value || '10') * 100) || 1000,
     pay_alipay_enabled: $('#cfg-alipay-enabled').checked,
@@ -1947,17 +2327,18 @@ Object.assign(window, {
   closeModal, copyText, toast,
   setHomeCategory, openBuy, submitBuy, doQuery,
   showPayModal, confirmPay,
-  forceCheckUsdt, approveOrder, rejectOrder,
+  forceCheckUsdt, approveOrder, rejectOrder, resendTg,
   switchAuthTab, memberRegister, memberLogin, memberFindPwd, memberLogout, submitRecharge,
   saveFindPwd,
   adminLogin, adminLogout, switchTab, resetData,
   createProduct, editProduct, saveProduct, deleteProduct,
   createCategory, editCategory, saveCategory, moveCategory, deleteCategory,
-  importCards, loadCards, deleteCard,
+  importCards, loadCards, deleteCard, onCardProductChange,
+  addSkuRow, removeSkuRow,
   redeliver, viewOrderCards,
   adjustBalance, openAdjustBalance, saveAdjustBalance,
   openResetPwd, saveResetPwd, deleteMember,
-  saveSettings, saveAdminPwd
+  saveSettings, saveAdminPwd, testTgNotify
 });
 </script>
 

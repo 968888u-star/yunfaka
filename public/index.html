@@ -62,6 +62,7 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .badge.ok{background:#dcfce7;color:#15803d}.badge.no{background:#fee2e2;color:#b91c1c}
 .badge.gray{background:#eef0f6;color:#6b7280}.badge.cat{background:#eef2ff;color:#4f46e5}
 .badge.warn{background:#fef3c7;color:#b45309}
+.badge.source{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
 .pay-methods{display:flex;gap:10px;flex-wrap:wrap}
 .pay-method{flex:1;min-width:100px;display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid var(--line);border-radius:12px;cursor:pointer;transition:.15s;background:#fff;font-weight:600;font-size:14px;user-select:none;-webkit-user-select:none}
 .pay-method:hover{border-color:#c7cbe0}.pay-method input{width:auto;margin:0}
@@ -82,8 +83,7 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .kv:last-child{border-bottom:0}.kv .k{color:var(--muted)}.kv .v{font-weight:600;text-align:right;word-break:break-all}
 .codebox{background:#0f172a;color:#7dd3fc;padding:14px 16px;border-radius:10px;font-size:15px;letter-spacing:.6px;display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
 .codebox span{word-break:break-all}
-.codebox button{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;flex-shrink:0}
-.qr-wrap{text-align:center;padding:14px;background:#f8fafc;border-radius:12px;margin:12px 0}
+.codebox button{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer;flex-shrink:0}.qr-wrap{text-align:center;padding:14px;background:#f8fafc;border-radius:12px;margin:12px 0}
 .qr-wrap img{max-width:220px;width:100%;border-radius:10px;border:1px solid var(--line);background:#fff}
 .qr-tip{font-size:12px;color:var(--muted);margin-top:8px}
 .addr-box{background:#0f172a;color:#7dd3fc;padding:12px 14px;border-radius:10px;font-size:13px;word-break:break-all;display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px}
@@ -105,7 +105,7 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .modal h3{margin:0 0 18px;font-size:17px}
 .modal.wide{max-width:560px}
 .toast{position:fixed;left:50%;bottom:40px;transform:translate(-50%,20px);background:#1f2430;color:#fff;padding:12px 22px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:300;max-width:90vw}
-.toast.show{opacity:1;transform:translate(-50%,0)}.toast.error{background:#b91c1c}.toast.success{background:#047857}
+.toast.show{opacity:1;transform:translate(-50%,0)}.toast.error{background:#b91c1c}.toast.success{background:#047857}.toast.info{background:#0369a1}
 .tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
 .tabs button{padding:9px 16px;border-radius:10px;border:0;background:#eef0f6;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted)}
 .tabs button.active{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff}
@@ -154,12 +154,11 @@ tbody tr:hover{background:#fafbfe}
 .color-swatches{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .color-swatch{width:34px;height:34px;border-radius:9px;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;transition:.15s}
 .color-swatch:hover{transform:scale(1.1)}
+.humkt-hint{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#166534;line-height:1.7}
 @media (max-width:600px){.nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}.hero h1{font-size:21px}.tg-float{right:16px;bottom:18px;width:50px;height:50px}.pay-method{min-width:80px;padding:10px 12px;font-size:13px}.member-card .amt{font-size:28px}.redpacket-box .code{font-size:26px;letter-spacing:2px}.modal.wide{max-width:100%}}
 </style>
 </head>
-<body>
-
-<header class="nav">
+<body><header class="nav">
   <div class="nav-inner">
     <a class="brand" href="#/"><span class="dot"></span><span id="brand-name">云发卡</span></a>
     <nav>
@@ -186,7 +185,7 @@ tbody tr:hover{background:#fafbfe}
 
 <script>
 /* ==================================================================
-   云发卡 v14 - 稳定版
+   云发卡 v15：含 Humkt 商品同步 + 加价30% + 自动下单
    ================================================================== */
 const $ = function(s){ return document.querySelector(s); };
 const esc = function(s){
@@ -202,7 +201,7 @@ function toast(msg, type){
   t.textContent = msg;
   t.className = 'toast show ' + (type||'');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(function(){ t.className = 'toast'; }, 2600);
+  toastTimer = setTimeout(function(){ t.className = 'toast'; }, 3000);
 }
 function openModal(html, wide){
   $('#modal-box').innerHTML = html;
@@ -251,10 +250,8 @@ function hashPwd(pwd){
     h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
   }
   return h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
-}
-
-/* ---------------- 数据层 ---------------- */
-const STORE_KEY = 'yunfaka_db_v14';
+}/* ---------------- 数据层 ---------------- */
+const STORE_KEY = 'yunfaka_db_v15';
 const MY_KEY = 'yunfaka_my_orders';
 const MEMBER_KEY = 'yunfaka_member_user';
 const LS_SECRET = 'yunfaka_last_secret';
@@ -304,7 +301,8 @@ const DEFAULT_CONFIG = {
   pay_usdt_note: '请使用 TRC20 网络转账，到账后自动发货',
   pay_usdt_qr: '',
   balance_enabled: true,
-  recharge_min: 1000
+  recharge_min: 1000,
+  humkt_markup: 1.3
 };
 
 function seedDB(){
@@ -325,7 +323,7 @@ function seedDB(){
     const id = ++db.seq.product;
     const product = {
       id: id, name: name, description: desc, note: note, active: true,
-      category_id: catId, created_at: now(),
+      category_id: catId, created_at: now(), source: 'local',
       skus: skus.map(function(s, i){ return {id: genSkuId()+i, name: s.name, price: s.price}; })
     };
     db.products.push(product);
@@ -343,7 +341,7 @@ function seedDB(){
     const id = ++db.seq.product;
     db.products.push({
       id: id, name: name, price: price, description: desc, note: note,
-      active: true, category_id: catId, created_at: now(), skus: []
+      active: true, category_id: catId, created_at: now(), source: 'local', skus: []
     });
     for (let i = 0; i < cardCount; i++){
       db.seq.card++;
@@ -378,11 +376,17 @@ function loadDB(){
     if (!Array.isArray(d.categories)) d.categories = [];
     if (!Array.isArray(d.members)) d.members = [];
     if (!Array.isArray(d.recharges)) d.recharges = [];
-    d.products.forEach(function(p){ if (!Array.isArray(p.skus)) p.skus = []; });
+    d.products.forEach(function(p){
+      if (!Array.isArray(p.skus)) p.skus = [];
+      if (!p.source) p.source = 'local';
+    });
     d.cards.forEach(function(c){ if (c.sku_id === undefined) c.sku_id = 0; });
     d.members = d.members.filter(function(m){ return m && m.username && m.password; });
     d.members.forEach(function(m){ if (m.secret === undefined && m.contact !== undefined) m.secret = m.contact; });
-    d.orders.forEach(function(o){ if (o.secret === undefined && o.contact !== undefined) o.secret = o.contact; });
+    d.orders.forEach(function(o){
+      if (o.secret === undefined && o.contact !== undefined) o.secret = o.contact;
+      if (!o.source) o.source = 'local';
+    });
     if (!d.seq) d.seq = {product:0, card:0, category:0};
     if (!d.seq.category){
       d.seq.category = d.categories.reduce(function(m, c){ return Math.max(m, c.id||0); }, 0);
@@ -411,6 +415,9 @@ function getSkuById(p, skuId){
   return null;
 }
 function productStock(db, p, skuId){
+  if (p && p.source === 'humkt'){
+    return p.humkt_stock || 0;
+  }
   if (!hasSkus(p)){
     return db.cards.filter(function(c){ return c.product_id === p.id && c.status === 'unused' && (!c.sku_id || c.sku_id === 0); }).length;
   }
@@ -424,6 +431,10 @@ function getAdminPwdHash(db){
   return cfg.admin_pwd_hash || DEFAULT_CONFIG.admin_pwd_hash;
 }
 function stockOf(db, pid){
+  const p = db.products.filter(function(x){ return x.id === pid; })[0];
+  if (p && p.source === 'humkt'){
+    return p.humkt_stock || 0;
+  }
   return db.cards.filter(function(c){ return c.product_id === pid && c.status === 'unused'; }).length;
 }
 function saveMyOrder(no, secret){
@@ -528,8 +539,8 @@ function notifyTg(orderNo){
   }).catch(function(e){ console.warn('TG 通知异常:', e); });
 }
 
-const STATUS_TEXT = { pending:'待支付', pending_review:'待审核', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回' };
-const STATUS_CLASS = { pending:'gray', pending_review:'warn', delivered:'ok', out_of_stock:'no', rejected:'no' };
+const STATUS_TEXT = { pending:'待支付', pending_review:'待审核', processing:'上游发货中', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回', humkt_error:'上游下单失败' };
+const STATUS_CLASS = { pending:'gray', pending_review:'warn', processing:'warn', delivered:'ok', out_of_stock:'no', rejected:'no', humkt_error:'no' };
 const RECHARGE_TEXT = { pending:'待支付', success:'已到账' };
 const RECHARGE_CLASS = { pending:'gray', success:'ok' };
 
@@ -537,9 +548,7 @@ function usdtQrUrl(address, amount){
   if (!address) return '';
   const q = amount ? address + '?amount=' + amount : address;
   return 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=' + encodeURIComponent(q);
-}
-
-/* ---------------- 路由 ---------------- */
+}/* ---------------- 路由 ---------------- */
 function route(){
   const hash = location.hash.replace(/^#/, '') || '/';
   window.scrollTo(0,0);
@@ -577,13 +586,14 @@ function renderHome(){
     const skuTags = skus.length ? '<div class="sku-tags">' + skus.map(function(s){ return '<span class="sku-tag">' + esc(s.name) + '</span>'; }).join('') + '</div>' : '';
     const priceSuffix = skus.length ? '<span class="from">起</span>' : '';
     const catBadge = '<span class="badge ' + (cat?'cat':'gray') + '">' + esc(cat?cat.name:'未分类') + '</span>';
+    const sourceBadge = p.source === 'humkt' ? '<span class="badge source" style="margin-left:4px">上游代购</span>' : '';
     return '<div class="card product">' +
       '<div class="spread">' +
-        '<div class="p-name">' + esc(p.name) + '</div>' +
+        '<div class="p-name">' + esc(p.name.length > 30 ? p.name.slice(0,30)+'…' : p.name) + '</div>' +
         '<span class="badge ' + (totalStock>0?'ok':'no') + '">' + (totalStock>0?'有货':'缺货') + '</span>' +
       '</div>' +
       '<div class="p-desc">' + esc(p.description || '虚拟商品 · 付款后自动发货') + '</div>' +
-      '<div class="row" style="gap:6px">' + catBadge + '</div>' +
+      '<div class="row" style="gap:6px">' + catBadge + sourceBadge + '</div>' +
       skuTags +
       '<div class="spread" style="margin-top:auto">' +
         '<div class="p-price"><small>¥</small>' + yuan(minPrice) + priceSuffix + '</div>' +
@@ -627,6 +637,7 @@ function openBuy(id){
   if (!p){ toast('商品不存在','error'); return; }
   const skus = getSkus(p);
   const hasSku = skus.length > 0;
+  const isHumkt = p.source === 'humkt';
   const totalStock = stockOf(db, id);
   if (totalStock <= 0){ toast('该商品暂时缺货','error'); return; }
   let defaultSkuId = 0;
@@ -649,8 +660,8 @@ function openBuy(id){
     const s = getSkuById(p, defaultSkuId);
     if (s) initialPrice = s.price;
   }
-  const initialStock = hasSku ? productStock(db, p, defaultSkuId) : productStock(db, p, 0);
-  const maxQty = Math.min(50, initialStock);
+  const initialStock = isHumkt ? (p.humkt_stock || 0) : (hasSku ? productStock(db, p, defaultSkuId) : productStock(db, p, 0));
+  const maxQty = Math.min(isHumkt ? (p.humkt_max_qty || 100) : 50, initialStock);
 
   const skuHtml = hasSku ? '<label class="field"><span>选择规格</span><div class="sku-options" id="buy-skus">' +
     skus.map(function(s){
@@ -664,10 +675,12 @@ function openBuy(id){
     }).join('') + '</div></label>' : '';
 
   const catKv = cat ? '<div class="kv"><span class="k">分类</span><span class="v">' + esc(cat.name) + '</span></div>' : '';
+  const sourceKv = isHumkt ? '<div class="kv"><span class="k">发货方式</span><span class="v" style="color:#15803d">系统向上游自动采购（约1~5分钟）</span></div>' : '';
 
   openModal('<h3>确认购买</h3>' +
     '<div class="kv"><span class="k">商品</span><span class="v">' + esc(p.name) + '</span></div>' +
     catKv +
+    sourceKv +
     skuHtml +
     '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="buy-unit">¥' + yuan(initialPrice) + '</span></div>' +
     '<label class="field"><span>购买数量（库存 <span id="buy-stock-label">' + initialStock + '</span>）</span><input id="buy-qty" type="number" min="1" max="' + maxQty + '" value="1"></label>' +
@@ -701,6 +714,7 @@ function openBuy(id){
     return sku ? sku.price : p.price;
   }
   function getCurrentStock(){
+    if (isHumkt) return p.humkt_stock || 0;
     return productStock(loadDB(), p, currentSkuId);
   }
   function refreshBalance(){
@@ -752,7 +766,7 @@ function openBuy(id){
   }
   function refreshStock(){
     const st = getCurrentStock();
-    const maxQ = Math.min(50, st);
+    const maxQ = Math.min(isHumkt ? (p.humkt_max_qty || 100) : 50, st);
     qty.setAttribute('max', maxQ);
     if (parseInt(qty.value) > maxQ) qty.value = maxQ;
     $('#buy-stock-label').textContent = st;
@@ -780,7 +794,7 @@ function openBuy(id){
   }
   qty.addEventListener('input', function(){
     let v = parseInt(qty.value) || 1;
-    const maxQ = Math.min(50, getCurrentStock());
+    const maxQ = Math.min(isHumkt ? (p.humkt_max_qty || 100) : 50, getCurrentStock());
     v = Math.max(1, Math.min(maxQ, v));
     qty.value = v;
     refreshTotals();
@@ -806,6 +820,7 @@ function submitBuy(id){
   const p = db.products.filter(function(x){ return x.id === id; })[0];
   if (!p){ toast('商品不存在','error'); return; }
   const hasSku = hasSkus(p);
+  const isHumkt = p.source === 'humkt';
   const currentSkuId = (typeof window.__buyCurrentSkuId === 'function') ? window.__buyCurrentSkuId() : 0;
   const qtyEl = $('#buy-qty');
   const secretEl = $('#buy-secret');
@@ -816,9 +831,10 @@ function submitBuy(id){
   const sku = hasSku ? getSkuById(p, currentSkuId) : null;
   if (hasSku && !sku){ toast('请选择规格','error'); return; }
   const price = hasSku ? sku.price : p.price;
-  const stock = productStock(db, p, hasSku ? sku.id : 0);
+  const stock = isHumkt ? (p.humkt_stock || 0) : productStock(db, p, hasSku ? sku.id : 0);
   if (qty < 1){ toast('数量至少为 1','error'); return; }
   if (qty > stock){ toast('库存不足，当前仅剩 ' + stock + ' 件','error'); return; }
+  if (isHumkt && qty < (p.humkt_min_qty || 1)){ toast('上游最少购买 ' + (p.humkt_min_qty||1) + ' 件','error'); return; }
   const amount = price * qty;
   const balanceEnabled = cfg.balance_enabled !== false;
   const member = getCurrentMember(db);
@@ -846,7 +862,10 @@ function submitBuy(id){
     balance_used: deduct, amount_due: due, secret: secret,
     username: member ? member.username : '',
     status: 'pending', pay_method: payMethod, cards: [],
-    note: p.note || '', created_at: now(), delivered_at: ''
+    note: p.note || '', created_at: now(), delivered_at: '',
+    source: p.source || 'local',
+    humkt_id: p.humkt_id || 0,
+    humkt_price: p.humkt_price || 0
   };
   if (payMethod === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
   db.orders.unshift(order);
@@ -856,15 +875,13 @@ function submitBuy(id){
   closeModal();
   if (due === 0){
     payOrder(orderNo);
-    toast('余额支付成功，已自动发货 🎉','success');
+    toast('余额支付成功，正在处理…','success');
     if (location.hash === '#/order/' + orderNo) route();
     else location.hash = '#/order/' + orderNo;
   } else {
     showPayModal('order', orderNo);
   }
-}
-
-/* ---------------- 支付 ---------------- */
+}/* ---------------- 支付 ---------------- */
 function showPayModal(type, id){
   const db = loadDB();
   const cfg = getConfig(db);
@@ -1008,6 +1025,15 @@ function payOrder(orderNo){
   const db = loadDB();
   const o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
   if (!o || o.status !== 'pending') return;
+
+  if (o.source === 'humkt' && o.humkt_id) {
+    o.status = 'processing';
+    o.humkt_stage = 'ordering';
+    saveDB(db);
+    triggerHumktOrder(o.order_no);
+    return;
+  }
+
   const orderSku = o.sku_id || 0;
   const available = db.cards.filter(function(c){
     if (c.product_id !== o.product_id) return false;
@@ -1125,9 +1151,7 @@ function resendTg(orderNo){
     if (d.ok) toast('TG 通知已发送 ✅', 'success');
     else toast(d.msg || '发送失败', 'error');
   }).catch(function(){ toast('网络错误', 'error'); });
-}
-
-/* ---------------- 会员 ---------------- */
+}/* ---------------- 会员 ---------------- */
 let authTab = 'login';
 function renderMemberPage(){
   const db = loadDB();
@@ -1321,8 +1345,7 @@ function renderMemberDashboard(member){
     '</tr>';
   }).join('') : '<tr><td colspan="6" class="empty">暂无订单</td></tr>';
 
-  const alipayLabel = '支付宝';
-  const alipayMethodHtml = alipayEnabled ? '<label class="pay-method ' + (defaultMethod === 'alipay' ? 'active' : '') + '" data-method="alipay"><input type="radio" name="rc-method" value="alipay" ' + (defaultMethod === 'alipay' ? 'checked' : '') + '><span class="logo">💰</span> ' + alipayLabel + '</label>' : '';
+  const alipayMethodHtml = alipayEnabled ? '<label class="pay-method ' + (defaultMethod === 'alipay' ? 'active' : '') + '" data-method="alipay"><input type="radio" name="rc-method" value="alipay" ' + (defaultMethod === 'alipay' ? 'checked' : '') + '><span class="logo">💰</span> 支付宝</label>' : '';
   const usdtMethodHtml = usdtEnabled ? '<label class="pay-method ' + (defaultMethod === 'usdt' ? 'active' : '') + '" data-method="usdt"><input type="radio" name="rc-method" value="usdt" ' + (defaultMethod === 'usdt' ? 'checked' : '') + '><span class="logo">🪙</span> USDT</label>' : '';
 
   $('#app').innerHTML = '<div class="member-card">' +
@@ -1402,9 +1425,7 @@ function submitRecharge(){
   db.recharges.unshift(rc);
   saveDB(db);
   showPayModal('recharge', id);
-}
-
-/* ---------------- 订单详情 ---------------- */
+}/* ---------------- 订单详情 ---------------- */
 function renderOrderPage(orderNo){
   const secret = getMyOrder(orderNo);
   if (!secret){
@@ -1443,6 +1464,19 @@ function renderOrderView(orderNo, secret){
     body = '<div class="card panel" style="background:#fffbeb;border-color:#fde68a">' +
       '<b>⚠️ 库存不足，暂未发货</b>' +
       '<p class="muted" style="font-size:13px;margin-bottom:0">管理员补货后会自动补发。</p></div>';
+  } else if (o.status === 'processing' || o.status === 'humkt_error'){
+    if (o.status === 'humkt_error'){
+      body = '<div class="card panel" style="background:#fee2e2;border-color:#fca5a5">' +
+        '<b>❌ 上游下单失败</b>' +
+        '<p class="muted" style="font-size:13px;margin:6px 0 0">' + esc(o.humkt_error || '请联系客服处理') + '</p>' +
+      '</div>';
+    } else {
+      body = '<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">' +
+        '<b>⏳ 上游发货中，请稍候</b>' +
+        '<p class="muted" style="font-size:13px;margin:6px 0 12px">系统已为你向上游下单，通常 1~5 分钟内到货，请勿关闭本页面。</p>' +
+        '<button class="btn primary" onclick="manualCheckHumkt(\'' + esc(o.order_no) + '\')">手动检查状态</button>' +
+      '</div>';
+    }
   } else if (o.status === 'pending'){
     if (o.pay_method === 'usdt'){
       body = '<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">' +
@@ -1480,13 +1514,14 @@ function renderOrderView(orderNo, secret){
     '<a class="btn tg-btn" style="display:inline-flex!important" href="' + tgUrl + '" target="_blank" rel="noopener">联系 TG 客服（发送订单号）</a>' +
   '</div>' : '';
   const skuBadge = o.sku_name ? ' <span class="badge cat" style="margin-left:6px">' + esc(o.sku_name) + '</span>' : '';
+  const sourceBadge = o.source === 'humkt' ? ' <span class="badge source" style="margin-left:6px">上游代购</span>' : '';
   $('#app').innerHTML = '<div class="card panel" style="max-width:640px;margin:24px auto">' +
       '<div class="spread" style="margin-bottom:6px">' +
         '<h2 style="margin:0">订单详情</h2>' +
         '<span class="badge ' + (STATUS_CLASS[o.status] || 'gray') + '">' + (STATUS_TEXT[o.status] || o.status) + '</span>' +
       '</div>' +
       '<div class="kv"><span class="k">订单号</span><span class="v mono">' + esc(o.order_no) + '</span></div>' +
-      '<div class="kv"><span class="k">商品</span><span class="v">' + esc(o.product_name) + skuBadge + '</span></div>' +
+      '<div class="kv"><span class="k">商品</span><span class="v">' + esc(o.product_name) + skuBadge + sourceBadge + '</span></div>' +
       '<div class="kv"><span class="k">数量</span><span class="v">' + o.quantity + '</span></div>' +
       '<div class="kv"><span class="k">订单金额</span><span class="v">¥' + yuan(o.amount) + '</span></div>' +
       (o.balance_used > 0 ? '<div class="kv"><span class="k">余额抵扣</span><span class="v" style="color:#b45309">-¥' + yuan(o.balance_used) + '</span></div>' : '') +
@@ -1497,12 +1532,16 @@ function renderOrderView(orderNo, secret){
       '<div class="kv"><span class="k">下单时间</span><span class="v">' + esc(o.created_at) + '</span></div>' +
       (o.delivered_at ? '<div class="kv"><span class="k">发货时间</span><span class="v">' + esc(o.delivered_at) + '</span></div>' : '') +
       (o.pay_tx ? '<div class="kv"><span class="k">链上交易</span><span class="v mono" style="font-size:11px">' + esc(o.pay_tx) + '</span></div>' : '') +
+      (o.humkt_trx ? '<div class="kv"><span class="k">上游单号</span><span class="v mono" style="font-size:11px">' + esc(o.humkt_trx) + '</span></div>' : '') +
     '</div>' +
     '<div style="max-width:640px;margin:0 auto">' + body + '</div>' +
     helpBox;
+  if (o.status === 'processing' && o.humkt_trx){
+    pollHumktStatus(o.order_no, 0);
+  }
   if (o.pay_method === 'usdt' && o.status === 'pending'){
     startUsdtPolling(o.order_no);
-  } else if (_usdtPollTimer){
+  } else if (_usdtPollTimer && o.status !== 'pending'){
     clearInterval(_usdtPollTimer);
     _usdtPollTimer = null;
   }
@@ -1562,6 +1601,7 @@ function adminLogout(){
 function renderAdminPanel(){
   const db = loadDB();
   const pendingCount = db.orders.filter(function(o){ return o.status === 'pending_review'; }).length;
+  const processingCount = db.orders.filter(function(o){ return o.status === 'processing' || o.status === 'humkt_error'; }).length;
   const pendingBadge = pendingCount > 0 ? '<span class="nb">' + pendingCount + '</span>' : '';
   $('#app').innerHTML = '<div class="spread" style="margin-bottom:18px">' +
       '<h2 style="margin:0;font-size:20px">管理后台</h2>' +
@@ -1575,6 +1615,7 @@ function renderAdminPanel(){
       '<button data-tab="cards" onclick="switchTab(\'cards\')">卡密</button>' +
       '<button data-tab="orders" onclick="switchTab(\'orders\')">订单</button>' +
       '<button data-tab="members" onclick="switchTab(\'members\')">会员</button>' +
+      '<button data-tab="humkt" onclick="switchTab(\'humkt\')">Humkt同步</button>' +
       '<button data-tab="settings" onclick="switchTab(\'settings\')">设置</button>' +
     '</div>' +
     '<div id="tab-body"><div class="loading">加载中…</div></div>';
@@ -1593,26 +1634,31 @@ function switchTab(tab){
   if (tab === 'cards') return renderCards();
   if (tab === 'orders') return renderOrders();
   if (tab === 'members') return renderMembers();
+  if (tab === 'humkt') return renderHumkt();
   if (tab === 'settings') return renderSettings();
   renderStats();
-}
-
-function renderStats(){
+}function renderStats(){
   const db = loadDB();
   const orders = db.orders;
   const delivered = orders.filter(function(o){ return o.status === 'delivered'; }).length;
   const pendingReview = orders.filter(function(o){ return o.status === 'pending_review'; }).length;
+  const processing = orders.filter(function(o){ return o.status === 'processing'; }).length;
+  const humktError = orders.filter(function(o){ return o.status === 'humkt_error'; }).length;
   const revenue = orders.filter(function(o){ return o.status === 'delivered'; }).reduce(function(s, o){ return s + o.amount; }, 0);
   const unused = db.cards.filter(function(c){ return c.status === 'unused'; }).length;
   const used = db.cards.filter(function(c){ return c.status === 'used'; }).length;
   const totalBalance = db.members.reduce(function(s, m){ return s + (m.balance || 0); }, 0);
   const totalRecharge = db.recharges.filter(function(r){ return r.status === 'success'; }).reduce(function(s, r){ return s + r.amount; }, 0);
+  const humktProducts = db.products.filter(function(p){ return p.source === 'humkt'; }).length;
   $('#tab-body').innerHTML = '<div class="stat-grid">' +
       '<div class="stat"><div class="n">' + db.products.length + '</div><div class="l">商品数</div></div>' +
+      '<div class="stat"><div class="n">' + humktProducts + '</div><div class="l">Humkt 商品</div></div>' +
       '<div class="stat"><div class="n">' + db.categories.length + '</div><div class="l">分类数</div></div>' +
       '<div class="stat"><div class="n">' + orders.length + '</div><div class="l">总订单</div></div>' +
       '<div class="stat"><div class="n">' + delivered + '</div><div class="l">已发货</div></div>' +
       '<div class="stat"><div class="n" style="color:#b45309">' + pendingReview + '</div><div class="l">待审核</div></div>' +
+      '<div class="stat"><div class="n" style="color:#0369a1">' + processing + '</div><div class="l">上游发货中</div></div>' +
+      (humktError > 0 ? '<div class="stat"><div class="n" style="color:#b91c1c">' + humktError + '</div><div class="l">上游失败</div></div>' : '') +
       '<div class="stat"><div class="n">' + unused + '</div><div class="l">可用卡密</div></div>' +
       '<div class="stat"><div class="n">' + used + '</div><div class="l">已售卡密</div></div>' +
       '<div class="stat"><div class="n">¥' + yuan(revenue) + '</div><div class="l">累计收入</div></div>' +
@@ -1646,9 +1692,10 @@ function renderPending(){
     const rpCell = o.redpacket_code ? '<span class="rp-code-cell" data-v="' + esc(o.redpacket_code) + '" onclick="copyText(this.dataset.v,this)" style="cursor:pointer" title="点击复制">' + esc(o.redpacket_code) + '</span>' : '<span class="muted">-</span>';
     const skuLine = o.sku_name ? '<div class="muted" style="font-size:11px">' + esc(o.sku_name) + '</div>' : '';
     const userLine = o.username ? '<div style="font-size:11px">@' + esc(o.username) + '</div>' : '';
+    const sourceTag = o.source === 'humkt' ? ' <span class="badge source">上游</span>' : '';
     return '<tr>' +
       '<td class="mono" style="font-size:12px">' + esc(o.order_no) + '</td>' +
-      '<td>' + esc(o.product_name) + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
+      '<td>' + esc(o.product_name) + sourceTag + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
       '<td style="font-weight:700;color:#e11d48">¥' + yuan(o.amount_due) + '</td>' +
       '<td>' + (o.pay_method === 'alipay' ? '支付宝' : 'USDT') + '</td>' +
       '<td>' + rpCell + '</td>' +
@@ -1836,18 +1883,21 @@ function renderProducts(){
     const skus = getSkus(p);
     const skuInfo = skus.length ? '<div class="sku-tags" style="margin-top:4px">' + skus.map(function(s){ return '<span class="sku-tag">' + esc(s.name) + ' ¥' + yuan(s.price) + '</span>'; }).join('') + '</div>' : '';
     const priceDisplay = skus.length ? '¥' + yuan(getMinPrice(p)) + ' 起' : '¥' + yuan(p.price);
-    return '<tr><td><b>' + esc(p.name) + '</b><div class="muted" style="font-size:12px">' + esc(p.description || '') + '</div>' + skuInfo + '</td>' +
+    const sourceBadge = p.source === 'humkt' ? '<span class="badge source" style="margin-left:4px">上游</span>' : '';
+    const nameShow = p.name.length > 35 ? p.name.slice(0,35) + '…' : p.name;
+    return '<tr><td><b>' + esc(nameShow) + '</b>' + sourceBadge + '<div class="muted" style="font-size:12px">' + esc((p.description||'').slice(0,80)) + '</div>' + skuInfo + '</td>' +
       '<td><span class="badge ' + (cat ? 'cat' : 'gray') + '">' + esc(cat ? cat.name : '未分类') + '</span></td>' +
       '<td>' + priceDisplay + '</td>' +
       '<td><span class="badge ' + (stock > 0 ? 'ok' : 'no') + '">' + stock + '</span></td>' +
       '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
       '<td style="text-align:right;white-space:nowrap">' +
-        '<button class="btn sm ghost" onclick="editProduct(' + p.id + ')">编辑</button> ' +
+        (p.source === 'humkt' ? '' : '<button class="btn sm ghost" onclick="editProduct(' + p.id + ')">编辑</button> ') +
         '<button class="btn sm danger" onclick="deleteProduct(' + p.id + ')">删除</button>' +
       '</td></tr>';
   }).join('') : '<tr><td colspan="6" class="empty">暂无商品</td></tr>';
   $('#tab-body').innerHTML = '<div class="card panel">' +
-      '<h2>新增商品</h2>' +
+      '<h2>新增商品（本地）</h2>' +
+      '<p class="muted" style="font-size:12px;margin-top:-8px;margin-bottom:14px">如需添加 humkt 商品，请到「Humkt同步」标签一键同步。</p>' +
       '<div class="row" style="align-items:flex-start;flex-wrap:wrap">' +
         '<div style="flex:1;min-width:180px"><label class="field"><span>商品名称</span><input id="np-name" placeholder="如：某视频会员"></label></div>' +
         '<div style="width:140px"><label class="field"><span>基础价格（元）</span><input id="np-price" type="number" min="0" step="0.01" placeholder="9.90"></label></div>' +
@@ -1878,7 +1928,7 @@ function createProduct(){
     description: $('#np-desc').value.trim(),
     note: $('#np-note').value.trim(),
     category_id: parseInt($('#np-cat').value) || 0,
-    active: true, created_at: now(), skus: skus
+    active: true, created_at: now(), skus: skus, source: 'local'
   });
   saveDB(db);
   toast(skus.length ? '创建成功，已添加 ' + skus.length + ' 个规格' : '创建成功','success');
@@ -1888,6 +1938,7 @@ function editProduct(id){
   const db = loadDB();
   const p = db.products.filter(function(x){ return x.id === id; })[0];
   if (!p) return;
+  if (p.source === 'humkt'){ toast('Humkt 商品不能手动编辑，请重新同步', 'error'); return; }
   const skus = getSkus(p);
   openModal('<h3>编辑商品</h3>' +
     '<label class="field"><span>商品名称</span><input id="ep-name" value="' + esc(p.name) + '"></label>' +
@@ -1936,14 +1987,16 @@ function deleteProduct(id){
 }
 function renderCards(){
   const db = loadDB();
-  const opts = db.products.map(function(p){
+  const localProducts = db.products.filter(function(p){ return p.source !== 'humkt'; });
+  const opts = localProducts.map(function(p){
     const skus = getSkus(p);
     const label = skus.length ? esc(p.name) + '（多规格）' : esc(p.name) + '（可用 ' + stockOf(db, p.id) + '）';
     return '<option value="' + p.id + '">' + label + '</option>';
   }).join('');
   $('#tab-body').innerHTML = '<div class="card panel">' +
       '<h2>批量导入卡密</h2>' +
-      '<label class="field"><span>选择商品</span><select id="ic-pid" onchange="onCardProductChange()">' + (opts || '<option value="">请先创建商品</option>') + '</select></label>' +
+      '<p class="muted" style="font-size:12px;margin-top:-8px;margin-bottom:14px">仅本地商品支持导入卡密。Humkt 商品由上游自动发货，无需导入。</p>' +
+      '<label class="field"><span>选择商品</span><select id="ic-pid" onchange="onCardProductChange()">' + (opts || '<option value="">请先创建本地商品</option>') + '</select></label>' +
       '<div id="ic-sku-wrap"></div>' +
       '<label class="field"><span>卡密内容（一行一条，自动去重）</span>' +
         '<textarea id="ic-text" rows="6" placeholder="CARD-0001-XXXX-YYYY&#10;CARD-0002-AAAA-BBBB"></textarea>' +
@@ -2065,9 +2118,16 @@ function renderOrders(){
     const skuLine = o.sku_name ? '<div class="muted" style="font-size:11px">' + esc(o.sku_name) + '</div>' : '';
     const userLine = o.username ? '<div style="font-size:11px">@' + esc(o.username) + '</div>' : '';
     const balanceLine = o.balance_used > 0 ? '<div class="muted" style="font-size:11px">余额抵扣¥' + yuan(o.balance_used) + '</div>' : '';
+    const sourceTag = o.source === 'humkt' ? ' <span class="badge source">上游</span>' : '';
     let actionBtns = '';
     if (o.status === 'pending_review'){
       actionBtns += '<button class="btn sm primary" onclick="approveOrder(\'' + esc(o.order_no) + '\')">发货</button> <button class="btn sm danger" onclick="rejectOrder(\'' + esc(o.order_no) + '\')">驳回</button> ';
+    }
+    if (o.status === 'processing'){
+      actionBtns += '<button class="btn sm ghost" onclick="manualCheckHumkt(\'' + esc(o.order_no) + '\')">检查上游</button> ';
+    }
+    if (o.status === 'humkt_error'){
+      actionBtns += '<button class="btn sm primary" onclick="triggerHumktOrder(\'' + esc(o.order_no) + '\')">重试下单</button> ';
     }
     if (o.status === 'out_of_stock'){
       actionBtns += '<button class="btn sm primary" onclick="redeliver(\'' + esc(o.order_no) + '\')">补发</button> ';
@@ -2078,7 +2138,7 @@ function renderOrders(){
     actionBtns += '<button class="btn sm danger" onclick="deleteOrder(\'' + esc(o.order_no) + '\')" title="删除此订单">🗑</button>';
     return '<tr>' +
       '<td class="mono" style="font-size:12px">' + esc(o.order_no) + '</td>' +
-      '<td>' + esc(o.product_name) + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
+      '<td>' + esc(o.product_name) + sourceTag + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
       '<td>¥' + yuan(o.amount) + balanceLine + '</td>' +
       '<td>' + (o.pay_method === 'balance' ? '余额' : (o.pay_method === 'alipay' ? '支付宝' : 'USDT')) + '</td>' +
       '<td>' + rpCell + '</td>' +
@@ -2094,7 +2154,7 @@ function renderOrders(){
       '<h2 style="margin:0">订单列表（' + orders.length + '）</h2>' +
       '<div class="row" style="gap:8px">' + clearBtn + '<button class="btn ghost sm" onclick="switchTab(\'orders\')">刷新</button></div>' +
     '</div>' +
-    '<p class="muted" style="font-size:12px;margin:10px 0 0">💡 点击订单右侧的 🗑 可单独删除；「清理已发货」会批量删除所有已发货和已驳回的订单（待支付和待审核订单会保留）。</p>' +
+    '<p class="muted" style="font-size:12px;margin:10px 0 0">💡 点击订单右侧的 🗑 可单独删除；「清理已发货」会批量删除所有已发货和已驳回的订单（待支付、待审核、处理中的订单会保留）。</p>' +
     '<div style="overflow-x:auto;margin-top:16px"><table>' +
       '<thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>红包口令</th><th>暗号</th><th>状态</th><th>时间</th><th></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>' +
@@ -2115,7 +2175,7 @@ function clearCompletedOrders(){
   const db = loadDB();
   const done = db.orders.filter(function(o){ return o.status === 'delivered' || o.status === 'rejected'; });
   if (!done.length){ toast('没有可清理的订单', 'error'); return; }
-  if (!confirm('确定批量删除 ' + done.length + ' 条「已发货/已驳回」订单？\n\n待支付、待审核的订单会保留。\n删除后不可恢复。')) return;
+  if (!confirm('确定批量删除 ' + done.length + ' 条「已发货/已驳回」订单？\n\n待支付、待审核、处理中的订单会保留。\n删除后不可恢复。')) return;
   db.orders = db.orders.filter(function(o){ return o.status !== 'delivered' && o.status !== 'rejected'; });
   saveDB(db);
   toast('已清理 ' + done.length + ' 条订单', 'success');
@@ -2249,8 +2309,7 @@ function deleteMember(username){
   saveDB(db);
   toast('会员已删除','success');
   renderMembers();
-}
-function setTgColorPreset(color){
+}function setTgColorPreset(color){
   const input = $('#cfg-tg-color');
   if (input) input.value = color;
   document.documentElement.style.setProperty('--tg-btn-color', color);
@@ -2263,7 +2322,6 @@ function renderSettings(){
   const colorPresets = ['#0088cc','#6366f1','#8b5cf6','#10b981','#ef4444','#f59e0b','#ec4899','#0ea5e9','#1e293b','#14b8a6'];
   const rpStyle = alipayMode === 'redpacket' ? '' : 'display:none';
   const qrStyle = alipayMode === 'qr' ? '' : 'display:none';
-  const tgOk = cfg.tg_notify_enabled && cfg.tg_bot_token && cfg.tg_chat_id;
 
   const colorSwatches = colorPresets.map(function(c){
     return '<div class="color-swatch" data-color="' + c + '" onclick="setTgColorPreset(\'' + c + '\')" style="background:' + c + '" title="' + c + '"></div>';
@@ -2287,13 +2345,16 @@ function renderSettings(){
         '</div>' +
         '<div class="muted" style="font-size:12px;margin-top:8px">选择颜色后，所有客服按钮（顶部导航 + 右下角悬浮球 + 首页底部）都会同步变色。</div>' +
       '</label>' +
-      '<div style="margin-top:14px;padding:14px;background:#f8fafc;border-radius:10px;text-align:center">' +
-        '<div class="muted" style="font-size:12px;margin-bottom:8px">预览效果：</div>' +
-        '<a id="tg-color-preview" class="btn tg-btn" href="' + (tgUrlOf(cfg) || '#') + '" target="_blank" rel="noopener" style="display:inline-flex!important">' +
-          '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#fff"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>' +
-          '联系 TG 客服' +
-        '</a>' +
+    '</div>' +
+
+    '<div class="card panel" style="max-width:620px">' +
+      '<h2>🛒 Humkt 上游对接</h2>' +
+      '<div class="humkt-hint">' +
+        '<b>当前状态：</b>Token 已配置' + (cfg.humkt_markup ? '，加价倍率 ' + cfg.humkt_markup : '') +
+        '<br><b>使用方法：</b>到「Humkt同步」标签点击「同步/刷新所有商品」即可拉取上游所有商品。' +
       '</div>' +
+      '<label class="field"><span>加价倍率（1.3 表示加价 30%）</span>' +
+        '<input id="cfg-humkt-markup" type="number" step="0.01" min="1" value="' + (cfg.humkt_markup || 1.3) + '"></label>' +
     '</div>' +
 
     '<div class="card panel" style="max-width:620px">' +
@@ -2463,6 +2524,7 @@ function saveSettings(){
   const name = $('#cfg-name').value.trim() || '云发卡';
   const tg = $('#cfg-tg').value.trim().replace(/^@/, '');
   const alipayMode = $('#cfg-alipay-mode').value;
+  const humktMarkup = parseFloat($('#cfg-humkt-markup').value) || 1.3;
   db.config = Object.assign({}, db.config, {
     site_name: name,
     tg_username: tg,
@@ -2482,12 +2544,291 @@ function saveSettings(){
     pay_usdt_network: $('#cfg-usdt-network').value.trim() || 'TRC20',
     pay_usdt_rate: Number($('#cfg-usdt-rate').value) || 7.2,
     pay_usdt_qr: $('#cfg-usdt-qr').value.trim(),
-    pay_usdt_note: $('#cfg-usdt-note').value.trim() || '请使用 TRC20 网络转账，到账后自动发货'
+    pay_usdt_note: $('#cfg-usdt-note').value.trim() || '请使用 TRC20 网络转账，到账后自动发货',
+    humkt_markup: humktMarkup
   });
   saveDB(db);
   applySiteConfig();
   toast('设置已保存','success');
   renderSettings();
+}
+
+/* ==================================================================
+   Humkt 同步相关
+   ================================================================== */
+
+function renderHumkt(){
+  var db = loadDB();
+  var humktProducts = db.products.filter(function(p){ return p.source === 'humkt'; });
+  var totalCount = humktProducts.length;
+  var totalValue = humktProducts.reduce(function(s, p){ return s + (p.price || 0); }, 0);
+  var cfg = getConfig(db);
+  var markup = cfg.humkt_markup || 1.3;
+
+  var productRows = humktProducts.length ? humktProducts.map(function(p){
+    var nameShow = p.name.length > 40 ? p.name.slice(0, 40) + '…' : p.name;
+    return '<tr>' +
+      '<td><b>' + esc(nameShow) + '</b>' +
+        '<div class="muted" style="font-size:11px">humkt ID: ' + p.humkt_id + '</div></td>' +
+      '<td class="muted">¥' + yuan(p.humkt_price) + '</td>' +
+      '<td style="font-weight:700;color:#e11d48">¥' + yuan(p.price) + '</td>' +
+      '<td><span class="badge ' + ((p.humkt_stock || 0) > 0 ? 'ok' : 'no') + '">' + (p.humkt_stock || 0) + '</span></td>' +
+      '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
+      '<td style="text-align:right;white-space:nowrap">' +
+        '<button class="btn sm ghost" onclick="toggleHumktProduct(' + p.id + ')">' + (p.active ? '下架' : '上架') + '</button> ' +
+        '<button class="btn sm danger" onclick="deleteProduct(' + p.id + ')">删除</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('') : '';
+
+  $('#tab-body').innerHTML = '<div class="card panel">' +
+      '<div class="spread" style="flex-wrap:wrap;gap:8px">' +
+        '<h2 style="margin:0">🛒 Humkt 商品同步</h2>' +
+        '<div class="row" style="gap:8px">' +
+          '<button class="btn primary" onclick="syncHumktProducts()">🔄 同步 / 刷新所有商品</button>' +
+          (totalCount > 0 ? '<button class="btn danger" onclick="deleteAllHumktProducts()">清空 Humkt 商品</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="humkt-hint">' +
+        '<b>💡 说明：</b>点击「同步 / 刷新所有商品」会把 humkt 的所有可购买商品拉过来，' +
+        '<b>自动加价 ' + ((markup - 1) * 100).toFixed(0) + '%</b> 后上架到你的商城。' +
+        '客户在你这里下单后，系统自动去 humkt 下单并把卡密回传给客户。' +
+        '<br><b>已上架：</b>' + totalCount + ' 个商品' +
+        (totalCount > 0 ? ' ｜ <b>平均售价：</b>¥' + yuan(totalValue / totalCount) : '') +
+      '</div>' +
+      '<div class="muted" style="font-size:12px;margin-bottom:12px">' +
+        '加价规则：humkt 价格 × ' + markup + ' = 你的售价。可在「设置」标签修改加价倍率。' +
+      '</div>' +
+    '</div>' +
+    '<div class="card panel">' +
+      '<h2>已上架的 Humkt 商品（' + totalCount + '）</h2>' +
+      (totalCount > 0 ? '<div style="overflow-x:auto"><table>' +
+        '<thead><tr><th>名称</th><th>上游价</th><th>你的售价</th><th>上游库存</th><th>状态</th><th></th></tr></thead>' +
+        '<tbody>' + productRows + '</tbody></table></div>'
+        : '<div class="empty">还没有同步任何 humkt 商品，点击上方「同步 / 刷新所有商品」开始</div>') +
+    '</div>';
+}
+
+function syncHumktProducts(){
+  var db0 = loadDB();
+  var cfg = getConfig(db0);
+  var markup = cfg.humkt_markup || 1.3;
+  var percentText = ((markup - 1) * 100).toFixed(0);
+
+  if (!confirm('将从 humkt 拉取所有可购买商品并加价 ' + percentText + '% 上架。已存在的会更新价格和库存。继续？')) return;
+  toast('正在拉取 humkt 商品列表…');
+
+  var allProducts = [];
+  var page = 1;
+  var MAX_PAGES = 5;
+
+  function fetchPage(){
+    return fetch('/api/humkt-goods?action=products&per_page=100&page=' + page)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.code !== 1){
+          throw new Error(d.message || 'humkt 拉取失败');
+        }
+        allProducts = allProducts.concat(d.data || []);
+        var lastPage = (d.meta && d.meta.last_page) || 1;
+        if (page < lastPage && page < MAX_PAGES){
+          page++;
+          return fetchPage();
+        }
+        return null;
+      });
+  }
+
+  fetchPage().then(function(){
+    var usable = allProducts.filter(function(h){
+      return !h.is_group && !h.maintenance && parseFloat(h.price) > 0;
+    });
+
+    if (!usable.length){
+      toast('没有可上架的商品（可能全部是产品组或维护中）', 'error');
+      return;
+    }
+
+    var db = loadDB();
+    var added = 0, updated = 0, skipped = 0;
+
+    usable.forEach(function(h){
+      if (h.is_selectable && h.selectable_mode === 'required'){
+        skipped++;
+        return;
+      }
+
+      var humktPriceFen = Math.round(parseFloat(h.price) * 100);
+      var ourPriceFen = Math.round(humktPriceFen * markup);
+
+      var exist = null;
+      for (var i = 0; i < db.products.length; i++){
+        if (db.products[i].source === 'humkt' && db.products[i].humkt_id === h.id){
+          exist = db.products[i];
+          break;
+        }
+      }
+
+      if (exist){
+        exist.price = ourPriceFen;
+        exist.humkt_price = humktPriceFen;
+        exist.name = h.name;
+        exist.description = (h.description || '虚拟商品').slice(0, 300);
+        exist.humkt_stock = h.in_stock || 0;
+        exist.humkt_min_qty = h.min_qty || 1;
+        exist.humkt_max_qty = h.max_qty || 100;
+        updated++;
+      } else {
+        db.seq.product++;
+        db.products.push({
+          id: db.seq.product,
+          name: h.name,
+          price: ourPriceFen,
+          description: (h.description || '虚拟商品').slice(0, 300),
+          note: '下单后系统自动向上游采购，通常 1~5 分钟到货，请耐心等待',
+          category_id: 0,
+          active: true,
+          created_at: now(),
+          skus: [],
+          source: 'humkt',
+          humkt_id: h.id,
+          humkt_price: humktPriceFen,
+          humkt_stock: h.in_stock || 0,
+          humkt_min_qty: h.min_qty || 1,
+          humkt_max_qty: h.max_qty || 100,
+          humkt_is_selectable: false,
+          humkt_selectable_mode: null
+        });
+        added++;
+      }
+    });
+
+    saveDB(db);
+    toast('同步完成：新增 ' + added + ' 个，更新 ' + updated + ' 个' +
+      (skipped ? '，跳过 ' + skipped + ' 个（自选号商品）' : ''), 'success');
+    renderHumkt();
+  }).catch(function(e){
+    toast('同步失败：' + e.message, 'error');
+  });
+}
+
+function toggleHumktProduct(id){
+  var db = loadDB();
+  for (var i = 0; i < db.products.length; i++){
+    if (db.products[i].id === id){
+      db.products[i].active = !db.products[i].active;
+      saveDB(db);
+      toast(db.products[i].active ? '已上架' : '已下架', 'success');
+      renderHumkt();
+      return;
+    }
+  }
+}
+
+function deleteAllHumktProducts(){
+  var count = loadDB().products.filter(function(p){ return p.source === 'humkt'; }).length;
+  if (!confirm('确定清空所有 humkt 同步的商品？这会删除 ' + count + ' 个商品。')) return;
+  var db = loadDB();
+  db.products = db.products.filter(function(p){ return p.source !== 'humkt'; });
+  saveDB(db);
+  toast('已清空所有 humkt 商品', 'success');
+  renderHumkt();
+}
+
+function triggerHumktOrder(orderNo){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o) return;
+  o.status = 'processing';
+  o.humkt_stage = 'ordering';
+  saveDB(db);
+
+  fetch('/api/humkt-order', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({order_no: orderNo})
+  }).then(function(r){ return r.json(); })
+    .then(function(d){
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (!o2) return;
+      if (!d.ok){
+        o2.status = 'humkt_error';
+        o2.humkt_error = d.msg || '上游下单失败';
+        saveDB(db2);
+        toast('上游下单失败：' + (d.msg || ''), 'error');
+        if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+        return;
+      }
+      o2.humkt_trx = d.trx;
+      o2.humkt_status = d.status || 'processing';
+      o2.status = 'processing';
+      saveDB(db2);
+      toast('已向 humkt 下单，正在等待发货…', 'success');
+      pollHumktStatus(orderNo, 0);
+      if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+      if (location.hash.indexOf('/admin') >= 0) renderOrders();
+    })
+    .catch(function(e){
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (o2){
+        o2.status = 'humkt_error';
+        o2.humkt_error = '网络错误：' + e.message;
+        saveDB(db2);
+      }
+      toast('网络错误：' + e.message, 'error');
+      if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+    });
+}
+
+function pollHumktStatus(orderNo, attempt){
+  if (attempt > 60) return;
+  setTimeout(function(){
+    fetch('/api/humkt-check?order=' + encodeURIComponent(orderNo))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok){
+          pollHumktStatus(orderNo, attempt + 1);
+          return;
+        }
+        if (d.status === 'shipped' || d.status === 'partial'){
+          toast('上游发货成功，卡密已到账 🎉', 'success');
+          fetch('/api/state?t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d2){
+            if (d2.ok && d2.db){ window.__DB = d2.db; }
+            if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+            if (location.hash.indexOf('/admin') >= 0) renderOrders();
+          });
+          return;
+        }
+        if (d.status === 'refunded'){
+          toast('上游退款，订单已关闭', 'error');
+          return;
+        }
+        pollHumktStatus(orderNo, attempt + 1);
+      }).catch(function(){
+        pollHumktStatus(orderNo, attempt + 1);
+      });
+  }, 15000);
+}
+
+function manualCheckHumkt(orderNo){
+  toast('正在检查上游状态…');
+  fetch('/api/humkt-check?order=' + encodeURIComponent(orderNo))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.ok && (d.status === 'shipped' || d.status === 'partial')){
+        toast('已发货，正在刷新…', 'success');
+        fetch('/api/state?t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d2){
+          if (d2.ok && d2.db){ window.__DB = d2.db; }
+          route();
+        });
+      } else if (d.ok){
+        toast('上游状态：' + (d.status_label || d.status), 'info');
+      } else {
+        toast(d.msg || '查询失败', 'error');
+      }
+    }).catch(function(){ toast('网络错误', 'error'); });
 }
 
 /* ---------------- 暴露到全局 ---------------- */
@@ -2548,9 +2889,14 @@ window.loadDB = loadDB;
 window.saveDB = saveDB;
 window.route = route;
 window.applySiteConfig = applySiteConfig;
-</script>
-
-<!-- ================= 多设备同步补丁 ================= -->
+window.renderHumkt = renderHumkt;
+window.syncHumktProducts = syncHumktProducts;
+window.toggleHumktProduct = toggleHumktProduct;
+window.deleteAllHumktProducts = deleteAllHumktProducts;
+window.triggerHumktOrder = triggerHumktOrder;
+window.pollHumktStatus = pollHumktStatus;
+window.manualCheckHumkt = manualCheckHumkt;
+</script><!-- ================= 多设备同步补丁 ================= -->
 <script>
 (function(){
   var API = '/api/state';

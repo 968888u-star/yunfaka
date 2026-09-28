@@ -202,6 +202,8 @@ const esc = function(s){
   });
 };
 const yuan = function(fen){ return (Number(fen||0)/100).toFixed(2); };
+const usdtRate = function(){ try{ const d=loadDB(); const cfg=getConfig(d); return Number(cfg.pay_usdt_rate)||7.2; }catch(e){ return 7.2; } };
+const usdt = function(fen){ return (Number(fen||0)/100/usdtRate()).toFixed(2); };
 
 let toastTimer;
 function toast(msg, type){
@@ -310,7 +312,8 @@ const DEFAULT_CONFIG = {
   pay_usdt_qr: '',
   balance_enabled: true,
   recharge_min: 1000,
-  luban_markup: 1.3
+  luban_markup: 1.3,
+  hero_subtitle: '7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额'
 };
 
 function seedDB(){
@@ -612,7 +615,7 @@ function renderHome(){
       '<div class="row" style="gap:6px">' + catBadge + srcBadge + '</div>' +
       skuTags +
       '<div class="spread" style="margin-top:auto">' +
-        '<div class="p-price"><small>¥</small>' + yuan(minPrice) + priceSuffix + '</div>' +
+        '<div class="p-price"><small>USDT </small>' + usdt(minPrice) + priceSuffix + '</div>' +
         '<div class="muted" style="font-size:12px">库存 ' + stockText + '</div>' +
       '</div>' +
       '<button class="btn primary" ' + btnDisabled + ' onclick="openBuy(' + p.id + ')">' + btnText + '</button>' +
@@ -624,7 +627,7 @@ function renderHome(){
   if (member){
     memberBar = '<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px">' +
       '<div><div class="muted" style="font-size:12px">当前会员</div><div style="font-weight:700">👤 ' + esc(member.username) + '</div></div>' +
-      '<div style="text-align:right;flex:1"><div class="muted" style="font-size:12px">账户余额</div><div style="font-weight:800;color:#e11d48;font-size:18px">¥' + yuan(member.balance) + '</div></div>' +
+      '<div style="text-align:right;flex:1"><div class="muted" style="font-size:12px">账户余额</div><div style="font-weight:800;color:#e11d48;font-size:18px">' + usdt(member.balance) + ' USDT</div></div>' +
       '<a class="btn primary sm" href="#/member">会员中心</a>' +
     '</div>';
   } else {
@@ -638,7 +641,7 @@ function renderHome(){
       '<div class="muted" style="font-size:13px;margin-bottom:14px">Telegram 客服在线</div>' +
       '<a class="btn tg-btn" style="display:inline-flex!important" href="' + tgUrl + '" target="_blank" rel="noopener">联系 TG 客服</a>' +
     '</div>' : '';
-  $('#app').innerHTML = '<div class="hero"><div class="blob"></div><h1>付款即发货，无需等待</h1><p>7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额</p></div>' +
+  $('#app').innerHTML = '<div class="hero"><div class="blob"></div><h1>付款即发货，无需等待</h1><p>' + esc(cfg.hero_subtitle || '7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额') + '</p></div>' +
     memberBar +
     '<div class="cats">' + catTabs + '</div>' +
     '<div class="grid">' + cards + '</div>' +
@@ -686,7 +689,7 @@ function openBuy(id){
       const cls = String(s.id)===String(defaultSkuId) ? 'active' : '';
       const disAttr = dis ? 'disabled style="opacity:.4;cursor:not-allowed"' : '';
       return '<button class="sku-option ' + cls + '" data-sku="' + s.id + '" ' + disAttr + '>' +
-        esc(s.name) + '<small>¥' + yuan(s.price) + (dis?' · 缺货':'') + '</small>' +
+        esc(s.name) + '<small>' + usdt(s.price) + ' USDT' + (dis?' · 缺货':'') + '</small>' +
       '</button>';
     }).join('') + '</div></label>' : '';
 
@@ -704,15 +707,15 @@ function openBuy(id){
     catKv +
     lubanKv +
     skuHtml +
-    '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="buy-unit">¥' + yuan(initialPrice) + '</span></div>' +
+    '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="buy-unit">' + usdt(initialPrice) + ' USDT</span></div>' +
     qtyHtml +
     '<label class="field"><span>暗号（用于查询订单 / 找回会员密码）</span><input id="buy-secret" type="text" placeholder="自定义内容，请务必牢记" maxlength="60" value="' + esc(lastSecret) + '"></label>' +
     '<div id="balance-box"></div>' +
     '<div class="spread" style="margin:14px 0;padding-top:14px;border-top:1px dashed var(--line)">' +
-      '<span class="muted" style="font-size:13px">订单金额</span><span id="buy-amount" style="font-size:18px;font-weight:800;color:#e11d48">¥' + yuan(initialPrice) + '</span>' +
+      '<span class="muted" style="font-size:13px">订单金额</span><span id="buy-amount" style="font-size:18px;font-weight:800;color:#e11d48">' + usdt(initialPrice) + ' USDT</span>' +
     '</div>' +
     '<div class="spread" style="margin-bottom:8px"><span class="muted" style="font-size:13px">余额抵扣</span><span id="buy-deduct" style="font-weight:700;color:#b45309">-¥0.00</span></div>' +
-    '<div class="spread" style="margin-bottom:16px"><span class="muted" style="font-size:13px">还需支付</span><span id="buy-due" style="font-size:20px;font-weight:800;color:#e11d48">¥' + yuan(initialPrice) + '</span></div>' +
+    '<div class="spread" style="margin-bottom:16px"><span class="muted" style="font-size:13px">还需支付</span><span id="buy-due" style="font-size:20px;font-weight:800;color:#e11d48">' + usdt(initialPrice) + ' USDT</span></div>' +
     lubanTip +
     '<div id="pay-method-wrap">' +
       '<label class="field" style="margin-bottom:14px"><span>支付方式</span>' +
@@ -742,7 +745,7 @@ function openBuy(id){
     if (m && balanceEnabled){
       const balance = m.balance || 0;
       if (balance > 0){
-        box.innerHTML = '<div class="balance-row"><div class="lbl">💎 会员「' + esc(m.username) + '」余额 ¥' + yuan(balance) + '</div>' +
+        box.innerHTML = '<div class="balance-row"><div class="lbl">💎 会员「' + esc(m.username) + '」余额 ' + usdt(balance) + ' USDT + '</div>' +
           '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">' +
           '<input type="checkbox" id="use-balance" checked> 使用余额抵扣</label></div>';
         $('#use-balance').addEventListener('change', refreshTotals);
@@ -770,10 +773,10 @@ function openBuy(id){
     const useBalance = cb && cb.checked && balanceEnabled && m;
     let deduct = useBalance ? Math.min(balance, amount) : 0;
     const due = amount - deduct;
-    $('#buy-unit').textContent = '¥' + yuan(price);
-    $('#buy-amount').textContent = '¥' + yuan(amount);
-    $('#buy-deduct').textContent = '-¥' + yuan(deduct);
-    $('#buy-due').textContent = '¥' + yuan(due);
+    $('#buy-unit').textContent = usdt(price) + ' USDT';
+    $('#buy-amount').textContent = usdt(amount) + ' USDT';
+    $('#buy-deduct').textContent = '-' + usdt(deduct) + ' USDT';
+    $('#buy-due').textContent = usdt(due) + ' USDT';
     const wrap = $('#pay-method-wrap');
     if (due === 0){
       wrap.style.opacity = '0.4';
@@ -903,7 +906,7 @@ function showPayModal(type, id){
     payMethod = o.pay_method;
     rpCode = o.redpacket_code || '';
     extra = '<div class="kv"><span class="k">商品</span><span class="v">' + esc(o.product_name) + (o.sku_name?' · ' + esc(o.sku_name):'') + ' × ' + o.quantity + '</span></div>' +
-      (o.balance_used > 0 ? '<div class="kv"><span class="k">余额已抵扣</span><span class="v" style="color:#b45309">-¥' + yuan(o.balance_used) + '</span></div>' : '');
+      (o.balance_used > 0 ? '<div class="kv"><span class="k">余额已抵扣</span><span class="v" style="color:#b45309">-' + usdt(o.balance_used) + ' USDT</span></div>' : '');
   } else if (type === 'recharge'){
     const r = db.recharges.filter(function(x){ return x.id === id; })[0];
     if (!r){ toast('充值记录不存在','error'); return; }
@@ -922,7 +925,7 @@ function showPayModal(type, id){
       html = '<h3>💰 支付宝口令红包</h3>' +
         '<div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">' + esc(orderNo) + '</span></div>' +
         extra +
-        '<div class="kv"><span class="k">应付金额</span><span class="v" style="color:#e11d48;font-size:18px">¥' + yuan(amount) + '</span></div>' +
+        '<div class="kv"><span class="k">应付金额（人民币）</span><span class="v" style="color:#e11d48;font-size:18px">¥' + yuan(amount) + '</span></div>' +
         '<div class="redpacket-box">' +
           '<div class="lbl">请记住下方口令，在支付宝中发送红包</div>' +
           '<div class="code">' + esc(rpCode) + '</div>' +
@@ -952,7 +955,7 @@ function showPayModal(type, id){
       html = '<h3>💰 支付宝支付</h3>' +
         '<div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">' + esc(orderNo) + '</span></div>' +
         extra +
-        '<div class="kv"><span class="k">应付金额</span><span class="v" style="color:#e11d48;font-size:18px">¥' + yuan(amount) + '</span></div>' +
+        '<div class="kv"><span class="k">应付金额（人民币）</span><span class="v" style="color:#e11d48;font-size:18px">¥' + yuan(amount) + '</span></div>' +
         qrHtml +
         '<p class="muted" style="font-size:13px;text-align:center;margin:8px 0 14px">' + esc(cfg.pay_alipay_note || '扫码支付后点击下方按钮') + '</p>' +
         '<div class="row" style="justify-content:flex-end">' +
@@ -971,7 +974,9 @@ function showPayModal(type, id){
     html = '<h3>🪙 USDT 支付</h3>' +
       '<div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">' + esc(orderNo) + '</span></div>' +
       extra +
-      '<div class="kv"><span class="k">应付金额</span><span class="v">¥' + yuan(amount) + '</span></div>' +
+      '<div class="kv"><span class="k">应付金额</span><span class="v">' + usdt(amount) + ' USDT</span></div>' +
+      '<div class="kv"><span class="k">折合人民币</span><span class="v">¥' + yuan(amount) + '</span></div>' +
+      '<div class="kv"><span class="k">实付 USDT</span>' +
       '<div class="kv"><span class="k">折算 USDT</span><span class="v" style="color:#10b981;font-size:18px">' + usdtAmount + ' USDT</span></div>' +
       '<div class="kv" style="margin-bottom:12px"><span class="k">网络</span><span class="v">' + esc(cfg.pay_usdt_network || 'TRC20') + '</span></div>' +
       qrSelf + qrAuto + addrHtml +
@@ -1117,7 +1122,7 @@ function approveOrder(orderNo){
   const o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
   if (!o) return;
   if (o.status !== 'pending_review'){ toast('订单状态不对', 'error'); return; }
-  if (!confirm('确认已收款 ¥' + yuan(o.amount_due) + '，为客户发货？')) return;
+  if (!confirm('确认已收款 ' + usdt(o.amount_due) + ' USDT，为客户发货？')) return;
 
   // Luban 订单
   if (o.source === 'luban') {
@@ -1353,7 +1358,7 @@ function renderMemberDashboard(member){
   const rechargeRows = myRecharges.length ? myRecharges.map(function(r){
     return '<tr>' +
       '<td class="mono" style="font-size:12px">' + esc(r.id) + '</td>' +
-      '<td>¥' + yuan(r.amount) + '</td>' +
+      '<td>' + usdt(r.amount) + ' USDT</td>' +
       '<td>' + (r.method === 'alipay' ? '支付宝' : 'USDT') + '</td>' +
       '<td><span class="badge ' + (RECHARGE_CLASS[r.status] || 'gray') + '">' + (RECHARGE_TEXT[r.status] || r.status) + '</span></td>' +
       '<td class="muted" style="font-size:12px">' + esc(r.created_at) + '</td>' +
@@ -1365,7 +1370,7 @@ function renderMemberDashboard(member){
     return '<tr>' +
       '<td class="mono" style="font-size:12px">' + esc(o.order_no) + '</td>' +
       '<td>' + esc(o.product_name) + (o.sku_name ? ' · ' + esc(o.sku_name) : '') + ' × ' + o.quantity + '</td>' +
-      '<td>¥' + yuan(o.amount) + '</td>' +
+      '<td>' + usdt(o.amount) + ' USDT</td>' +
       '<td><span class="badge ' + (STATUS_CLASS[o.status] || 'gray') + '">' + (STATUS_TEXT[o.status] || o.status) + '</span></td>' +
       '<td class="muted" style="font-size:12px">' + esc(o.created_at) + '</td>' +
       '<td style="text-align:right"><a class="btn sm ghost" href="#/order/' + esc(o.order_no) + '">查看</a></td>' +
@@ -1377,7 +1382,7 @@ function renderMemberDashboard(member){
 
   $('#app').innerHTML = '<div class="member-card">' +
       '<div class="lbl">账户余额（元）</div>' +
-      '<div class="amt"><small>¥</small>' + yuan(balance) + '</div>' +
+      '<div class="amt"><small>USDT </small>' + usdt(balance) + '</div>' +
       '<div class="id">账号：<b>' + esc(member.username) + '</b><br>暗号：<b>' + esc(member.secret || '未设置') + '</b></div>' +
     '</div>' +
     '<div class="card panel">' +
@@ -1387,8 +1392,8 @@ function renderMemberDashboard(member){
       '</div>' +
       '<label class="field"><span>选择充值金额（元）</span>' +
         '<div class="quick-amounts" id="quick-amounts">' +
-          '<button data-amt="1000">¥10</button><button data-amt="3000">¥30</button><button data-amt="5000">¥50</button>' +
-          '<button data-amt="10000" class="active">¥100</button><button data-amt="20000">¥200</button><button data-amt="50000">¥500</button>' +
+          '<button data-amt="1000">1 USDT</button><button data-amt="3000">3 USDT</button><button data-amt="5000">5 USDT</button>' +
+          '<button data-amt="10000" class="active">10 USDT</button><button data-amt="20000">20 USDT</button><button data-amt="50000">50 USDT</button>' +
         '</div>' +
       '</label>' +
       '<label class="field"><span>自定义金额（元）</span><input id="rc-amount" type="number" min="0.01" step="0.01" value="100.00"></label>' +
@@ -1439,7 +1444,7 @@ function submitRecharge(){
   if (!member){ toast('请先登录','error'); return; }
   const amount = Math.round(parseFloat($('#rc-amount').value || '0') * 100);
   const min = cfg.recharge_min || 1000;
-  if (!(amount >= min)){ toast('最低充值 ¥' + yuan(min),'error'); return; }
+  if (!(amount >= min)){ toast('最低充值 ' + usdt(min) + ' USDT','error'); return; }
   const radio = document.querySelector('input[name="rc-method"]:checked');
   if (!radio){ toast('请选择支付方式','error'); return; }
   const id = genRechargeId();
@@ -1561,13 +1566,13 @@ function renderOrderView(orderNo, secret){
       body = '<div class="card panel" style="background:#fff5f5;border-color:#fc8181">' +
         '<b>⏳ 待发送红包</b>' +
         '<p class="muted" style="font-size:13px;margin:6px 0 12px">请点击下方按钮查看红包口令并在支付宝中发送。</p>' +
-        '<button class="btn primary" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">查看口令 ¥' + yuan(o.amount_due) + '</button>' +
+        '<button class="btn primary" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">查看口令 ' + usdt(o.amount_due) + ' USDT + '</button>' +
       '</div>';
     } else {
       body = '<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">' +
         '<b>⏳ 待支付</b>' +
         '<p class="muted" style="font-size:13px;margin:6px 0 12px">支付方式：支付宝</p>' +
-        '<button class="btn primary" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">去支付 ¥' + yuan(o.amount_due) + '</button>' +
+        '<button class="btn primary" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">去支付 ' + usdt(o.amount_due) + ' USDT + '</button>' +
       '</div>';
     }
   } else if (o.status === 'pending_review'){
@@ -1599,9 +1604,9 @@ function renderOrderView(orderNo, secret){
       '<div class="kv"><span class="k">订单号</span><span class="v mono">' + esc(o.order_no) + '</span></div>' +
       '<div class="kv"><span class="k">商品</span><span class="v">' + esc(o.product_name) + skuBadge + srcBadge + '</span></div>' +
       '<div class="kv"><span class="k">数量</span><span class="v">' + o.quantity + '</span></div>' +
-      '<div class="kv"><span class="k">订单金额</span><span class="v">¥' + yuan(o.amount) + '</span></div>' +
-      (o.balance_used > 0 ? '<div class="kv"><span class="k">余额抵扣</span><span class="v" style="color:#b45309">-¥' + yuan(o.balance_used) + '</span></div>' : '') +
-      (o.amount_due > 0 ? '<div class="kv"><span class="k">实付金额</span><span class="v" style="color:#e11d48">¥' + yuan(o.amount_due) + '</span></div>' : '') +
+      '<div class="kv"><span class="k">订单金额</span><span class="v">' + usdt(o.amount) + ' USDT</span></div>' +
+      (o.balance_used > 0 ? '<div class="kv"><span class="k">余额抵扣</span><span class="v" style="color:#b45309">-' + usdt(o.balance_used) + ' USDT</span></div>' : '') +
+      (o.amount_due > 0 ? '<div class="kv"><span class="k">实付金额</span><span class="v" style="color:#e11d48">' + usdt(o.amount_due) + ' USDT</span></div>' : '') +
       '<div class="kv"><span class="k">支付方式</span><span class="v">' + (o.pay_method === 'balance' ? '余额' : (o.pay_method === 'alipay' ? '支付宝' : 'USDT')) + '</span></div>' +
       (o.redpacket_code ? '<div class="kv"><span class="k">红包口令</span><span class="v mono" style="color:#e91e63">' + esc(o.redpacket_code) + '</span></div>' : '') +
       numberKv + codeKv +
@@ -1732,10 +1737,10 @@ function switchTab(tab){
       (waitingSms > 0 ? '<div class="stat"><div class="n" style="color:#0369a1">' + waitingSms + '</div><div class="l">接码中</div></div>' : '') +
       '<div class="stat"><div class="n">' + unused + '</div><div class="l">可用卡密</div></div>' +
       '<div class="stat"><div class="n">' + used + '</div><div class="l">已售卡密</div></div>' +
-      '<div class="stat"><div class="n">¥' + yuan(revenue) + '</div><div class="l">累计收入</div></div>' +
+      '<div class="stat"><div class="n">' + usdt(revenue) + '</div><div class="l">累计收入(USDT)</div></div>' +
       '<div class="stat"><div class="n">' + db.members.length + '</div><div class="l">会员数</div></div>' +
-      '<div class="stat"><div class="n">¥' + yuan(totalBalance) + '</div><div class="l">会员余额总额</div></div>' +
-      '<div class="stat"><div class="n">¥' + yuan(totalRecharge) + '</div><div class="l">累计充值</div></div>' +
+      '<div class="stat"><div class="n">' + usdt(totalBalance) + '</div><div class="l">会员余额(USDT)</div></div>' +
+      '<div class="stat"><div class="n">' + usdt(totalRecharge) + '</div><div class="l">累计充值(USDT)</div></div>' +
     '</div>' +
     '<div class="card panel" style="margin-top:20px">' +
       '<h2>数据管理</h2>' +
@@ -1767,7 +1772,7 @@ function renderPending(){
     return '<tr>' +
       '<td class="mono" style="font-size:12px">' + esc(o.order_no) + '</td>' +
       '<td>' + esc(o.product_name) + srcTag + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
-      '<td style="font-weight:700;color:#e11d48">¥' + yuan(o.amount_due) + '</td>' +
+      '<td style="font-weight:700;color:#e11d48">' + usdt(o.amount_due) + ' USDT</td>' +
       '<td>' + (o.pay_method === 'alipay' ? '支付宝' : 'USDT') + '</td>' +
       '<td>' + rpCell + '</td>' +
       '<td class="muted" style="font-size:12px">' + esc(o.secret) + userLine + '</td>' +
@@ -1952,8 +1957,8 @@ function renderProducts(){
     const stock = stockOf(db, p.id);
     const cat = db.categories.filter(function(c){ return String(c.id) === String(p.category_id); })[0];
     const skus = getSkus(p);
-    const skuInfo = skus.length ? '<div class="sku-tags" style="margin-top:4px">' + skus.map(function(s){ return '<span class="sku-tag">' + esc(s.name) + ' ¥' + yuan(s.price) + '</span>'; }).join('') + '</div>' : '';
-    const priceDisplay = skus.length ? '¥' + yuan(getMinPrice(p)) + ' 起' : '¥' + yuan(p.price);
+    const skuInfo = skus.length ? '<div class="sku-tags" style="margin-top:4px">' + skus.map(function(s){ return '<span class="sku-tag">' + esc(s.name) + ' ' + usdt(s.price) + ' USDT</span>'; }).join('') + '</div>' : '';
+    const priceDisplay = skus.length ? usdt(getMinPrice(p)) + ' USDT 起' : usdt(p.price) + ' USDT';
     const srcBadge = p.source === 'luban' ? '<span class="badge src-luban" style="margin-left:4px">接码</span>' : '';
     const stockShow = p.source === 'luban' ? '不限' : stock;
     const nameShow = p.name.length > 30 ? p.name.slice(0,30) + '…' : p.name;
@@ -2101,7 +2106,7 @@ function onCardProductChange(){
       '<select id="ic-skuid" onchange="loadCards()">' +
         skus.map(function(s){
           const cnt = db.cards.filter(function(c){ return c.product_id === pid && String(c.sku_id) === String(s.id) && c.status === 'unused'; }).length;
-          return '<option value="' + s.id + '">' + esc(s.name) + ' ¥' + yuan(s.price) + '（可用 ' + cnt + '）</option>';
+          return '<option value="' + s.id + '">' + esc(s.name) + ' ' + usdt(s.price) + ' USDT（可用 ' + cnt + '）</option>';
         }).join('') +
       '</select>' +
     '</label>';
@@ -2188,7 +2193,7 @@ function renderOrders(){
     const rpCell = o.redpacket_code ? '<span class="rp-code-cell" data-v="' + esc(o.redpacket_code) + '" onclick="copyText(this.dataset.v,this)" style="cursor:pointer" title="点击复制">' + esc(o.redpacket_code) + '</span>' : '<span class="muted">-</span>';
     const skuLine = o.sku_name ? '<div class="muted" style="font-size:11px">' + esc(o.sku_name) + '</div>' : '';
     const userLine = o.username ? '<div style="font-size:11px">@' + esc(o.username) + '</div>' : '';
-    const balanceLine = o.balance_used > 0 ? '<div class="muted" style="font-size:11px">余额抵扣¥' + yuan(o.balance_used) + '</div>' : '';
+    const balanceLine = o.balance_used > 0 ? '<div class="muted" style="font-size:11px">余额抵扣' + usdt(o.balance_used) + ' USDT + '</div>' : '';
     const srcTag = o.source === 'luban' ? ' <span class="badge src-luban">接码</span>' : '';
     let actionBtns = '';
     if (o.status === 'pending_review'){
@@ -2208,7 +2213,7 @@ function renderOrders(){
     return '<tr>' +
       '<td class="mono" style="font-size:12px">' + esc(o.order_no) + '</td>' +
       '<td>' + esc(o.product_name) + srcTag + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
-      '<td>¥' + yuan(o.amount) + balanceLine + '</td>' +
+      '<td>' + usdt(o.amount) + ' USDT' + balanceLine + '</td>' +
       '<td>' + (o.pay_method === 'balance' ? '余额' : (o.pay_method === 'alipay' ? '支付宝' : 'USDT')) + '</td>' +
       '<td>' + rpCell + '</td>' +
       '<td class="muted" style="font-size:12px">' + esc(o.secret) + userLine + '</td>' +
@@ -2290,7 +2295,7 @@ function renderMembers(){
     return '<tr>' +
       '<td><b>' + esc(m.username) + '</b></td>' +
       '<td class="muted" style="font-size:12px">' + esc(m.secret || '-') + '</td>' +
-      '<td style="font-weight:700;color:#b45309">¥' + yuan(m.balance) + '</td>' +
+      '<td style="font-weight:700;color:#b45309">' + usdt(m.balance) + ' USDT</td>' +
       '<td class="muted" style="font-size:12px">' + esc(m.created_at) + '</td>' +
       '<td style="text-align:right;white-space:nowrap">' +
         '<button class="btn sm ghost" onclick="adjustBalance(\'' + esc(m.username) + '\',100)">+1元</button> ' +
@@ -2323,7 +2328,7 @@ function openAdjustBalance(username){
   if (!m) return;
   openModal('<h3>调整余额</h3>' +
     '<div class="kv"><span class="k">账号</span><span class="v">' + esc(username) + '</span></div>' +
-    '<div class="kv" style="margin-bottom:14px"><span class="k">当前余额</span><span class="v" style="color:#b45309">¥' + yuan(m.balance) + '</span></div>' +
+    '<div class="kv" style="margin-bottom:14px"><span class="k">当前余额</span><span class="v" style="color:#b45309">' + usdt(m.balance) + ' USDT</span></div>' +
     '<label class="field"><span>调整金额（元，正数增加，负数减少）</span>' +
       '<input id="adj-amount" type="number" step="0.01" placeholder="例如：10 或 -5"></label>' +
     '<div class="row" style="justify-content:flex-end">' +
@@ -2372,7 +2377,7 @@ function deleteMember(username){
   const db = loadDB();
   const m = findMemberByUsername(db, username);
   if (!m) return;
-  if (!confirm('确定删除会员「' + username + '」吗？其余额 ¥' + yuan(m.balance) + ' 也会一并清除。')) return;
+  if (!confirm('确定删除会员「' + username + '」吗？其余额 ' + usdt(m.balance) + ' USDT 也会一并清除。')) return;
   db.members = db.members.filter(function(x){ return x.username !== username; });
   if (getCurrentUsername() === username) setCurrentUsername('');
   saveDB(db);
@@ -2415,7 +2420,7 @@ function renderLuban(){
             '<td><b>' + esc(nameShow) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.luban_service_id) + '</div></td>' +
             '<td>' + esc(p.luban_country || '-') + '</td>' +
             '<td class="muted">$' + (p.luban_origin_cost || 0) + '</td>' +
-            '<td style="font-weight:700;color:#e11d48">¥' + yuan(p.price) + '</td>' +
+            '<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT</td>' +
             '<td><span class="badge cat">' + (p.luban_type === 'common' ? '通用' : '验证码') + '</span></td>' +
             '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
             '<td style="text-align:right;white-space:nowrap">' +
@@ -2841,6 +2846,8 @@ function renderSettings(){
       '<h2>站点设置</h2>' +
       '<label class="field"><span>网站标题</span>' +
         '<input id="cfg-name" value="' + esc(cfg.site_name) + '" maxlength="20" placeholder="云发卡"></label>' +
+      '<label class="field"><span>首页 Banner 副标题（付款即发货下方文字）</span>' +
+        '<input id="cfg-hero-sub" value="' + esc(cfg.hero_subtitle || '') + '" maxlength="60" placeholder="7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额"></label>' +
       '<label class="field"><span>Telegram 客服用户名（不含 @，留空则隐藏所有客服按钮）</span>' +
         '<input id="cfg-tg" value="' + esc(cfg.tg_username) + '" maxlength="40" placeholder="U345666"></label>' +
       '<div class="muted" style="font-size:12px;margin-bottom:14px">' +
@@ -2887,7 +2894,7 @@ function renderSettings(){
       '<label class="field">' +
         '<span><input type="checkbox" id="cfg-balance-enabled" ' + (cfg.balance_enabled !== false ? 'checked' : '') + '> 启用余额支付（下单可抵扣）</span>' +
       '</label>' +
-      '<label class="field"><span>最低充值金额（元）</span>' +
+      '<label class="field"><span>最低充值金额（USDT）</span>' +
         '<input id="cfg-recharge-min" type="number" step="0.01" value="' + (cfg.recharge_min / 100).toFixed(2) + '"></label>' +
 
       '<h3 style="font-size:14px;margin:20px 0 10px">💰 支付宝</h3>' +
@@ -3009,6 +3016,7 @@ function saveSettings(){
   const alipayMode = $('#cfg-alipay-mode').value;
   db.config = Object.assign({}, db.config, {
     site_name: name,
+    hero_subtitle: ($('#cfg-hero-sub') ? $('#cfg-hero-sub').value.trim() : '') || '7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额',
     tg_username: tg,
     tg_btn_color: $('#cfg-tg-color') ? $('#cfg-tg-color').value.trim() : (db.config.tg_btn_color || '#0088cc'),
     tg_notify_enabled: $('#cfg-tg-notify').checked,
@@ -3266,7 +3274,7 @@ window.renderLuban = function(){
             '<td><b>' + esc(nameShow) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.luban_service_id) + '</div></td>' +
             '<td>' + esc(p.luban_country || '-') + '</td>' +
             '<td class="muted">$' + (p.luban_origin_cost || 0) + '</td>' +
-            '<td style="font-weight:700;color:#e11d48">¥' + yuan(p.price) + '</td>' +
+            '<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT</td>' +
             '<td><span class="badge cat">' + (p.luban_type === 'common' ? '通用' : '验证码') + '</span></td>' +
             '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
             '<td style="text-align:right;white-space:nowrap">' +
@@ -3715,7 +3723,7 @@ function renderLubanResults(){
         '<span class="badge cat">' + esc(s.country_name_zh || s.country_name_en || '') + '</span>' +
         (s.provider ? '<span class="badge gray" style="font-size:11px">' + esc(s.provider) + '</span>' : '') +
       '</div>' +
-      '<div class="p-price" style="font-size:20px;color:#e11d48"><small>¥</small>' + (priceFen / 100).toFixed(2) + '</div>' +
+      '<div class="p-price" style="font-size:20px;color:#e11d48"><small>USDT </small>' + (priceFen / 100 / usdtRate()).toFixed(2) + '</div>' +
       '<button class="btn primary" onclick="lubanClientBuy(\'' + esc(s.service_id) + '\')">立即接码</button>' +
     '</div>';
   });
@@ -3740,7 +3748,7 @@ function lubanClientBuy(serviceId){
   openModal('<h3>确认接码</h3>' +
     '<div class="kv"><span class="k">服务</span><span class="v">' + esc(svc.service_name) + '</span></div>' +
     '<div class="kv"><span class="k">国家</span><span class="v">' + esc(svc.country_name_zh || svc.country_name_en || '') + '</span></div>' +
-    '<div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px">¥' + (priceFen / 100).toFixed(2) + '</span></div>' +
+    '<div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px">' + (priceFen / 100 / usdtRate()).toFixed(2) + ' USDT</span></div>' +
     '<label class="field"><span>暗号（用于查询订单 / 找回密码）</span>' +
       '<input id="luban-buy-secret" type="text" placeholder="自定义内容，请务必牢记" maxlength="60" value="' + esc(member ? (member.secret || '') : '') + '">' +
     '</label>' +
@@ -3769,9 +3777,9 @@ function renderLubanPayBox(priceFen){
   var html = '';
   if (useBalance) {
     html += '<div class="balance-row">' +
-      '<div class="lbl">💎 会员余额 ¥' + (balance / 100).toFixed(2) + '</div>' +
+      '<div class="lbl">💎 会员余额 ' + (balance/100/usdtRate()).toFixed(2) + ' USDT</div>' +
       '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">' +
-        '<input type="checkbox" id="luban-use-balance" checked> 使用余额抵扣（-¥' + (deduct / 100).toFixed(2) + '）' +
+        '<input type="checkbox" id="luban-use-balance" checked> 使用余额抵扣（-' + (deduct/100/usdtRate()).toFixed(2) + ' USDT）' +
       '</label>' +
     '</div>';
   }
@@ -4441,7 +4449,7 @@ function finishSearch(serviceRaw, tryList){
       '</div>' +
       '<div class="spread" style="margin:18px 0;padding-top:14px;border-top:1px dashed var(--line)">' +
         '<span class="muted" style="font-size:13px">接码价格</span>' +
-        '<span style="font-size:22px;font-weight:800;color:#e11d48">¥' + (priceFen / 100).toFixed(2) + '</span>' +
+        '<span style="font-size:22px;font-weight:800;color:#e11d48">' + (priceFen / 100 / usdtRate()).toFixed(2) + ' USDT</span>' +
       '</div>' +
       '<button class="btn primary block" onclick="lubanCommonBuy()">📱 立即接码</button>';
   };
@@ -4500,9 +4508,9 @@ function finishSearch(serviceRaw, tryList){
     var html = '';
     if (useBalance) {
       html += '<div class="balance-row">' +
-        '<div class="lbl">💎 会员余额 ¥' + (balance / 100).toFixed(2) + '</div>' +
+        '<div class="lbl">💎 会员余额 ' + (balance/100/usdtRate()).toFixed(2) + ' USDT</div>' +
         '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">' +
-          '<input type="checkbox" id="luban-common-use-balance" checked> 使用余额抵扣（-¥' + (deduct / 100).toFixed(2) + '）' +
+          '<input type="checkbox" id="luban-common-use-balance" checked> 使用余额抵扣（-' + (deduct/100/usdtRate()).toFixed(2) + ' USDT）' +
         '</label>' +
       '</div>';
     }
@@ -4884,9 +4892,9 @@ function renderLubanCommonPayBox(priceFen){
   var html = '';
   if (useBalance) {
     html += '<div class="balance-row">' +
-      '<div class="lbl">💎 会员余额 ¥' + (balance / 100).toFixed(2) + '</div>' +
+      '<div class="lbl">💎 会员余额 ' + (balance/100/usdtRate()).toFixed(2) + ' USDT</div>' +
       '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">' +
-        '<input type="checkbox" id="luban-common-use-balance" checked> 使用余额抵扣（-¥' + (deduct / 100).toFixed(2) + '）' +
+        '<input type="checkbox" id="luban-common-use-balance" checked> 使用余额抵扣（-' + (deduct/100/usdtRate()).toFixed(2) + ' USDT）' +
       '</label>' +
     '</div>';
   }

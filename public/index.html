@@ -5847,5 +5847,139 @@ window.lubanStartCommonNew = function(orderNo, params){
     setTimeout(applyUI, 200);
 })();
 </script>
+<!-- 云发卡平台 - 终极修复（MutationObserver防闪烁 + 绝对锁死紫色） -->
+<script>
+(function() {
+    // 1. 注入固定紫色样式，绝对不变色
+    var style = document.createElement('style');
+    style.innerHTML = `
+        #yf-global-cate-item {
+            background-color: #8463f6 !important;
+            color: #ffffff !important;
+            border-radius: 20px !important;
+            border: none !important;
+            padding: 6px 16px !important;
+            margin-right: 10px !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
+            cursor: pointer !important;
+            white-space: nowrap !important;
+            display: inline-block !important;
+            flex-shrink: 0 !important;
+            box-shadow: 0 2px 6px rgba(132, 99, 246, 0.3) !important;
+            text-align: center !important;
+            transition: opacity 0.2s !important;
+        }
+        #yf-global-cate-item:hover { opacity: 0.85 !important; }
+    `;
+    document.head.appendChild(style);
+
+    var topGlobalBtn = null;
+
+    // 2. 查找并隐藏顶部原有的“全球接码”
+    function findTopBtn() {
+        if (topGlobalBtn) return topGlobalBtn;
+        var allEls = document.querySelectorAll('div, span, a, button, li');
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                topGlobalBtn = allEls[i];
+                topGlobalBtn.style.display = 'none';
+                return topGlobalBtn;
+            }
+        }
+        return null;
+    }
+
+    // 3. 插入按钮的核心逻辑
+    function injectBtn() {
+        if (document.getElementById('yf-global-cate-item')) return; // 如果已经存在，绝对不重复插入
+
+        var topBtn = findTopBtn();
+        if (!topBtn) return;
+
+        // 查找“全部”按钮
+        var allEls = document.querySelectorAll('div, span, a, button, li');
+        var allBtn = null;
+        for (var j = 0; j < allEls.length; j++) {
+            var txt = allEls[j].innerText ? allEls[j].innerText.trim() : '';
+            if (txt.indexOf('全部') === 0 && txt.length < 15 && allEls[j].children.length === 0) {
+                var p = allEls[j].parentNode;
+                if (p && p.innerText && (p.innerText.includes('游戏点卡') || p.innerText.includes('软件工具') || p.innerText.includes('会员卡券')) && !p.innerText.includes('立即购买')) {
+                    allBtn = allEls[j];
+                    break;
+                }
+            }
+        }
+        if (!allBtn) return;
+
+        var cateBar = allBtn.parentNode;
+        if (!cateBar) return;
+
+        // 创建按钮
+        var globalBtn = document.createElement('div');
+        globalBtn.id = 'yf-global-cate-item';
+        globalBtn.innerText = '全球接码';
+        globalBtn.onclick = function(e) {
+            e.stopPropagation();
+            topBtn.click();
+        };
+
+        // 插入到第一位（“全部”的前面）
+        cateBar.insertBefore(globalBtn, allBtn);
+    }
+
+    // 4. 使用 MutationObserver 监听页面变化（替代 setInterval，防闪烁核心）
+    var observer = new MutationObserver(function() {
+        injectBtn();
+    });
+
+    // 启动监听
+    function startObserver() {
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+            document.addEventListener('DOMContentLoaded', startObserver);
+            return;
+        }
+        injectBtn(); // 首次立即执行
+    }
+    startObserver();
+
+    // 5. 安卓手机右下角客服图标修复
+    if (/android/i.test(navigator.userAgent)) {
+        setInterval(function() {
+            var allEls = document.querySelectorAll('div, span, a, button, li');
+            for (var k = 0; k < allEls.length; k++) {
+                var cTxt = allEls[k].innerText ? allEls[k].innerText.trim() : '';
+                if (cTxt === '客服' && allEls[k].children.length === 0) {
+                    var cp = allEls[k].parentNode;
+                    var isFloat = false;
+                    while (cp && cp !== document.body) {
+                        if (window.getComputedStyle(cp).position === 'fixed') { isFloat = true; break; }
+                        cp = cp.parentNode;
+                    }
+                    if (isFloat || allEls[k].style.position === 'fixed') {
+                        var btn = allEls[k];
+                        btn.style.setProperty('position', 'fixed', 'important');
+                        btn.style.setProperty('right', '20px', 'important');
+                        btn.style.setProperty('bottom', '80px', 'important');
+                        btn.style.setProperty('display', 'flex', 'important');
+                        btn.style.setProperty('justify-content', 'center', 'important');
+                        btn.style.setProperty('align-items', 'center', 'important');
+                        btn.style.setProperty('width', '50px', 'important');
+                        btn.style.setProperty('height', '50px', 'important');
+                        btn.style.setProperty('border-radius', '50%', 'important');
+                        btn.style.setProperty('background-color', '#ef4444', 'important');
+                        btn.style.setProperty('color', '#ffffff', 'important');
+                        btn.style.setProperty('z-index', '999999', 'important');
+                        btn.style.setProperty('box-shadow', '0 4px 12px rgba(239, 68, 68, 0.4)', 'important');
+                        break;
+                    }
+                }
+            }
+        }, 1000); // 安卓这边保持1秒一次不会影响主界面
+    }
+})();
+</script>
 </body>
 </html>

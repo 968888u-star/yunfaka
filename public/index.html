@@ -6764,47 +6764,61 @@ window.lubanStartCommonNew = function(orderNo, params){
         if (document.body) {
             observer.observe(document.body, { childList: true, subtree: true });
         } else {
-            document.addEventListener('DOMContentLoaded', start);
-            return;
-        }
-        applyUI();
-    }
-    start();
+<!-- 云发卡平台 - 绝对安全版（只执行一次，绝不卡死） -->
+<script>
+(function() {
+    // 等页面完全加载后 2 秒，只执行这一次，执行完就结束
+    setTimeout(function() {
+        var allEls = document.querySelectorAll('div, span, a, button, li');
+        var topGlobalBtn = null;
 
-    // 7. 安卓手机客服图标修复（保持不变）
-    if (/android/i.test(navigator.userAgent)) {
-        setInterval(function() {
-            var allEls = document.querySelectorAll('div, span, a, button, li');
-            for (var m = 0; m < allEls.length; m++) {
-                var cTxt = allEls[m].innerText ? allEls[m].innerText.trim() : '';
-                if (cTxt === '客服' && allEls[m].children.length === 0) {
-                    var cp = allEls[m].parentNode;
-                    var isFloat = false;
-                    while (cp && cp !== document.body) {
-                        if (window.getComputedStyle(cp).position === 'fixed') { isFloat = true; break; }
-                        cp = cp.parentNode;
-                    }
-                    if (isFloat || allEls[m].style.position === 'fixed') {
-                        var btn2 = allEls[m];
-                        btn2.style.setProperty('position', 'fixed', 'important');
-                        btn2.style.setProperty('right', '20px', 'important');
-                        btn2.style.setProperty('bottom', '80px', 'important');
-                        btn2.style.setProperty('display', 'flex', 'important');
-                        btn2.style.setProperty('justify-content', 'center', 'important');
-                        btn2.style.setProperty('align-items', 'center', 'important');
-                        btn2.style.setProperty('width', '50px', 'important');
-                        btn2.style.setProperty('height', '50px', 'important');
-                        btn2.style.setProperty('border-radius', '50%', 'important');
-                        btn2.style.setProperty('background-color', '#ef4444', 'important');
-                        btn2.style.setProperty('color', '#ffffff', 'important');
-                        btn2.style.setProperty('z-index', '999999', 'important');
-                        btn2.style.setProperty('box-shadow', '0 4px 12px rgba(239, 68, 68, 0.4)', 'important');
-                        break;
-                    }
-                }
+        // 1. 找并隐藏顶部原来的“全球接码”
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                topGlobalBtn = allEls[i];
+                topGlobalBtn.style.display = 'none'; // 隐藏顶部，恢复原样
+                break;
             }
-        }, 2000);
-    }
+        }
+        if (!topGlobalBtn) return;
+
+        // 2. 找“注册会员”卡片
+        var regCard = null;
+        for (var j = 0; j < allEls.length; j++) {
+            var txt = allEls[j].innerText || '';
+            if (txt.includes('注册会员') && txt.includes('享余额支付') && txt.length < 200) {
+                regCard = allEls[j];
+                break;
+            }
+        }
+        if (!regCard || !regCard.parentNode) return;
+
+        // 3. 创建和“注册会员”风格一致的卡片（用内联样式，绝对不跟原页面冲突）
+        var card = document.createElement('div');
+        card.id = 'yf-sms-entry-card';
+        card.style.cssText = 'margin-top:12px;background:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,0.03);cursor:pointer;border:1px solid #f3f4f6;box-sizing:border-box;width:100%;';
+        
+        card.innerHTML = `
+            <div style="display:flex;align-items:center;flex:1;">
+                <div style="width:36px;height:36px;background:#f3e8ff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-right:12px;flex-shrink:0;">🌐</div>
+                <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="font-size:15px;font-weight:600;color:#1f2937;margin-bottom:2px;">全球接码</div>
+                    <div style="font-size:12px;color:#9ca3af;">实时搜索 · 自动分配号码</div>
+                </div>
+            </div>
+            <div style="background:#8463f6;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;white-space:nowrap;flex-shrink:0;margin-left:10px;box-shadow:0 2px 6px rgba(132,99,246,0.2);">立即接码</div>
+        `;
+
+        // 4. 绑定点击事件（点击后自动触发顶部的“全球接码”功能）
+        card.onclick = function(e) {
+            e.stopPropagation();
+            topGlobalBtn.click();
+        };
+
+        // 5. 插入到“注册会员”卡片的正下方
+        regCard.parentNode.insertBefore(card, regCard.nextSibling);
+
+    }, 2000); // 2秒后执行，只执行一次
 })();
 </script>
 </body>

@@ -3915,5 +3915,199 @@ function lubanSubmitClientBuy(serviceId){
   });
 })();
 </script>
+<script>
+/* ============ 全球接码 v7 · 中文国家 + 智能搜索 ============ */
+
+// 国家中文映射表（用 ISO code 兜底）
+var LUBAN_COUNTRY_CN = {
+  'CN':'中国','US':'美国','GB':'英国','UK':'英国','RU':'俄罗斯','IN':'印度',
+  'ID':'印度尼西亚','PH':'菲律宾','VN':'越南','TH':'泰国','MY':'马来西亚',
+  'SG':'新加坡','JP':'日本','KR':'韩国','HK':'中国香港','TW':'中国台湾',
+  'MO':'中国澳门','DE':'德国','FR':'法国','IT':'意大利','ES':'西班牙',
+  'PT':'葡萄牙','NL':'荷兰','BE':'比利时','CH':'瑞士','SE':'瑞典','NO':'挪威',
+  'DK':'丹麦','FI':'芬兰','PL':'波兰','CZ':'捷克','AT':'奥地利','GR':'希腊',
+  'CA':'加拿大','AU':'澳大利亚','NZ':'新西兰','BR':'巴西','MX':'墨西哥',
+  'AR':'阿根廷','CL':'智利','CO':'哥伦比亚','PE':'秘鲁','VE':'委内瑞拉',
+  'ZA':'南非','EG':'埃及','TR':'土耳其','SA':'沙特阿拉伯','AE':'阿联酋',
+  'IL':'以色列','PK':'巴基斯坦','BD':'孟加拉国','LK':'斯里兰卡','NP':'尼泊尔',
+  'KH':'柬埔寨','MM':'缅甸','LA':'老挝','MN':'蒙古','KZ':'哈萨克斯坦',
+  'UZ':'乌兹别克斯坦','IR':'伊朗','IQ':'伊拉克','JO':'约旦','KW':'科威特',
+  'QA':'卡塔尔','OM':'阿曼','BH':'巴林','LB':'黎巴嫩','SY':'叙利亚',
+  'TN':'突尼斯','MA':'摩洛哥','DZ':'阿尔及利亚','LY':'利比亚','NG':'尼日利亚',
+  'KE':'肯尼亚','GH':'加纳','ET':'埃塞俄比亚','TZ':'坦桑尼亚','UG':'乌干达',
+  'UA':'乌克兰','BY':'白俄罗斯','RO':'罗马尼亚','HU':'匈牙利','BG':'保加利亚',
+  'HR':'克罗地亚','RS':'塞尔维亚','SK':'斯洛伐克','SI':'斯洛文尼亚',
+  'LT':'立陶宛','LV':'拉脱维亚','EE':'爱沙尼亚','MD':'摩尔多瓦','GE':'格鲁吉亚',
+  'AM':'亚美尼亚','AZ':'阿塞拜疆','CY':'塞浦路斯','MT':'马耳他','IS':'冰岛',
+  'IE':'爱尔兰','LU':'卢森堡'
+};
+
+// 常见服务中文 → 拼音/英文映射（智能搜索用）
+var LUBAN_SERVICE_ALIAS = {
+  '豆包':'doubao',
+  '微信':'weixin',
+  '拼多多':'pinduoduo',
+  '淘宝':'taobao',
+  '支付宝':'alipay',
+  '抖音':'douyin',
+  '小红书':'xiaohongshu',
+  '哔哩哔哩':'bilibili',
+  'b站':'bilibili',
+  '快手':'kuaishou',
+  '知乎':'zhihu',
+  '微博':'weibo',
+  '百度':'baidu',
+  '京东':'jd',
+  '美团':'meituan',
+  '滴滴':'didi',
+  '腾讯':'tencent',
+  '网易':'netease',
+  '小米':'xiaomi',
+  '华为':'huawei',
+  '抖音国际版':'tiktok',
+  '油管':'youtube',
+  '脸书':'facebook',
+  '推特':'twitter',
+  '电报':'telegram',
+  '飞机':'telegram'
+};
+
+// 覆盖 loadLubanCountries —— 中文优先
+window.loadLubanCountries = function(){
+  fetch('/api/luban?action=countries')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var sel = $('#luban-c-country');
+      if (!sel) return;
+      if (d.code === 0 && Array.isArray(d.msg)) {
+        var html = '<option value="">全部国家/地区</option>';
+        d.msg.forEach(function(c){
+          var code = (c.code || '').toUpperCase();
+          var name = c.name_cn || LUBAN_COUNTRY_CN[code] || c.name_en || code || '';
+          if (!name) return;
+          // 搜索仍用英文名（LubanSms 后端需要英文）
+          var val = c.name_en || name;
+          html += '<option value="' + esc(val) + '" data-code="' + esc(code) + '">' + esc(name) + (code ? '（' + esc(code) + '）' : '') + '</option>';
+        });
+        sel.innerHTML = html;
+      } else {
+        sel.innerHTML = '<option value="">加载失败</option>';
+      }
+    })
+    .catch(function(){
+      var sel = $('#luban-c-country');
+      if (sel) sel.innerHTML = '<option value="">加载失败</option>';
+    });
+};
+
+// 覆盖 renderLubanClient —— 去掉"自动加价 30%"文字
+window.renderLubanClient = function(){
+  $('#app').innerHTML =
+    '<div class="hero" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)">' +
+      '<div class="blob"></div>' +
+      '<h1>🌍 全球接码</h1>' +
+      '<p>选择国家和平台，实时接码 · 全自动发货</p>' +
+    '</div>' +
+    '<div class="card panel">' +
+      '<h2>🔍 搜索服务</h2>' +
+      '<div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:14px">' +
+        '<div style="flex:1;min-width:160px">' +
+          '<label class="field" style="margin:0"><span>国家 / 地区</span>' +
+            '<select id="luban-c-country"><option value="">加载中…</option></select>' +
+          '</label>' +
+        '</div>' +
+        '<div style="flex:2;min-width:200px">' +
+          '<label class="field" style="margin:0"><span>服务关键词（如：Apple / 微信 / Tinder）</span>' +
+            '<input id="luban-c-service" placeholder="留空 = 显示该国家全部服务">' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+      '<button class="btn primary block" onclick="lubanClientSearch(1)">🔍 搜索服务</button>' +
+      '<p class="muted" style="font-size:12px;margin:12px 0 0">💡 提示：中文搜不到的试试拼音或英文，如「拼多多」搜 pinduoduo、「豆包」搜 doubao。</p>' +
+    '</div>' +
+    '<div class="card panel">' +
+      '<div class="spread" style="margin-bottom:14px">' +
+        '<h2 style="margin:0">搜索结果</h2>' +
+        '<span class="muted" id="luban-c-count" style="font-size:13px"></span>' +
+      '</div>' +
+      '<div id="luban-c-results"><div class="empty">选择国家和关键词后点击搜索</div></div>' +
+      '<div id="luban-c-loadmore" style="text-align:center;margin-top:14px"></div>' +
+    '</div>';
+
+  loadLubanCountries();
+};
+
+// 覆盖 lubanClientSearch —— 支持中文自动转拼音
+window.lubanClientSearch = function(page){
+  var country = ($('#luban-c-country') && $('#luban-c-country').value) || '';
+  var serviceRaw = ($('#luban-c-service') && $('#luban-c-service').value.trim()) || '';
+
+  // 中文服务名自动映射到拼音/英文
+  var service = serviceRaw;
+  var serviceLower = serviceRaw.toLowerCase();
+  if (LUBAN_SERVICE_ALIAS[serviceLower]) {
+    service = LUBAN_SERVICE_ALIAS[serviceLower];
+  } else if (LUBAN_SERVICE_ALIAS[serviceRaw]) {
+    service = LUBAN_SERVICE_ALIAS[serviceRaw];
+  }
+
+  if (page === 1) {
+    _lubanResults = [];
+    $('#luban-c-results').innerHTML = '<div class="loading">正在搜索…</div>';
+    $('#luban-c-loadmore').innerHTML = '';
+    $('#luban-c-count').textContent = '';
+  } else {
+    $('#luban-c-loadmore').innerHTML = '<div class="loading">加载中…</div>';
+  }
+
+  var url = '/api/luban?action=client_services&language=zh&page=' + page;
+  if (country) url += '&countryName=' + encodeURIComponent(country);
+  if (service) url += '&service=' + encodeURIComponent(service);
+
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.code !== 0) {
+        $('#luban-c-results').innerHTML = '<div class="empty">搜索失败：' + esc(d.msg || '') + '</div>';
+        $('#luban-c-loadmore').innerHTML = '';
+        return;
+      }
+      var list = Array.isArray(d.msg) ? d.msg : [];
+
+      if (page === 1 && list.length === 0) {
+        var hint = '';
+        if (serviceRaw && serviceRaw !== service) {
+          hint = '（已尝试用拼音「' + esc(service) + '」搜索）';
+        } else if (serviceRaw) {
+          hint = '试试换拼音或英文关键词';
+        }
+        $('#luban-c-results').innerHTML = '<div class="empty">没有找到匹配的服务 ' + hint + '</div>';
+        $('#luban-c-count').textContent = '';
+        $('#luban-c-loadmore').innerHTML = '';
+        return;
+      }
+
+      if (page === 1) {
+        _lubanResults = list;
+      } else {
+        _lubanResults = _lubanResults.concat(list);
+      }
+
+      renderLubanResults();
+      $('#luban-c-count').textContent = '共 ' + _lubanResults.length + ' 个';
+
+      if (list.length >= 15) {
+        $('#luban-c-loadmore').innerHTML =
+          '<button class="btn ghost" onclick="lubanClientSearch(' + (page + 1) + ')">加载更多</button>';
+      } else {
+        $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px">已显示全部结果</div>';
+      }
+    })
+    .catch(function(e){
+      $('#luban-c-results').innerHTML = '<div class="empty">网络错误：' + esc(e.message) + '</div>';
+      $('#luban-c-loadmore').innerHTML = '';
+    });
+};
+</script>
 </body>
 </html>

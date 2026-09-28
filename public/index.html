@@ -5457,5 +5457,128 @@ window.lubanStartCommonNew = function(orderNo, params){
     setTimeout(applyUI, 100);
 })();
 </script>
+<!-- 云发卡平台 - 彻底修复全球接码闪烁 + 完美同步紫色样式 -->
+<script>
+(function() {
+    var isApplying = false;
+
+    function applyUI() {
+        if (isApplying) return;
+        isApplying = true;
+
+        try {
+            // 1. 隐藏顶部的“全球接码”
+            var allEls = document.querySelectorAll('div, span, a, button, li');
+            var topGlobalBtn = null;
+            for (var i = 0; i < allEls.length; i++) {
+                if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                    topGlobalBtn = allEls[i];
+                    topGlobalBtn.style.display = 'none';
+                    break;
+                }
+            }
+            if (!topGlobalBtn) { isApplying = false; return; }
+
+            // 2. 精准查找顶部的“全部”按钮和分类栏
+            var allBtn = null;
+            for (var j = 0; j < allEls.length; j++) {
+                var txt = allEls[j].innerText ? allEls[j].innerText.trim() : '';
+                if (txt.indexOf('全部') === 0 && txt.length < 15 && allEls[j].children.length === 0) {
+                    var p = allEls[j].parentNode;
+                    // 确认父级是分类栏（包含其他分类，且不是商品卡片）
+                    if (p && p.innerText && (p.innerText.includes('游戏点卡') || p.innerText.includes('软件工具') || p.innerText.includes('会员卡券')) && !p.innerText.includes('立即购买')) {
+                        allBtn = allEls[j];
+                        break;
+                    }
+                }
+            }
+            if (!allBtn) { isApplying = false; return; }
+
+            var cateBar = allBtn.parentNode;
+            if (!cateBar) { isApplying = false; return; }
+
+            // 3. 获取“全部”按钮的真实颜色（完美同步颜色）
+            var allStyle = window.getComputedStyle(allBtn);
+            var bgColor = allStyle.backgroundColor;
+            var txtColor = allStyle.color;
+
+            // 4. 处理“全球接码”按钮
+            var newCate = document.getElementById('yf-global-cate-item');
+            
+            if (!newCate) {
+                // 【核心防闪烁】不存在时才创建，只创建一次！
+                newCate = document.createElement('div');
+                newCate.id = 'yf-global-cate-item';
+                newCate.innerText = '全球接码';
+                
+                // 用真实提取的颜色和样式
+                newCate.style.cssText = 'padding: 6px 16px; margin-right: 10px; border-radius: 20px; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; display: inline-block; transition: opacity 0.2s;';
+                newCate.style.setProperty('background', bgColor, 'important');
+                newCate.style.setProperty('color', txtColor, 'important');
+                newCate.style.setProperty('border', 'none', 'important');
+                newCate.style.setProperty('box-shadow', '0 2px 6px rgba(0,0,0,0.1)', 'important');
+                
+                newCate.onmouseover = function() { this.style.opacity = '0.85'; };
+                newCate.onmouseout = function() { this.style.opacity = '1'; };
+                newCate.onclick = function(e) {
+                    e.stopPropagation();
+                    topGlobalBtn.click();
+                };
+                
+                // 插入到第一位
+                cateBar.insertBefore(newCate, cateBar.firstChild);
+            } else {
+                // 按钮已存在，只同步颜色，绝不移动它（防闪烁）
+                if (newCate.style.backgroundColor !== bgColor) {
+                    newCate.style.setProperty('background', bgColor, 'important');
+                }
+                if (newCate.style.color !== txtColor) {
+                    newCate.style.setProperty('color', txtColor, 'important');
+                }
+            }
+
+            // 5. 修复安卓手机右下角客服图标
+            if (/android/i.test(navigator.userAgent)) {
+                var customerBtn = null;
+                for (var k = 0; k < allEls.length; k++) {
+                    var cTxt = allEls[k].innerText ? allEls[k].innerText.trim() : '';
+                    if (cTxt === '客服' && allEls[k].children.length === 0) {
+                        var cp = allEls[k].parentNode;
+                        var isFloat = false;
+                        while (cp && cp !== document.body) {
+                            if (window.getComputedStyle(cp).position === 'fixed') { isFloat = true; break; }
+                            cp = cp.parentNode;
+                        }
+                        if (isFloat || allEls[k].style.position === 'fixed') {
+                            customerBtn = allEls[k];
+                            break;
+                        }
+                    }
+                }
+                if (customerBtn) {
+                    customerBtn.style.setProperty('position', 'fixed', 'important');
+                    customerBtn.style.setProperty('right', '20px', 'important');
+                    customerBtn.style.setProperty('bottom', '80px', 'important');
+                    customerBtn.style.setProperty('display', 'flex', 'important');
+                    customerBtn.style.setProperty('justify-content', 'center', 'important');
+                    customerBtn.style.setProperty('align-items', 'center', 'important');
+                    customerBtn.style.setProperty('width', '50px', 'important');
+                    customerBtn.style.setProperty('height', '50px', 'important');
+                    customerBtn.style.setProperty('border-radius', '50%', 'important');
+                    customerBtn.style.setProperty('background-color', '#ef4444', 'important');
+                    customerBtn.style.setProperty('color', '#ffffff', 'important');
+                    customerBtn.style.setProperty('z-index', '999999', 'important');
+                    customerBtn.style.setProperty('box-shadow', '0 4px 12px rgba(239, 68, 68, 0.4)', 'important');
+                }
+            }
+        } finally {
+            isApplying = false;
+        }
+    }
+
+    setInterval(applyUI, 2000); // 2秒检查一次，极大降低渲染频率
+    setTimeout(applyUI, 100);
+})();
+</script>
 </body>
 </html>

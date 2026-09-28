@@ -3554,5 +3554,336 @@ window.lubanSyncServices = function(){
   });
 };
 </script>
+<script>
+/* ============ 全球接码 · 客户端实时查（补丁 v5） ============ */
+var _lubanResults = [];
+
+// 覆盖 route，加入 #/luban 分支
+(function(){
+  var _origRoute = window.route;
+  window.route = function(){
+    var hash = location.hash.replace(/^#/, '') || '/';
+    if (hash.indexOf('/luban') === 0) return renderLubanClient();
+    return _origRoute.apply(this, arguments);
+  };
+})();
+
+// 顶部导航注入「全球接码」入口
+(function(){
+  function injectNav(){
+    var nav = document.querySelector('.nav nav');
+    if (!nav || document.getElementById('nav-luban')) return;
+    var a = document.createElement('a');
+    a.id = 'nav-luban';
+    a.href = '#/luban';
+    a.textContent = '全球接码';
+    nav.insertBefore(a, nav.firstChild);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectNav);
+  } else {
+    injectNav();
+  }
+})();
+
+function renderLubanClient(){
+  $('#app').innerHTML =
+    '<div class="hero" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)">' +
+      '<div class="blob"></div>' +
+      '<h1>🌍 全球接码</h1>' +
+      '<p>选择国家和平台，实时接码 · 自动加价 30%，价格透明</p>' +
+    '</div>' +
+    '<div class="card panel">' +
+      '<h2>🔍 搜索服务</h2>' +
+      '<div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:14px">' +
+        '<div style="flex:1;min-width:160px">' +
+          '<label class="field" style="margin:0"><span>国家 / 地区</span>' +
+            '<select id="luban-c-country"><option value="">加载中…</option></select>' +
+          '</label>' +
+        '</div>' +
+        '<div style="flex:2;min-width:200px">' +
+          '<label class="field" style="margin:0"><span>服务关键词（如：Apple / 微信 / Tinder）</span>' +
+            '<input id="luban-c-service" placeholder="留空 = 显示该国家全部服务">' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+      '<button class="btn primary block" onclick="lubanClientSearch(1)">🔍 搜索服务</button>' +
+      '<p class="muted" style="font-size:12px;margin:12px 0 0">💡 提示：中文搜不到的试试拼音或英文，如「拼多多」搜 pinduoduo。</p>' +
+    '</div>' +
+    '<div class="card panel">' +
+      '<div class="spread" style="margin-bottom:14px">' +
+        '<h2 style="margin:0">搜索结果</h2>' +
+        '<span class="muted" id="luban-c-count" style="font-size:13px"></span>' +
+      '</div>' +
+      '<div id="luban-c-results"><div class="empty">选择国家和关键词后点击搜索</div></div>' +
+      '<div id="luban-c-loadmore" style="text-align:center;margin-top:14px"></div>' +
+    '</div>';
+
+  loadLubanCountries();
+}
+
+function loadLubanCountries(){
+  fetch('/api/luban?action=countries')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var sel = $('#luban-c-country');
+      if (!sel) return;
+      if (d.code === 0 && Array.isArray(d.msg)) {
+        var html = '<option value="">全部国家/地区</option>';
+        d.msg.forEach(function(c){
+          var name = c.name_cn || c.name_en || '';
+          html += '<option value="' + esc(name) + '">' + esc(name) + (c.code ? '（' + esc(c.code) + '）' : '') + '</option>';
+        });
+        sel.innerHTML = html;
+      } else {
+        sel.innerHTML = '<option value="">加载失败</option>';
+      }
+    })
+    .catch(function(){
+      var sel = $('#luban-c-country');
+      if (sel) sel.innerHTML = '<option value="">加载失败</option>';
+    });
+}
+
+function lubanClientSearch(page){
+  var country = ($('#luban-c-country') && $('#luban-c-country').value) || '';
+  var service = ($('#luban-c-service') && $('#luban-c-service').value.trim()) || '';
+
+  if (page === 1) {
+    _lubanResults = [];
+    $('#luban-c-results').innerHTML = '<div class="loading">正在搜索…</div>';
+    $('#luban-c-loadmore').innerHTML = '';
+    $('#luban-c-count').textContent = '';
+  } else {
+    $('#luban-c-loadmore').innerHTML = '<div class="loading">加载中…</div>';
+  }
+
+  var url = '/api/luban?action=client_services&language=zh&page=' + page;
+  if (country) url += '&countryName=' + encodeURIComponent(country);
+  if (service) url += '&service=' + encodeURIComponent(service);
+
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.code !== 0) {
+        $('#luban-c-results').innerHTML = '<div class="empty">搜索失败：' + esc(d.msg || '') + '</div>';
+        $('#luban-c-loadmore').innerHTML = '';
+        return;
+      }
+      var list = Array.isArray(d.msg) ? d.msg : [];
+
+      if (page === 1 && list.length === 0) {
+        $('#luban-c-results').innerHTML = '<div class="empty">没有找到匹配的服务，试试换个关键词或国家</div>';
+        $('#luban-c-count').textContent = '';
+        $('#luban-c-loadmore').innerHTML = '';
+        return;
+      }
+
+      if (page === 1) {
+        _lubanResults = list;
+      } else {
+        _lubanResults = _lubanResults.concat(list);
+      }
+
+      renderLubanResults();
+      $('#luban-c-count').textContent = '共 ' + _lubanResults.length + ' 个';
+
+      if (list.length >= 15) {
+        $('#luban-c-loadmore').innerHTML =
+          '<button class="btn ghost" onclick="lubanClientSearch(' + (page + 1) + ')">加载更多</button>';
+      } else {
+        $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px">已显示全部结果</div>';
+      }
+    })
+    .catch(function(e){
+      $('#luban-c-results').innerHTML = '<div class="empty">网络错误：' + esc(e.message) + '</div>';
+      $('#luban-c-loadmore').innerHTML = '';
+    });
+}
+
+function renderLubanResults(){
+  if (!_lubanResults.length) {
+    $('#luban-c-results').innerHTML = '<div class="empty">无结果</div>';
+    return;
+  }
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">';
+  _lubanResults.forEach(function(s){
+    var priceFen = s.price_cny || 0;
+    html += '<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">' +
+      '<div style="font-weight:700;font-size:15px;line-height:1.4">' + esc(s.service_name) + '</div>' +
+      '<div class="row" style="gap:6px;flex-wrap:wrap">' +
+        '<span class="badge cat">' + esc(s.country_name_zh || s.country_name_en || '') + '</span>' +
+        (s.provider ? '<span class="badge gray" style="font-size:11px">' + esc(s.provider) + '</span>' : '') +
+      '</div>' +
+      '<div class="p-price" style="font-size:20px;color:#e11d48"><small>¥</small>' + (priceFen / 100).toFixed(2) + '</div>' +
+      '<button class="btn primary" onclick="lubanClientBuy(\'' + esc(s.service_id) + '\')">立即接码</button>' +
+    '</div>';
+  });
+  html += '</div>';
+  $('#luban-c-results').innerHTML = html;
+}
+
+function lubanClientBuy(serviceId){
+  var svc = null;
+  for (var i = 0; i < _lubanResults.length; i++){
+    if (String(_lubanResults[i].service_id) === String(serviceId)) {
+      svc = _lubanResults[i];
+      break;
+    }
+  }
+  if (!svc) { toast('服务不存在', 'error'); return; }
+
+  var priceFen = svc.price_cny || 0;
+  var db = loadDB();
+  var member = getCurrentMember(db);
+
+  openModal('<h3>确认接码</h3>' +
+    '<div class="kv"><span class="k">服务</span><span class="v">' + esc(svc.service_name) + '</span></div>' +
+    '<div class="kv"><span class="k">国家</span><span class="v">' + esc(svc.country_name_zh || svc.country_name_en || '') + '</span></div>' +
+    '<div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px">¥' + (priceFen / 100).toFixed(2) + '</span></div>' +
+    '<label class="field"><span>暗号（用于查询订单 / 找回密码）</span>' +
+      '<input id="luban-buy-secret" type="text" placeholder="自定义内容，请务必牢记" maxlength="60" value="' + esc(member ? (member.secret || '') : '') + '">' +
+    '</label>' +
+    '<div id="luban-pay-box"></div>' +
+    '<div class="row" style="justify-content:flex-end;margin-top:14px">' +
+      '<button class="btn ghost" onclick="closeModal()">取消</button>' +
+      '<button class="btn primary" onclick="lubanSubmitClientBuy(\'' + esc(svc.service_id) + '\')">确认付款并接码</button>' +
+    '</div>');
+
+  renderLubanPayBox(priceFen);
+}
+
+function renderLubanPayBox(priceFen){
+  var db = loadDB();
+  var cfg = getConfig(db);
+  var member = getCurrentMember(db);
+  var balance = member ? (member.balance || 0) : 0;
+  var alipayEnabled = cfg.pay_alipay_enabled !== false;
+  var usdtEnabled = cfg.pay_usdt_enabled !== false;
+  var balanceEnabled = cfg.balance_enabled !== false;
+
+  var useBalance = member && balanceEnabled && balance > 0;
+  var deduct = useBalance ? Math.min(balance, priceFen) : 0;
+  var due = priceFen - deduct;
+
+  var html = '';
+  if (useBalance) {
+    html += '<div class="balance-row">' +
+      '<div class="lbl">💎 会员余额 ¥' + (balance / 100).toFixed(2) + '</div>' +
+      '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">' +
+        '<input type="checkbox" id="luban-use-balance" checked> 使用余额抵扣（-¥' + (deduct / 100).toFixed(2) + '）' +
+      '</label>' +
+    '</div>';
+  }
+  html += '<div class="spread" style="margin:12px 0"><span class="muted" style="font-size:13px">还需支付</span>' +
+    '<span id="luban-due" style="font-size:20px;font-weight:800;color:#e11d48">¥' + (due / 100).toFixed(2) + '</span></div>';
+
+  if (due > 0) {
+    html += '<label class="field"><span>支付方式</span>' +
+      '<div class="pay-methods" id="luban-pay-methods">' +
+        (alipayEnabled ? '<label class="pay-method active" data-method="alipay"><input type="radio" name="luban-pay" value="alipay" checked><span class="logo">💰</span> 支付宝</label>' : '') +
+        (usdtEnabled ? '<label class="pay-method ' + (!alipayEnabled ? 'active' : '') + '" data-method="usdt"><input type="radio" name="luban-pay" value="usdt" ' + (!alipayEnabled ? 'checked' : '') + '><span class="logo">🪙</span> USDT</label>' : '') +
+      '</div></label>';
+  } else {
+    html += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;font-size:13px;color:#15803d">✅ 余额充足，无需额外支付</div>';
+  }
+
+  $('#luban-pay-box').innerHTML = html;
+
+  document.querySelectorAll('#luban-pay-methods .pay-method').forEach(function(el){
+    el.addEventListener('click', function(){
+      document.querySelectorAll('#luban-pay-methods .pay-method').forEach(function(x){ x.classList.remove('active'); });
+      el.classList.add('active');
+      var r = el.querySelector('input[type=radio]');
+      if (r) r.checked = true;
+    });
+  });
+
+  var cb = $('#luban-use-balance');
+  if (cb) {
+    cb.addEventListener('change', function(){ renderLubanPayBox(priceFen); });
+  }
+}
+
+function lubanSubmitClientBuy(serviceId){
+  var svc = null;
+  for (var i = 0; i < _lubanResults.length; i++){
+    if (String(_lubanResults[i].service_id) === String(serviceId)) {
+      svc = _lubanResults[i];
+      break;
+    }
+  }
+  if (!svc) { toast('服务不存在', 'error'); return; }
+
+  var priceFen = svc.price_cny || 0;
+  var secretEl = $('#luban-buy-secret');
+  var secret = secretEl ? secretEl.value.trim() : '';
+  var sErr = validateSecret(secret);
+  if (sErr) { toast(sErr, 'error'); return; }
+
+  var db = loadDB();
+  var cfg = getConfig(db);
+  var member = getCurrentMember(db);
+  var balanceEnabled = cfg.balance_enabled !== false;
+  var cb = $('#luban-use-balance');
+  var useBalance = cb && cb.checked && balanceEnabled && member;
+
+  var deduct = 0;
+  if (useBalance) {
+    deduct = Math.min(member.balance || 0, priceFen);
+  }
+  var due = priceFen - deduct;
+
+  var payMethod = 'balance';
+  if (due > 0) {
+    var radio = document.querySelector('input[name="luban-pay"]:checked');
+    if (!radio) { toast('请选择支付方式', 'error'); return; }
+    payMethod = radio.value;
+  }
+
+  if (deduct > 0) {
+    if (!deductBalance(db, member.username, deduct)) {
+      toast('余额扣除失败', 'error');
+      return;
+    }
+  }
+
+  var orderNo = genOrderNo();
+  var order = {
+    order_no: orderNo,
+    product_id: 0,
+    product_name: '[接码] ' + svc.service_name + ' · ' + (svc.country_name_zh || svc.country_name_en || ''),
+    sku_id: 0, sku_name: '', category_id: 0, quantity: 1,
+    amount: priceFen, balance_used: deduct, amount_due: due,
+    secret: secret, username: member ? member.username : '',
+    status: 'pending', pay_method: payMethod, cards: [],
+    note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放',
+    created_at: now(), delivered_at: '',
+    source: 'luban', luban_type: 'sms',
+    luban_service_id: String(svc.service_id),
+    luban_service_name: svc.service_name,
+    luban_country: svc.country_name_zh || svc.country_name_en || ''
+  };
+
+  if (payMethod === 'alipay') {
+    order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
+  }
+
+  db.orders.unshift(order);
+  saveDB(db);
+  saveMyOrder(orderNo, secret);
+  localStorage.setItem(LS_SECRET, secret);
+  closeModal();
+
+  if (due === 0) {
+    payOrder(orderNo);
+    toast('支付成功，正在分配号码…', 'success');
+    if (location.hash === '#/order/' + orderNo) route();
+    else location.hash = '#/order/' + orderNo;
+  } else {
+    showPayModal('order', orderNo);
+  }
+}
+</script>
 </body>
 </html>

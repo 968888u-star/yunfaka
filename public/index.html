@@ -5056,5 +5056,121 @@ window.lubanStartCommonNew = function(orderNo, params){
     });
 };
 </script>
+<!-- 云发卡平台 - 多设备同步最终版（直接追加，覆盖旧逻辑） -->
+<script>
+(function() {
+    var DEFAULT_SUB = '选择国家和平台，实时接码，全自动发货';
+
+    function loadCloud(cb) {
+        fetch('/api/sms-config?t=' + Date.now())
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d && d.sub) {
+                localStorage.setItem('yf_sms_config', JSON.stringify(d));
+                if (cb) cb(d);
+            }
+        }).catch(function() { console.warn('云端拉取失败，使用本地缓存'); });
+    }
+
+    function saveCloud(sub, luban) {
+        var payload = { sub: sub, luban: luban };
+        localStorage.setItem('yf_sms_config', JSON.stringify(payload));
+        fetch('/api/sms-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              if (d.success) alert('✅ 设置已保存，多设备同步成功！');
+              else alert('❌ 保存失败：' + (d.error || '未知错误'));
+          }).catch(function() { alert('❌ 网络错误，云端保存失败！'); });
+    }
+
+    function applyCfg() {
+        var cfgStr = localStorage.getItem('yf_sms_config');
+        var cfg = cfgStr ? JSON.parse(cfgStr) : { sub: DEFAULT_SUB, luban: true };
+        
+        var els = document.querySelectorAll('div, p, span, h1, h2, h3, h4, h5, h6');
+        for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            if (el.children.length === 0 && (el.innerText.trim() === DEFAULT_SUB || el.innerText.trim() === cfg.sub)) {
+                if (el.innerText.trim() !== cfg.sub) el.innerText = cfg.sub;
+                break;
+            }
+        }
+
+        if (window.location.hash.includes('/admin')) {
+            var tabs = document.querySelectorAll('div, button, a, span, li');
+            for (var j = 0; j < tabs.length; j++) {
+                var tab = tabs[j];
+                if (tab.innerText && tab.innerText.trim() === 'Luban接码' && tab.children.length === 0) {
+                    tab.style.display = cfg.luban ? '' : 'none';
+                    if (!cfg.luban && (tab.style.backgroundColor === 'rgb(99, 102, 241)' || tab.classList.contains('active'))) {
+                        for (var k = 0; k < tabs.length; k++) {
+                            if (tabs[k].innerText && tabs[k].innerText.trim() === '概览' && tabs[k].children.length === 0) {
+                                tabs[k].click();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function injectPanel() {
+        if (!window.location.hash.includes('/admin')) return;
+        
+        var allEls = document.querySelectorAll('div, section');
+        var target = null;
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].innerText && allEls[i].innerText.includes('客服按钮颜色') && allEls[i].children.length > 2) {
+                target = allEls[i]; break;
+            }
+        }
+        if (!target) return;
+
+        var panel = document.getElementById('yf-sms-config-panel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'yf-sms-config-panel';
+            target.appendChild(panel);
+        }
+
+        if (panel.getAttribute('data-cloud') === 'true') return;
+        panel.innerHTML = '';
+        panel.setAttribute('data-cloud', 'true');
+
+        var cfgStr = localStorage.getItem('yf_sms_config');
+        var cfg = cfgStr ? JSON.parse(cfgStr) : { sub: DEFAULT_SUB, luban: true };
+
+        panel.style.cssText = 'margin-top:20px;padding:16px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.05);';
+
+        var html = `
+            <h3 style="margin:0 0 12px 0;font-size:15px;font-weight:600;display:flex;align-items:center;">☁️ 云端同步设置（多设备生效）</h3>
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">全球接码副标题：</label>
+                <input id="yf-c-sub" type="text" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box;font-size:13px;" value="${cfg.sub.replace(/"/g, '&quot;')}">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:flex;align-items:center;font-size:13px;color:#666;cursor:pointer;">
+                    <input id="yf-c-luban" type="checkbox" style="margin-right:8px;width:16px;height:16px;" ${cfg.luban ? 'checked' : ''}> 启用 LubanSms 接码插件
+                </label>
+            </div>
+            <button id="yf-c-save" style="padding:10px 20px;background:#6366f1;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;width:100%;">保存并同步到云端</button>
+        `;
+        panel.insertAdjacentHTML('beforeend', html);
+
+        document.getElementById('yf-c-save').onclick = function() {
+            var subVal = document.getElementById('yf-c-sub').value.trim() || DEFAULT_SUB;
+            var lubanVal = document.getElementById('yf-c-luban').checked;
+            saveCloud(subVal, lubanVal);
+        };
+    }
+
+    setInterval(function() { applyCfg(); injectPanel(); }, 800);
+    loadCloud(function() { applyCfg(); injectPanel(); });
+    setInterval(function() { loadCloud(); }, 30000);
+})();
+</script>
 </body>
 </html>

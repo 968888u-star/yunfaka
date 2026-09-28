@@ -1,3 +1,8 @@
+// ==================================================================
+// LubanSms API 统一入口（完整版）
+// 路径名来自官方文档，不要修改
+// ==================================================================
+
 export async function onRequest(context) {
   const { request, env } = context;
   const corsHeaders = {
@@ -28,17 +33,19 @@ export async function onRequest(context) {
   function ok(data) { return Response.json(data, { headers: corsHeaders }); }
 
   try {
+    // ---------- 账户 ----------
     if (action === 'balance') {
       const r = await fetch(buildUrl('getBalance', {}));
       return ok(await r.json());
     }
 
+    // ---------- 国家列表 ----------
     if (action === 'countries') {
       const r = await fetch(buildUrl('countries', {}));
       return ok(await r.json());
     }
 
-    // 后台用（带成本价）
+    // ---------- 服务列表（后台用，带成本价）----------
     if (action === 'services') {
       const params = {
         language: url.searchParams.get('language') || 'zh',
@@ -62,7 +69,7 @@ export async function onRequest(context) {
       return ok(d);
     }
 
-    // 客户端用（只返回人民币最终售价，不暴露成本）
+    // ---------- 客户端服务列表（只返回人民币售价）----------
     if (action === 'client_services') {
       const params = {
         language: url.searchParams.get('language') || 'zh',
@@ -89,18 +96,23 @@ export async function onRequest(context) {
       return ok(d);
     }
 
+    // ---------- 验证码接收：请求号码 ----------
     if (action === 'request_number') {
       const serviceId = url.searchParams.get('service_id');
       if (!serviceId) return ok({ ok: false, msg: '缺少 service_id' });
       const r = await fetch(buildUrl('getNumber', { service_id: serviceId }));
       return ok(await r.json());
     }
+
+    // ---------- 验证码接收：获取短信 ----------
     if (action === 'get_sms') {
       const requestId = url.searchParams.get('request_id');
       if (!requestId) return ok({ ok: false, msg: '缺少 request_id' });
       const r = await fetch(buildUrl('getSms', { request_id: requestId }));
       return ok(await r.json());
     }
+
+    // ---------- 验证码接收：更改状态（释放号码）----------
     if (action === 'change_status') {
       const requestId = url.searchParams.get('request_id');
       const status = url.searchParams.get('status') || 'reject';
@@ -108,18 +120,31 @@ export async function onRequest(context) {
       const r = await fetch(buildUrl('setStatus', { request_id: requestId, status: status }));
       return ok(await r.json());
     }
+
+    // ---------- 验证码接收：重新激活号码 ----------
     if (action === 'reactivate') {
       const requestId = url.searchParams.get('request_id');
       if (!requestId) return ok({ ok: false, msg: '缺少 request_id' });
       const r = await fetch(buildUrl('getAgainNmber', { request_id: requestId }));
       return ok(await r.json());
     }
+
+    // ---------- 通用短信：请求号码（支持国家/指定号码/类型/过滤）----------
     if (action === 'common_request') {
       const phone = url.searchParams.get('phone') || '';
-      const params = phone ? { phone: phone } : {};
+      const cardType = url.searchParams.get('cardType') || '';
+      const filter = url.searchParams.get('filter') || '';
+      const country = url.searchParams.get('country') || '';
+      const params = {};
+      if (phone) params.phone = phone;
+      if (cardType && cardType !== '全部') params.cardType = cardType;
+      if (filter) params.filter = filter;
+      if (country) params.country = country;
       const r = await fetch(buildUrl('getKeywordNumber', params));
       return ok(await r.json());
     }
+
+    // ---------- 通用短信：获取短信 ----------
     if (action === 'common_get_sms') {
       const phone = url.searchParams.get('phone');
       const keyword = url.searchParams.get('keyword') || '';
@@ -127,6 +152,8 @@ export async function onRequest(context) {
       const r = await fetch(buildUrl('getKeywordSms', { phone: phone, keyword: keyword }));
       return ok(await r.json());
     }
+
+    // ---------- 通用短信：释放号码 ----------
     if (action === 'common_release') {
       const phone = url.searchParams.get('phone');
       if (!phone) return ok({ ok: false, msg: '缺少 phone' });

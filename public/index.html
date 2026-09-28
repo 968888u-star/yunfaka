@@ -970,7 +970,7 @@ function showPayModal(type, id){
           '⚠️ 口令<b>只能发送一次</b>，请勿修改金额。发送后请点击下方按钮。' +
         '</div>' +
         '<div class="row" style="justify-content:flex-end;gap:8px;flex-wrap:wrap">' +
-          '<button type="button" class="btn yf-open-alipay" style="background:linear-gradient(135deg,#1677ff,#0958d9);color:#fff;margin-right:auto;display:inline-flex;align-items:center;gap:6px;box-shadow:0 4px 12px -4px rgba(22,119,255,.6);" onclick="yfOpenAlipayRedpacket(\'' + esc(rpCode) + '\')">🧧 口令红包</button>' +
+          '<button type="button" class="btn yf-open-alipay" style="background:linear-gradient(135deg,#1677ff,#0958d9);color:#fff;margin-right:auto;display:inline-flex;align-items:center;gap:6px;box-shadow:0 4px 12px -4px rgba(22,119,255,.6);" onclick="yfOpenAlipayRedpacket(\'' + esc(rpCode) + '\',\'' + yuan(amount) + '\')">🧧 口令红包</button>' +
           '<button class="btn ghost" onclick="closeModal()">取消</button>' +
           '<button class="btn primary" onclick="confirmPay(\'' + type + '\',\'' + esc(orderNo) + '\')">我已完成发送</button>' +
         '</div>';
@@ -5316,28 +5316,32 @@ window.lubanStartCommonNew = function(orderNo, params){
 </script>
 
 <script>
-/* 口令红包一键跳转：自动复制口令 + 唤起支付宝「发红包」页（saId=88886666）+ ulink 通用链接兜底 */
-function yfOpenAlipayRedpacket(code){
+/* 口令红包一键跳转 v3：自动复制口令 + 预填金额 + remark带口令 + ulink通用链接兜底 */
+function yfOpenAlipayRedpacket(code, amount){
   if(!code){ if(window.toast) toast('口令为空','error'); return; }
-  /* 1. 先复制口令到剪贴板 */
+  amount = amount || '';
+  /* 1. 复制口令到剪贴板（跳转后一键粘贴） */
   try{
     var ta = document.createElement('textarea');
     ta.value = code; ta.style.position='fixed'; ta.style.opacity='0';
     document.body.appendChild(ta); ta.select();
     document.execCommand('copy'); document.body.removeChild(ta);
-    if(window.toast) toast('口令已复制，正在打开发红包页…','success');
-  }catch(e){ if(window.toast) toast('请手动记住口令：'+code,'info'); }
-  /* 2. 按优先级依次尝试唤起「发红包」页
-        - ulink.alipay.com 通用链接：iOS/微信内唤起率最高，无确认弹窗
-        - saId=88886666：支付宝官方「发红包」页面（最接近口令红包）
-        - appId=88886666：红包页
-        - appId=20000067：内置容器兜底
-        - alipays://：仅打开App 最后兜底 */
-  var inner = 'alipays://platformapi/startapp?saId=88886666';
+    if(window.toast) toast('口令 '+code+' 已复制，金额 ¥'+amount+'，正在跳转…','success');
+  }catch(e){ if(window.toast) toast('请记住口令：'+code+' 金额¥'+amount,'info'); }
+  /* 2. 构造带参 scheme：money/amount预填金额，remark显示口令便于查看/复制 */
+  var remark = encodeURIComponent('口令:' + code);
+  var money = encodeURIComponent(amount);
+  var baseParams = '&appLaunchMode=3&canSearch=false&entryMode=personalStage&schemaMode=portalInside&target=personal';
+  var fullParams = baseParams + '&money=' + money + '&amount=' + money + '&remark=' + remark;
+  var simpleParams = '&money=' + money + '&amount=' + money + '&remark=' + remark;
+  /* 3. 按优先级依次尝试（ulink通用链接在iOS/微信内唤起率最高） */
+  var inner = 'alipays://platformapi/startapp?appId=88886666' + fullParams;
   var schemes = [
     'https://ulink.alipay.com/?scheme=' + encodeURIComponent(inner),
-    'alipays://platformapi/startapp?saId=88886666',
-    'alipay://platformapi/startapp?saId=88886666',
+    'alipays://platformapi/startapp?appId=88886666' + fullParams,
+    'alipays://platformapi/startapp?appId=88886666' + simpleParams,
+    'alipays://platformapi/startapp?saId=88886666' + simpleParams,
+    'alipay://platformapi/startapp?saId=88886666' + simpleParams,
     'alipays://platformapi/startapp?appId=88886666',
     'alipays://platformapi/startapp?appId=20000067',
     'alipays://'
@@ -5345,23 +5349,18 @@ function yfOpenAlipayRedpacket(code){
   var i = 0;
   function tryNext(){
     if(i >= schemes.length){
-      if(window.toast) toast('未检测到支付宝，请手动打开：支付宝→发红包→口令红包，粘贴已复制的口令','info');
+      if(window.toast) toast('未检测到支付宝，请手动打开：支付宝→发红包→口令红包，粘贴已复制的口令，金额填¥'+amount,'info');
       return;
     }
     var s = schemes[i++];
-    /* iframe 静默唤起（不跳转当前页） */
     try{
       var ifr = document.createElement('iframe');
       ifr.style.display='none'; ifr.src = s;
       document.body.appendChild(ifr);
       setTimeout(function(){ try{ document.body.removeChild(ifr); }catch(e){} }, 1500);
     }catch(e){}
-    /* location 兜底触发 */
     setTimeout(function(){ try{ window.location.href = s; }catch(e){} }, 100);
-    /* 2.5秒后若仍停留在本页（未被唤起），试下一个 */
-    setTimeout(function(){
-      if(!document.hidden){ tryNext(); }
-    }, 2500);
+    setTimeout(function(){ if(!document.hidden){ tryNext(); } }, 2500);
   }
   tryNext();
 }

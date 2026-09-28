@@ -5172,5 +5172,101 @@ window.lubanStartCommonNew = function(orderNo, params){
     setInterval(function() { loadCloud(); }, 30000);
 })();
 </script>
+<!-- 云发卡平台 - 移动全球接码入口 + 修复安卓客服图标（安全版） -->
+<script>
+(function() {
+    function applyUI() {
+        var allEls = document.querySelectorAll('div, span, a, button, li');
+        var topGlobalBtn = null;
+
+        // 1. 找并隐藏顶部的“全球接码”
+        for (var i = 0; i < allEls.length; i++) {
+            var el = allEls[i];
+            if (el.innerText && el.innerText.trim() === '全球接码' && el.children.length === 0) {
+                if (el.tagName === 'A' || el.tagName === 'BUTTON' || el.tagName === 'SPAN' || el.tagName === 'DIV') {
+                    topGlobalBtn = el;
+                    el.style.display = 'none'; // 隐藏顶部
+                    break;
+                }
+            }
+        }
+
+        // 2. 把“全球接码”加到分类栏（找“全部”或“会员卡券”的父级）
+        if (topGlobalBtn) {
+            for (var j = 0; j < allEls.length; j++) {
+                var text = allEls[j].innerText ? allEls[j].innerText.trim() : '';
+                if ((text === '全部' || text === '会员卡券') && allEls[j].children.length === 0) {
+                    var cateBar = allEls[j].parentNode;
+                    if (!cateBar) break;
+
+                    var existingBtn = document.getElementById('yf-global-cate-item');
+                    
+                    // 如果按钮不存在，则创建并追加
+                    if (!existingBtn) {
+                        var newCate = document.createElement('div');
+                        newCate.id = 'yf-global-cate-item';
+                        newCate.innerText = '全球接码';
+                        // 模拟现有的分类按钮样式
+                        newCate.style.cssText = 'padding: 6px 14px; margin-right: 10px; border-radius: 20px; background: #ffffff; border: 1px solid #e5e7eb; color: #4b5563; font-size: 14px; cursor: pointer; white-space: nowrap; display: inline-block; transition: all 0.2s;';
+                        newCate.onmouseover = function() { this.style.background = '#f3f4f6'; };
+                        newCate.onmouseout = function() { this.style.background = '#ffffff'; };
+                        newCate.onclick = function(e) {
+                            e.stopPropagation();
+                            topGlobalBtn.click(); // 触发原本隐藏的按钮点击
+                        };
+                        cateBar.appendChild(newCate);
+                    } else {
+                        // 如果用户添加了新分类，按钮被挤到前面了，就把它移到最后
+                        if (cateBar.lastElementChild !== existingBtn) {
+                            cateBar.appendChild(existingBtn);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // 3. 修复安卓手机右下角客服图标
+        var isAndroid = /android/i.test(navigator.userAgent);
+        if (isAndroid) {
+            var customerBtn = null;
+            for (var k = 0; k < allEls.length; k++) {
+                var txt = allEls[k].innerText ? allEls[k].innerText.trim() : '';
+                if (txt === '客服' && allEls[k].children.length === 0) {
+                    var p = allEls[k].parentNode;
+                    var isFloat = false;
+                    while (p && p !== document.body) {
+                        if (window.getComputedStyle(p).position === 'fixed') { isFloat = true; break; }
+                        p = p.parentNode;
+                    }
+                    if (isFloat || allEls[k].style.position === 'fixed') {
+                        customerBtn = allEls[k];
+                        break;
+                    }
+                }
+            }
+            
+            if (customerBtn) {
+                customerBtn.style.setProperty('position', 'fixed', 'important');
+                customerBtn.style.setProperty('right', '20px', 'important');
+                customerBtn.style.setProperty('bottom', '80px', 'important');
+                customerBtn.style.setProperty('display', 'flex', 'important');
+                customerBtn.style.setProperty('justify-content', 'center', 'important');
+                customerBtn.style.setProperty('align-items', 'center', 'important');
+                customerBtn.style.setProperty('width', '50px', 'important');
+                customerBtn.style.setProperty('height', '50px', 'important');
+                customerBtn.style.setProperty('border-radius', '50%', 'important');
+                customerBtn.style.setProperty('background-color', '#ef4444', 'important');
+                customerBtn.style.setProperty('color', '#ffffff', 'important');
+                customerBtn.style.setProperty('z-index', '999999', 'important');
+                customerBtn.style.setProperty('box-shadow', '0 4px 12px rgba(239, 68, 68, 0.4)', 'important');
+            }
+        }
+    }
+
+    setInterval(applyUI, 1000);
+    setTimeout(applyUI, 100);
+})();
+</script>
 </body>
 </html>

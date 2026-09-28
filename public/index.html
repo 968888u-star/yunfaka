@@ -959,7 +959,7 @@ function showPayModal(type, id){
         '<div class="redpacket-steps">' +
           '<b>操作步骤：</b>' +
           '<ol>' +
-            '<li>点击下方「🚀一键打开支付宝」按钮（或手动打开支付宝 App）</li>' +
+            '<li>点击下方「🧧口令红包」按钮，一键复制口令并打开发红包页（或手动打开支付宝）</li>' +
             '<li>点「发红包」→ 选「口令红包」</li>' +
             '<li>输入上方口令：<b>' + esc(rpCode) + '</b></li>' +
             '<li>金额填：<b>¥' + yuan(amount) + '</b></li>' +
@@ -970,7 +970,7 @@ function showPayModal(type, id){
           '⚠️ 口令<b>只能发送一次</b>，请勿修改金额。发送后请点击下方按钮。' +
         '</div>' +
         '<div class="row" style="justify-content:flex-end;gap:8px;flex-wrap:wrap">' +
-          '<button type="button" class="btn yf-open-alipay" style="background:linear-gradient(135deg,#1677ff,#0958d9);color:#fff;margin-right:auto;display:inline-flex;align-items:center;gap:6px;box-shadow:0 4px 12px -4px rgba(22,119,255,.6);" onclick="yfOpenAlipayRedpacket(\'' + esc(rpCode) + '\')">🚀 一键打开支付宝</button>' +
+          '<button type="button" class="btn yf-open-alipay" style="background:linear-gradient(135deg,#1677ff,#0958d9);color:#fff;margin-right:auto;display:inline-flex;align-items:center;gap:6px;box-shadow:0 4px 12px -4px rgba(22,119,255,.6);" onclick="yfOpenAlipayRedpacket(\'' + esc(rpCode) + '\')">🧧 口令红包</button>' +
           '<button class="btn ghost" onclick="closeModal()">取消</button>' +
           '<button class="btn primary" onclick="confirmPay(\'' + type + '\',\'' + esc(orderNo) + '\')">我已完成发送</button>' +
         '</div>';
@@ -5316,7 +5316,7 @@ window.lubanStartCommonNew = function(orderNo, params){
 </script>
 
 <script>
-/* 干净版：一键复制口令 + 唤起支付宝红包页（多scheme兜底，唯一入口） */
+/* 口令红包一键跳转：自动复制口令 + 唤起支付宝「发红包」页（saId=88886666）+ ulink 通用链接兜底 */
 function yfOpenAlipayRedpacket(code){
   if(!code){ if(window.toast) toast('口令为空','error'); return; }
   /* 1. 先复制口令到剪贴板 */
@@ -5325,35 +5325,40 @@ function yfOpenAlipayRedpacket(code){
     ta.value = code; ta.style.position='fixed'; ta.style.opacity='0';
     document.body.appendChild(ta); ta.select();
     document.execCommand('copy'); document.body.removeChild(ta);
-    if(window.toast) toast('口令已复制，正在唤起支付宝…','success');
+    if(window.toast) toast('口令已复制，正在打开发红包页…','success');
   }catch(e){ if(window.toast) toast('请手动记住口令：'+code,'info'); }
-  /* 2. 多 scheme 依次尝试唤起支付宝红包页（口令红包无官方直链，取最近可达页） */
+  /* 2. 按优先级依次尝试唤起「发红包」页
+        - ulink.alipay.com 通用链接：iOS/微信内唤起率最高，无确认弹窗
+        - saId=88886666：支付宝官方「发红包」页面（最接近口令红包）
+        - appId=88886666：红包页
+        - appId=20000067：内置容器兜底
+        - alipays://：仅打开App 最后兜底 */
+  var inner = 'alipays://platformapi/startapp?saId=88886666';
   var schemes = [
+    'https://ulink.alipay.com/?scheme=' + encodeURIComponent(inner),
+    'alipays://platformapi/startapp?saId=88886666',
+    'alipay://platformapi/startapp?saId=88886666',
+    'alipays://platformapi/startapp?appId=88886666',
     'alipays://platformapi/startapp?appId=20000067',
-    'alipays://platformapi/startapp?appId=20000067&page=redPacketSend',
-    'alipay://platformapi/startapp?appId=20000067',
     'alipays://'
   ];
   var i = 0;
   function tryNext(){
     if(i >= schemes.length){
-      if(window.toast) toast('未检测到支付宝，请手动打开支付宝→发红包→口令红包粘贴口令','info');
+      if(window.toast) toast('未检测到支付宝，请手动打开：支付宝→发红包→口令红包，粘贴已复制的口令','info');
       return;
     }
     var s = schemes[i++];
-    /* iframe 方式静默唤起，不跳转当前页 */
+    /* iframe 静默唤起（不跳转当前页） */
     try{
       var ifr = document.createElement('iframe');
-      ifr.style.display='none';
-      ifr.src = s;
+      ifr.style.display='none'; ifr.src = s;
       document.body.appendChild(ifr);
       setTimeout(function(){ try{ document.body.removeChild(ifr); }catch(e){} }, 1500);
     }catch(e){}
-    /* 同时用 location 兜底 */
-    setTimeout(function(){
-      try{ window.location.href = s; }catch(e){}
-    }, 80);
-    /* 2.5秒后若仍停留在本页，说明未唤起成功，试下一个 scheme 或提示 */
+    /* location 兜底触发 */
+    setTimeout(function(){ try{ window.location.href = s; }catch(e){} }, 100);
+    /* 2.5秒后若仍停留在本页（未被唤起），试下一个 */
     setTimeout(function(){
       if(!document.hidden){ tryNext(); }
     }, 2500);

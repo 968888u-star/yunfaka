@@ -745,7 +745,7 @@ function openBuy(id){
     if (m && balanceEnabled){
       const balance = m.balance || 0;
       if (balance > 0){
-        box.innerHTML = '<div class="balance-row"><div class="lbl">💎 会员「' + esc(m.username) + '」余额 ' + usdt(balance) + ' USDT + '</div>' +
+        box.innerHTML = '<div class="balance-row"><div class="lbl">💎 会员「' + esc(m.username) + '」余额 ' + usdt(balance) + ' USDT</div>' +
           '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">' +
           '<input type="checkbox" id="use-balance" checked> 使用余额抵扣</label></div>';
         $('#use-balance').addEventListener('change', refreshTotals);
@@ -1566,13 +1566,13 @@ function renderOrderView(orderNo, secret){
       body = '<div class="card panel" style="background:#fff5f5;border-color:#fc8181">' +
         '<b>⏳ 待发送红包</b>' +
         '<p class="muted" style="font-size:13px;margin:6px 0 12px">请点击下方按钮查看红包口令并在支付宝中发送。</p>' +
-        '<button class="btn primary" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">查看口令 ' + usdt(o.amount_due) + ' USDT + '</button>' +
+        '<button class="btn primary" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">查看口令 ' + usdt(o.amount_due) + ' USDT</button>' +
       '</div>';
     } else {
       body = '<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">' +
         '<b>⏳ 待支付</b>' +
         '<p class="muted" style="font-size:13px;margin:6px 0 12px">支付方式：支付宝</p>' +
-        '<button class="btn primary" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">去支付 ' + usdt(o.amount_due) + ' USDT + '</button>' +
+        '<button class="btn primary" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">去支付 ' + usdt(o.amount_due) + ' USDT</button>' +
       '</div>';
     }
   } else if (o.status === 'pending_review'){
@@ -2193,7 +2193,7 @@ function renderOrders(){
     const rpCell = o.redpacket_code ? '<span class="rp-code-cell" data-v="' + esc(o.redpacket_code) + '" onclick="copyText(this.dataset.v,this)" style="cursor:pointer" title="点击复制">' + esc(o.redpacket_code) + '</span>' : '<span class="muted">-</span>';
     const skuLine = o.sku_name ? '<div class="muted" style="font-size:11px">' + esc(o.sku_name) + '</div>' : '';
     const userLine = o.username ? '<div style="font-size:11px">@' + esc(o.username) + '</div>' : '';
-    const balanceLine = o.balance_used > 0 ? '<div class="muted" style="font-size:11px">余额抵扣' + usdt(o.balance_used) + ' USDT + '</div>' : '';
+    const balanceLine = o.balance_used > 0 ? '<div class="muted" style="font-size:11px">余额抵扣' + usdt(o.balance_used) + ' USDT</div>' : '';
     const srcTag = o.source === 'luban' ? ' <span class="badge src-luban">接码</span>' : '';
     let actionBtns = '';
     if (o.status === 'pending_review'){

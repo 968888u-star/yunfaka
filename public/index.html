@@ -5924,4 +5924,326 @@ window.lubanStartCommonNew = function(orderNo, params){
 })();
 </script>
 </body>
+<!-- ============ 终极修复补丁 v17（末尾追加·全量接管） ============ -->
+<script>
+(function(){
+  'use strict';
+
+  /* ============ 1. 修复通用短信接收点击无反应 ============ */
+  window.renderLubanClient = function(){
+    var tab = window.__lubanTab || 'sms';
+    var db = loadDB();
+    var cfg = getConfig(db);
+    var commonPrice = cfg.luban_common_price || 200;
+
+    var tabBar =
+      '<div class="card panel" style="padding:14px 20px">' +
+        '<div class="tabs" style="margin:0">' +
+          '<button class="' + (tab === 'sms' ? 'active' : '') + '" onclick="lubanSwitchTab(\'sms\')">🎯 指定服务接码</button>' +
+          '<button class="' + (tab === 'common' ? 'active' : '') + '" onclick="lubanSwitchTab(\'common\')">📨 通用短信接收</button>' +
+        '</div>' +
+      '</div>';
+
+    var hero =
+      '<div class="hero" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)">' +
+        '<div class="blob"></div>' +
+        '<h1>🌍 全球接码</h1>' +
+        '<p>选择国家和平台，实时接码 · 全自动发货</p>' +
+      '</div>';
+
+    if (tab === 'common') {
+      $('#app').innerHTML = hero + tabBar +
+        '<div class="card panel">' +
+          '<h2>📨 通用短信接收</h2>' +
+          '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#075985;line-height:1.7">' +
+            '<b>💡 说明：</b>通用短信可以接收任意平台的验证码，填写发送短信的平台名称作为关键词。' +
+            '<br>例：注册拼多多 → 关键词填「拼多多」；注册微信 → 关键词填「微信」。' +
+          '</div>' +
+          '<label class="field"><span>选择国家</span>' +
+            '<select id="luban-common-country">' +
+              '<option value="">🌍 全部国家/地区</option>' +
+              '<option value="中国">中国（CN）</option>' +
+              '<option value="美国">美国（US）</option>' +
+              '<option value="英国">英国（GB）</option>' +
+              '<option value="俄罗斯">俄罗斯（RU）</option>' +
+              '<option value="印度">印度（IN）</option>' +
+              '<option value="印度尼西亚">印度尼西亚（ID）</option>' +
+              '<option value="菲律宾">菲律宾（PH）</option>' +
+              '<option value="越南">越南（VN）</option>' +
+              '<option value="泰国">泰国（TH）</option>' +
+              '<option value="马来西亚">马来西亚（MY）</option>' +
+              '<option value="新加坡">新加坡（SG）</option>' +
+              '<option value="日本">日本（JP）</option>' +
+              '<option value="韩国">韩国（KR）</option>' +
+              '<option value="中国香港">中国香港（HK）</option>' +
+              '<option value="中国台湾">中国台湾（TW）</option>' +
+              '<option value="德国">德国（DE）</option>' +
+              '<option value="法国">法国（FR）</option>' +
+              '<option value="意大利">意大利（IT）</option>' +
+              '<option value="西班牙">西班牙（ES）</option>' +
+              '<option value="荷兰">荷兰（NL）</option>' +
+              '<option value="波兰">波兰（PL）</option>' +
+              '<option value="乌克兰">乌克兰（UA）</option>' +
+              '<option value="土耳其">土耳其（TR）</option>' +
+              '<option value="加拿大">加拿大（CA）</option>' +
+              '<option value="巴西">巴西（BR）</option>' +
+              '<option value="澳大利亚">澳大利亚（AU）</option>' +
+            '</select>' +
+          '</label>' +
+          '<label class="field"><span>短信关键词（必填）</span>' +
+            '<input id="luban-common-keyword" placeholder="如：拼多多 / 微信 / 百度 / 抖音">' +
+          '</label>' +
+          '<label class="field"><span>指定号码（可选，只能填已获取过的号码）</span>' +
+            '<input id="luban-common-phone" placeholder="留空 = 随机分配新号码">' +
+          '</label>' +
+          '<div class="row" style="gap:12px;flex-wrap:wrap">' +
+            '<div style="flex:1;min-width:140px">' +
+              '<label class="field" style="margin:0"><span>类型</span>' +
+                '<select id="luban-common-cardtype">' +
+                  '<option value="全部">全部</option>' +
+                  '<option value="实卡">实卡</option>' +
+                  '<option value="虚卡">虚卡</option>' +
+                '</select>' +
+              '</label>' +
+            '</div>' +
+            '<div style="flex:1;min-width:140px">' +
+              '<label class="field" style="margin:0"><span>过滤重复号码</span>' +
+                '<select id="luban-common-filter">' +
+                  '<option value="否">否</option>' +
+                  '<option value="是">是</option>' +
+                '</select>' +
+              '</label>' +
+            '</div>' +
+          '</div>' +
+          '<div class="spread" style="margin:18px 0;padding-top:14px;border-top:1px dashed var(--line)">' +
+            '<span class="muted" style="font-size:13px">接码价格</span>' +
+            '<span style="font-size:22px;font-weight:800;color:#e11d48" data-fen="' + commonPrice + '">' + (commonPrice/100/usdtRate()).toFixed(2) + ' USDT</span>' +
+          '</div>' +
+          '<button class="btn primary block" onclick="lubanCommonBuy()">📱 立即接码</button>' +
+        '</div>';
+      return;
+    }
+
+    $('#app').innerHTML = hero + tabBar +
+      '<div class="card panel">' +
+        '<h2>🔍 搜索服务</h2>' +
+        '<div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:14px">' +
+          '<div style="flex:1;min-width:160px">' +
+            '<label class="field" style="margin:0"><span>国家 / 地区</span>' +
+              '<select id="luban-c-country">' +
+                '<option value="">🌍 全部国家/地区</option>' +
+                '<option value="中国" selected>中国（CN）</option>' +
+                '<option value="美国">美国（US）</option>' +
+                '<option value="英国">英国（GB）</option>' +
+                '<option value="俄罗斯">俄罗斯（RU）</option>' +
+                '<option value="印度">印度（IN）</option>' +
+                '<option value="印度尼西亚">印度尼西亚（ID）</option>' +
+                '<option value="菲律宾">菲律宾（PH）</option>' +
+                '<option value="越南">越南（VN）</option>' +
+                '<option value="泰国">泰国（TH）</option>' +
+                '<option value="马来西亚">马来西亚（MY）</option>' +
+                '<option value="新加坡">新加坡（SG）</option>' +
+                '<option value="日本">日本（JP）</option>' +
+                '<option value="韩国">韩国（KR）</option>' +
+                '<option value="中国香港">中国香港（HK）</option>' +
+                '<option value="中国台湾">中国台湾（TW）</option>' +
+                '<option value="德国">德国（DE）</option>' +
+                '<option value="法国">法国（FR）</option>' +
+                '<option value="意大利">意大利（IT）</option>' +
+                '<option value="西班牙">西班牙（ES）</option>' +
+                '<option value="荷兰">荷兰（NL）</option>' +
+                '<option value="波兰">波兰（PL）</option>' +
+                '<option value="乌克兰">乌克兰（UA）</option>' +
+                '<option value="土耳其">土耳其（TR）</option>' +
+                '<option value="加拿大">加拿大（CA）</option>' +
+                '<option value="巴西">巴西（BR）</option>' +
+                '<option value="澳大利亚">澳大利亚（AU）</option>' +
+              '</select>' +
+            '</label>' +
+          '</div>' +
+          '<div style="flex:2;min-width:200px">' +
+            '<label class="field" style="margin:0"><span>服务关键词</span>' +
+              '<input id="luban-c-service" placeholder="如：Apple / 微信 / Tinder">' +
+            '</label>' +
+          '</div>' +
+        '</div>' +
+        '<button class="btn primary block" onclick="lubanClientSearch(1)">🔍 搜索服务</button>' +
+        '<p class="muted" style="font-size:12px;margin:12px 0 0">💡 中文搜不到试试拼音或英文，如「拼多多」搜 pinduoduo。</p>' +
+      '</div>' +
+      '<div class="card panel">' +
+        '<div class="spread" style="margin-bottom:14px">' +
+          '<h2 style="margin:0">搜索结果</h2>' +
+          '<span class="muted" id="luban-c-count" style="font-size:13px"></span>' +
+        '</div>' +
+        '<div id="luban-c-results"><div class="empty">选择国家和关键词后点击搜索</div></div>' +
+        '<div id="luban-c-loadmore" style="text-align:center;margin-top:14px"></div>' +
+      '</div>';
+  };
+
+  /* ============ 2. 修复弹窗底部被裁 ============ */
+  var fixStyle = document.createElement('style');
+  fixStyle.textContent = [
+    '.modal-mask{ padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)) !important; align-items: flex-start !important; }',
+    '.modal{ max-height: calc(100dvh - 40px) !important; margin: auto !important; padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; display: flex; flex-direction: column; overflow-y: auto !important; }',
+    '.modal > .row:last-child{ position: sticky; bottom: 0; background: #fff; padding-top: 12px; padding-bottom: max(4px, env(safe-area-inset-bottom)); margin-top: 12px; z-index: 10; flex-shrink: 0; }',
+    '@media (max-width:600px){ .modal{ max-height: calc(100dvh - 24px) !important; padding: 20px 18px max(20px, env(safe-area-inset-bottom)) !important; border-radius: 16px !important; } }',
+    /* 新增：彻底干掉所有重复的一键跳转按钮（只保留我们注入的那个） */
+    '.yf-jump-btn{ display: inline-flex !important; align-items: center !important; gap: 6px !important; }'
+  ].join('\n');
+  document.head.appendChild(fixStyle);
+
+  /* ============ 3. 极简复制函数（绝对兼容） ============ */
+  function yfStrongCopy(text, btn){
+    var ok = false;
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.width = '1px';
+      ta.style.height = '1px';
+      ta.style.padding = '0';
+      ta.style.border = 'none';
+      ta.style.outline = 'none';
+      ta.style.boxShadow = 'none';
+      ta.style.background = 'transparent';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch(e) { ok = false; }
+
+    if (!ok && navigator.clipboard) {
+      try { navigator.clipboard.writeText(text); ok = true; } catch(e){}
+    }
+
+    if (btn) {
+      var orig = btn.innerHTML;
+      btn.innerHTML = ok ? '✅ 已复制' : '❌ 复制失败，请长按口令手动复制';
+      setTimeout(function(){ btn.innerHTML = orig; }, 1600);
+    }
+    return ok;
+  }
+
+  /* ============ 4. 一键跳转支付宝（极简版） ============ */
+  function yfOpenAlipay(code){
+    yfStrongCopy(code, null);
+    if (typeof toast === 'function') toast('口令已复制，正在打开支付宝…', 'success');
+    setTimeout(function(){
+      try {
+        window.location.href = 'alipays://platformapi/startapp?appId=20000067';
+      } catch(e) {}
+    }, 200);
+  }
+
+  /* ============ 5. 彻底接管支付宝弹窗 ============ */
+  var _origShowPayModal = window.showPayModal;
+  window.showPayModal = function(type, id){
+    var db = loadDB();
+    var cfg = getConfig(db);
+    var o = null;
+
+    if (type === 'order') {
+      o = db.orders.filter(function(x){ return x.order_no === id; })[0];
+    }
+
+    // 支付宝弹窗：完全由我们接管
+    if (o && o.pay_method === 'alipay') {
+      // 老订单缺口令 → 立刻补一个并存库
+      if (!o.redpacket_code) {
+        o.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix || 'YFK');
+        saveDB(db);
+      }
+      var code = o.redpacket_code;
+      var amountYuan = (o.amount_due / 100).toFixed(2);
+
+      var html = '<h3>💰 支付宝口令红包</h3>' +
+        '<div class="kv"><span class="k">单号</span><span class="v mono" style="font-size:12px">' + esc(o.order_no) + '</span></div>' +
+        '<div class="kv"><span class="k">商品</span><span class="v">' + esc(o.product_name) + ' × ' + o.quantity + '</span></div>' +
+        '<div class="kv" style="margin-bottom:14px"><span class="k">应付金额</span><span class="v" style="color:#e11d48;font-size:18px">¥' + amountYuan + '</span></div>' +
+
+        '<div class="redpacket-box">' +
+          '<div class="lbl">请记住下方口令，在支付宝中发送红包</div>' +
+          '<div class="code" id="yf-packet-code">' + esc(code) + '</div>' +
+          '<button class="copy-btn" id="yf-copy-code-btn" type="button">📋 复制口令</button>' +
+        '</div>' +
+
+        '<div class="redpacket-steps">' +
+          '<b>操作步骤：</b>' +
+          '<ol>' +
+            '<li>点击下方蓝色按钮，一键复制口令并打开支付宝</li>' +
+            '<li>打开支付宝 App → 点「发红包」→ 选「口令红包」</li>' +
+            '<li>粘贴上方口令：<b>' + esc(code) + '</b></li>' +
+            '<li>金额填：<b>¥' + amountYuan + '</b></li>' +
+            '<li>发给任意好友（或自己），完成发送</li>' +
+          '</ol>' +
+        '</div>' +
+        '<div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">' +
+          '⚠️ 口令<b>只能发送一次</b>，请勿修改金额。发送后请点击下方按钮。' +
+        '</div>' +
+
+        '<div class="row" style="justify-content:flex-end;gap:8px;" id="yf-jump-row">' +
+          '<button class="btn yf-jump-btn" id="yf-btn-jump-unique" type="button" style="background:linear-gradient(135deg,#1677ff,#0958d9);color:#fff;margin-right:auto;box-shadow:0 4px 12px -4px rgba(22,119,255,.6);"><span>🚀</span> 一键打开支付宝</button>' +
+          '<button class="btn ghost" onclick="closeModal()">取消</button>' +
+          '<button class="btn primary" onclick="confirmPay(\'order\',\'' + esc(o.order_no) + '\')">我已完成发送</button>' +
+        '</div>';
+
+      openModal(html);
+
+      // 绑定复制按钮
+      var copyBtn = document.getElementById('yf-copy-code-btn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          yfStrongCopy(code, copyBtn);
+        });
+      }
+
+      // 绑定一键跳转（唯一按钮）
+      var jumpBtn = document.getElementById('yf-btn-jump-unique');
+      if (jumpBtn) {
+        jumpBtn.addEventListener('click', function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          yfOpenAlipay(code);
+        });
+      }
+
+      // ★ 关键：30ms 后彻底扫荡所有旧补丁残留的「一键打开支付宝」按钮
+      setTimeout(function(){
+        var row = document.getElementById('yf-jump-row');
+        if (!row) return;
+        var btns = row.querySelectorAll('button');
+        var firstKept = false;
+        for (var i = 0; i < btns.length; i++) {
+          var txt = btns[i].textContent || '';
+          if (txt.indexOf('一键打开支付宝') >= 0) {
+            if (!firstKept && btns[i].id === 'yf-btn-jump-unique') {
+              firstKept = true;
+            } else {
+              btns[i].style.display = 'none';
+              btns[i].parentNode.removeChild(btns[i]);
+              i--;
+            }
+          }
+        }
+      }, 30);
+
+      return;
+    }
+
+    // 非支付宝弹窗 → 走原本逻辑
+    return _origShowPayModal.apply(this, arguments);
+  };
+
+  console.log('[云发卡] 修复补丁 v17 已加载：末尾追加 + 全量接管 + 自动清理重复按钮');
+})();
+</script>
+</body>
 </html>

@@ -6972,5 +6972,149 @@ window.lubanStartCommonNew = function(orderNo, params){
     }, 2000); 
 })();
 </script>
+<!-- 云发卡平台 - 终极清扫版（彻底清除顶部白条 + 重写下方融合卡片） -->
+<style>
+    /* 用于精准隐藏顶部原生按钮 */
+    .yf-hide-native-sms { display: none !important; }
+    
+    /* 新卡片的完美样式，完全对齐“注册会员” */
+    .yf-sms-card-wrap {
+        margin-top: 12px !important;
+        background: #ffffff !important;
+        border-radius: 12px !important;
+        padding: 16px 20px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03) !important;
+        border: 1px solid #f3f4f6 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+    }
+    .yf-sms-card-wrap:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+    }
+    .yf-sms-icon-box {
+        width: 36px !important;
+        height: 36px !important;
+        background: #f3e8ff !important;
+        border-radius: 10px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 18px !important;
+        margin-right: 12px !important;
+        flex-shrink: 0 !important;
+    }
+    .yf-sms-text-box {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    .yf-sms-title-txt {
+        font-size: 15px !important;
+        font-weight: 600 !important;
+        color: #1f2937 !important;
+        margin-bottom: 2px !important;
+    }
+    .yf-sms-sub-txt {
+        font-size: 12px !important;
+        color: #9ca3af !important;
+    }
+    .yf-sms-action-btn {
+        background: #8463f6 !important;
+        color: #ffffff !important;
+        padding: 8px 16px !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+        margin-left: 10px !important;
+        box-shadow: 0 2px 6px rgba(132, 99, 246, 0.2) !important;
+    }
+</style>
+
+<script>
+(function() {
+    // 只执行一次，2秒后触发，避免与页面加载冲突
+    setTimeout(function() {
+        var allEls = document.querySelectorAll('div, span, a, button, li, p');
+
+        // ===== 第一步：彻底清理顶部Banner里的错误白条 =====
+        for (var i = 0; i < allEls.length; i++) {
+            var el = allEls[i];
+            var txt = el.innerText || '';
+            // 如果这个元素包含“全球接码”和“实时搜索”，且长度很短，说明是那条多余的白条
+            if (txt.includes('全球接码') && txt.includes('实时搜索') && txt.length < 100) {
+                // 排除我们即将创建的卡片
+                if (el.id !== 'yf-sms-entry-card-final') {
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                }
+            }
+        }
+
+        // ===== 第二步：隐藏顶部的原生“全球接码” =====
+        var topNavSmsBtn = null;
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                topNavSmsBtn = allEls[i];
+                topNavSmsBtn.classList.add('yf-hide-native-sms');
+                topNavSmsBtn.style.display = 'none';
+                break;
+            }
+        }
+        if (!topNavSmsBtn) return;
+
+        // ===== 第三步：找“注册会员”卡片 =====
+        var regCard = null;
+        for (var j = 0; j < allEls.length; j++) {
+            var txt = allEls[j].innerText || '';
+            if (txt.includes('注册会员') && txt.includes('享余额支付') && txt.length < 100) {
+                var p = allEls[j];
+                // 向上找真正的卡片容器（带圆角或阴影）
+                while (p && p !== document.body) {
+                    var style = window.getComputedStyle(p);
+                    if (style.borderRadius !== '0px' && style.boxShadow !== 'none') {
+                        regCard = p;
+                        break;
+                    }
+                    p = p.parentNode;
+                }
+                if (regCard) break;
+            }
+        }
+        if (!regCard || !regCard.parentNode) return;
+
+        // ===== 第四步：检查并创建我们的完美卡片 =====
+        if (document.getElementById('yf-sms-entry-card-final')) return;
+
+        var card = document.createElement('div');
+        card.id = 'yf-sms-entry-card-final';
+        card.className = 'yf-sms-card-wrap';
+        // 结构完全对齐“注册会员”：左图标，中文字，右按钮
+        card.innerHTML = `
+            <div style="display:flex; align-items:center; flex:1;">
+                <div class="yf-sms-icon-box">🌐</div>
+                <div class="yf-sms-text-box">
+                    <div class="yf-sms-title-txt">全球接码</div>
+                    <div class="yf-sms-sub-txt">实时搜索 · 自动分配号码</div>
+                </div>
+            </div>
+            <div class="yf-sms-action-btn">立即接码</div>
+        `;
+
+        card.onclick = function(e) {
+            e.stopPropagation();
+            topNavSmsBtn.click();
+        };
+
+        // 插入到“注册会员”卡片正下方
+        regCard.parentNode.insertBefore(card, regCard.nextSibling);
+
+    }, 2000); 
+})();
+</script>
 </body>
 </html>

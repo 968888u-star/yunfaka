@@ -62,6 +62,8 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .badge.ok{background:#dcfce7;color:#15803d}.badge.no{background:#fee2e2;color:#b91c1c}
 .badge.gray{background:#eef0f6;color:#6b7280}.badge.cat{background:#eef2ff;color:#4f46e5}
 .badge.warn{background:#fef3c7;color:#b45309}
+.badge.src{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.badge.src-luban{background:#fef3c7;color:#b45309;border:1px solid #fcd34d}
 .pay-methods{display:flex;gap:10px;flex-wrap:wrap}
 .pay-method{flex:1;min-width:100px;display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid var(--line);border-radius:12px;cursor:pointer;transition:.15s;background:#fff;font-weight:600;font-size:14px;user-select:none;-webkit-user-select:none}
 .pay-method:hover{border-color:#c7cbe0}.pay-method input{width:auto;margin:0}
@@ -97,6 +99,11 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .redpacket-steps{background:#fff5f5;border:1px dashed #fc8181;border-radius:10px;padding:14px 18px;font-size:13px;color:#742a2a;line-height:2;margin-bottom:14px}
 .redpacket-steps ol{margin:0;padding-left:20px}
 .redpacket-steps b{color:#c53030}
+.session-box{background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;border-radius:14px;padding:22px 24px;margin:14px 0;position:relative;overflow:hidden}
+.session-box::after{content:"";position:absolute;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.08);right:-60px;top:-60px}
+.session-box .lbl{font-size:13px;opacity:.9;margin-bottom:6px;position:relative;z-index:1}
+.session-box .num{font-size:26px;font-weight:900;letter-spacing:1px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin-bottom:12px;position:relative;z-index:1;text-shadow:0 2px 8px rgba(0,0,0,.2);word-break:break-all}
+.session-box .timer{font-size:14px;font-weight:600;opacity:.95;position:relative;z-index:1;display:inline-block;background:rgba(255,255,255,.18);padding:4px 12px;border-radius:8px}
 .modal-mask{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;animation:fade .18s}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 .modal{background:#fff;border-radius:18px;width:100%;max-width:440px;padding:24px;box-shadow:0 24px 60px -12px rgba(0,0,0,.35);animation:pop .2s;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -104,7 +111,7 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .modal h3{margin:0 0 18px;font-size:17px}
 .modal.wide{max-width:560px}
 .toast{position:fixed;left:50%;bottom:40px;transform:translate(-50%,20px);background:#1f2430;color:#fff;padding:12px 22px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:300;max-width:90vw}
-.toast.show{opacity:1;transform:translate(-50%,0)}.toast.error{background:#b91c1c}.toast.success{background:#047857}
+.toast.show{opacity:1;transform:translate(-50%,0)}.toast.error{background:#b91c1c}.toast.success{background:#047857}.toast.info{background:#0369a1}
 .tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
 .tabs button{padding:9px 16px;border-radius:10px;border:0;background:#eef0f6;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted)}
 .tabs button.active{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff}
@@ -150,10 +157,11 @@ tbody tr:hover{background:#fafbfe}
 .sku-hint{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.6}
 .tg-hint{background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#075985;line-height:1.7}
 .tg-hint code{background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px}
+.luban-hint{background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#92400e;line-height:1.7}
 .color-swatches{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .color-swatch{width:34px;height:34px;border-radius:9px;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;transition:.15s}
 .color-swatch:hover{transform:scale(1.1)}
-@media (max-width:600px){.nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}.hero h1{font-size:21px}.tg-float{right:16px;bottom:18px;width:50px;height:50px}.pay-method{min-width:80px;padding:10px 12px;font-size:13px}.member-card .amt{font-size:28px}.redpacket-box .code{font-size:26px;letter-spacing:2px}.modal.wide{max-width:100%}}
+@media (max-width:600px){.nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}.hero h1{font-size:21px}.tg-float{right:16px;bottom:18px;width:50px;height:50px}.pay-method{min-width:80px;padding:10px 12px;font-size:13px}.member-card .amt{font-size:28px}.redpacket-box .code{font-size:26px;letter-spacing:2px}.session-box .num{font-size:20px}.modal.wide{max-width:100%}}
 </style>
 </head>
 <body>
@@ -185,7 +193,7 @@ tbody tr:hover{background:#fafbfe}
 
 <script>
 /* ==================================================================
-   云发卡 v14 稳定版
+   云发卡 v15 · LubanSms 接码版
    ================================================================== */
 const $ = function(s){ return document.querySelector(s); };
 const esc = function(s){
@@ -251,7 +259,7 @@ function hashPwd(pwd){
   }
   return h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
 }/* ---------------- 数据层 ---------------- */
-const STORE_KEY = 'yunfaka_db_v14';
+const STORE_KEY = 'yunfaka_db_v15';
 const MY_KEY = 'yunfaka_my_orders';
 const MEMBER_KEY = 'yunfaka_member_user';
 const LS_SECRET = 'yunfaka_last_secret';
@@ -301,7 +309,8 @@ const DEFAULT_CONFIG = {
   pay_usdt_note: '请使用 TRC20 网络转账，到账后自动发货',
   pay_usdt_qr: '',
   balance_enabled: true,
-  recharge_min: 1000
+  recharge_min: 1000,
+  luban_markup: 1.3
 };
 
 function seedDB(){
@@ -322,7 +331,7 @@ function seedDB(){
     const id = ++db.seq.product;
     const product = {
       id: id, name: name, description: desc, note: note, active: true,
-      category_id: catId, created_at: now(),
+      category_id: catId, created_at: now(), source: 'local',
       skus: skus.map(function(s, i){ return {id: genSkuId()+i, name: s.name, price: s.price}; })
     };
     db.products.push(product);
@@ -340,7 +349,7 @@ function seedDB(){
     const id = ++db.seq.product;
     db.products.push({
       id: id, name: name, price: price, description: desc, note: note,
-      active: true, category_id: catId, created_at: now(), skus: []
+      active: true, category_id: catId, created_at: now(), source: 'local', skus: []
     });
     for (let i = 0; i < cardCount; i++){
       db.seq.card++;
@@ -375,11 +384,17 @@ function loadDB(){
     if (!Array.isArray(d.categories)) d.categories = [];
     if (!Array.isArray(d.members)) d.members = [];
     if (!Array.isArray(d.recharges)) d.recharges = [];
-    d.products.forEach(function(p){ if (!Array.isArray(p.skus)) p.skus = []; });
+    d.products.forEach(function(p){
+      if (!Array.isArray(p.skus)) p.skus = [];
+      if (!p.source) p.source = 'local';
+    });
     d.cards.forEach(function(c){ if (c.sku_id === undefined) c.sku_id = 0; });
     d.members = d.members.filter(function(m){ return m && m.username && m.password; });
     d.members.forEach(function(m){ if (m.secret === undefined && m.contact !== undefined) m.secret = m.contact; });
-    d.orders.forEach(function(o){ if (o.secret === undefined && o.contact !== undefined) o.secret = o.contact; });
+    d.orders.forEach(function(o){
+      if (o.secret === undefined && o.contact !== undefined) o.secret = o.contact;
+      if (!o.source) o.source = 'local';
+    });
     if (!d.seq) d.seq = {product:0, card:0, category:0};
     if (!d.seq.category){
       d.seq.category = d.categories.reduce(function(m, c){ return Math.max(m, c.id||0); }, 0);
@@ -408,6 +423,7 @@ function getSkuById(p, skuId){
   return null;
 }
 function productStock(db, p, skuId){
+  if (p && p.source === 'luban') return 9999;
   if (!hasSkus(p)){
     return db.cards.filter(function(c){ return c.product_id === p.id && c.status === 'unused' && (!c.sku_id || c.sku_id === 0); }).length;
   }
@@ -421,6 +437,8 @@ function getAdminPwdHash(db){
   return cfg.admin_pwd_hash || DEFAULT_CONFIG.admin_pwd_hash;
 }
 function stockOf(db, pid){
+  const p = db.products.filter(function(x){ return x.id === pid; })[0];
+  if (p && p.source === 'luban') return 9999;
   return db.cards.filter(function(c){ return c.product_id === pid && c.status === 'unused'; }).length;
 }
 function saveMyOrder(no, secret){
@@ -525,8 +543,16 @@ function notifyTg(orderNo){
   }).catch(function(e){ console.warn('TG 通知异常:', e); });
 }
 
-const STATUS_TEXT = { pending:'待支付', pending_review:'待审核', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回' };
-const STATUS_CLASS = { pending:'gray', pending_review:'warn', delivered:'ok', out_of_stock:'no', rejected:'no' };
+const STATUS_TEXT = {
+  pending:'待支付', pending_review:'待审核', processing:'处理中',
+  waiting_sms:'等待接码', delivered:'已发货', out_of_stock:'缺货待补发',
+  rejected:'已驳回', luban_error:'接码失败'
+};
+const STATUS_CLASS = {
+  pending:'gray', pending_review:'warn', processing:'warn',
+  waiting_sms:'warn', delivered:'ok', out_of_stock:'no',
+  rejected:'no', luban_error:'no'
+};
 const RECHARGE_TEXT = { pending:'待支付', success:'已到账' };
 const RECHARGE_CLASS = { pending:'gray', success:'ok' };
 
@@ -572,19 +598,24 @@ function renderHome(){
     const skuTags = skus.length ? '<div class="sku-tags">' + skus.map(function(s){ return '<span class="sku-tag">' + esc(s.name) + '</span>'; }).join('') + '</div>' : '';
     const priceSuffix = skus.length ? '<span class="from">起</span>' : '';
     const catBadge = '<span class="badge ' + (cat?'cat':'gray') + '">' + esc(cat?cat.name:'未分类') + '</span>';
+    let srcBadge = '';
+    if (p.source === 'luban') srcBadge = '<span class="badge src-luban" style="margin-left:4px">接码</span>';
+    const stockText = p.source === 'luban' ? '不限' : totalStock;
+    const btnDisabled = p.source === 'luban' ? '' : (totalStock<=0?'disabled':'');
+    const btnText = p.source === 'luban' ? '立即接码' : (totalStock>0?'立即购买':'暂时缺货');
     return '<div class="card product">' +
       '<div class="spread">' +
-        '<div class="p-name">' + esc(p.name) + '</div>' +
-        '<span class="badge ' + (totalStock>0?'ok':'no') + '">' + (totalStock>0?'有货':'缺货') + '</span>' +
+        '<div class="p-name">' + esc(p.name.length > 28 ? p.name.slice(0,28)+'…' : p.name) + '</div>' +
+        '<span class="badge ' + (p.source==='luban'?'ok':(totalStock>0?'ok':'no')) + '">' + (p.source==='luban'?'可接码':(totalStock>0?'有货':'缺货')) + '</span>' +
       '</div>' +
       '<div class="p-desc">' + esc(p.description || '虚拟商品 · 付款后自动发货') + '</div>' +
-      '<div class="row" style="gap:6px">' + catBadge + '</div>' +
+      '<div class="row" style="gap:6px">' + catBadge + srcBadge + '</div>' +
       skuTags +
       '<div class="spread" style="margin-top:auto">' +
         '<div class="p-price"><small>¥</small>' + yuan(minPrice) + priceSuffix + '</div>' +
-        '<div class="muted" style="font-size:12px">库存 ' + totalStock + '</div>' +
+        '<div class="muted" style="font-size:12px">库存 ' + stockText + '</div>' +
       '</div>' +
-      '<button class="btn primary" ' + (totalStock<=0?'disabled':'') + ' onclick="openBuy(' + p.id + ')">' + (totalStock>0?'立即购买':'暂时缺货') + '</button>' +
+      '<button class="btn primary" ' + btnDisabled + ' onclick="openBuy(' + p.id + ')">' + btnText + '</button>' +
     '</div>';
   }).join('') : '<div class="empty" style="grid-column:1/-1">该分类下暂无商品</div>';
   const tgUrl = tgUrlOf(cfg);
@@ -607,7 +638,7 @@ function renderHome(){
       '<div class="muted" style="font-size:13px;margin-bottom:14px">Telegram 客服在线</div>' +
       '<a class="btn tg-btn" style="display:inline-flex!important" href="' + tgUrl + '" target="_blank" rel="noopener">联系 TG 客服</a>' +
     '</div>' : '';
-  $('#app').innerHTML = '<div class="hero"><div class="blob"></div><h1>付款即发货，无需等待</h1><p>7×24 小时全自动发货 · 支持支付宝 / USDT / 会员余额</p></div>' +
+  $('#app').innerHTML = '<div class="hero"><div class="blob"></div><h1>付款即发货，无需等待</h1><p>7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额</p></div>' +
     memberBar +
     '<div class="cats">' + catTabs + '</div>' +
     '<div class="grid">' + cards + '</div>' +
@@ -620,10 +651,11 @@ function openBuy(id){
   const cfg = getConfig(db);
   const p = db.products.filter(function(x){ return x.id === id; })[0];
   if (!p){ toast('商品不存在','error'); return; }
+  const isLuban = p.source === 'luban';
   const skus = getSkus(p);
   const hasSku = skus.length > 0;
   const totalStock = stockOf(db, id);
-  if (totalStock <= 0){ toast('该商品暂时缺货','error'); return; }
+  if (!isLuban && totalStock <= 0){ toast('该商品暂时缺货','error'); return; }
   let defaultSkuId = 0;
   if (hasSku){
     let firstOk = null;
@@ -644,8 +676,8 @@ function openBuy(id){
     const s = getSkuById(p, defaultSkuId);
     if (s) initialPrice = s.price;
   }
-  const initialStock = hasSku ? productStock(db, p, defaultSkuId) : productStock(db, p, 0);
-  const maxQty = Math.min(50, initialStock);
+  const initialStock = isLuban ? 9999 : (hasSku ? productStock(db, p, defaultSkuId) : productStock(db, p, 0));
+  const maxQty = isLuban ? 1 : Math.min(50, initialStock);
 
   const skuHtml = hasSku ? '<label class="field"><span>选择规格</span><div class="sku-options" id="buy-skus">' +
     skus.map(function(s){
@@ -659,13 +691,21 @@ function openBuy(id){
     }).join('') + '</div></label>' : '';
 
   const catKv = cat ? '<div class="kv"><span class="k">分类</span><span class="v">' + esc(cat.name) + '</span></div>' : '';
+  const lubanKv = isLuban ? '<div class="kv"><span class="k">接码类型</span><span class="v" style="color:#b45309">' + (p.luban_type === 'common' ? '通用短信接收' : '验证码接收') + '</span></div>' +
+    '<div class="kv"><span class="k">国家</span><span class="v">' + esc(p.luban_country || '-') + '</span></div>' : '';
+  const lubanTip = isLuban ? '<div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">' +
+    '⚠️ 接码服务：付款后系统会立即分配号码，请在 20 分钟内完成目标平台注册，超时号码将自动释放。' +
+    '</div>' : '';
 
-  openModal('<h3>确认购买</h3>' +
+  const qtyHtml = isLuban ? '' : '<label class="field"><span>购买数量（库存 <span id="buy-stock-label">' + initialStock + '</span>）</span><input id="buy-qty" type="number" min="1" max="' + maxQty + '" value="1"></label>';
+
+  openModal('<h3>' + (isLuban ? '确认接码' : '确认购买') + '</h3>' +
     '<div class="kv"><span class="k">商品</span><span class="v">' + esc(p.name) + '</span></div>' +
     catKv +
+    lubanKv +
     skuHtml +
     '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="buy-unit">¥' + yuan(initialPrice) + '</span></div>' +
-    '<label class="field"><span>购买数量（库存 <span id="buy-stock-label">' + initialStock + '</span>）</span><input id="buy-qty" type="number" min="1" max="' + maxQty + '" value="1"></label>' +
+    qtyHtml +
     '<label class="field"><span>暗号（用于查询订单 / 找回会员密码）</span><input id="buy-secret" type="text" placeholder="自定义内容，请务必牢记" maxlength="60" value="' + esc(lastSecret) + '"></label>' +
     '<div id="balance-box"></div>' +
     '<div class="spread" style="margin:14px 0;padding-top:14px;border-top:1px dashed var(--line)">' +
@@ -673,6 +713,7 @@ function openBuy(id){
     '</div>' +
     '<div class="spread" style="margin-bottom:8px"><span class="muted" style="font-size:13px">余额抵扣</span><span id="buy-deduct" style="font-weight:700;color:#b45309">-¥0.00</span></div>' +
     '<div class="spread" style="margin-bottom:16px"><span class="muted" style="font-size:13px">还需支付</span><span id="buy-due" style="font-size:20px;font-weight:800;color:#e11d48">¥' + yuan(initialPrice) + '</span></div>' +
+    lubanTip +
     '<div id="pay-method-wrap">' +
       '<label class="field" style="margin-bottom:14px"><span>支付方式</span>' +
         '<div class="pay-methods" id="pay-methods">' +
@@ -683,7 +724,7 @@ function openBuy(id){
     '</div>' +
     '<div class="row" style="justify-content:flex-end;margin-top:8px">' +
       '<button class="btn ghost" onclick="closeModal()">取消</button>' +
-      '<button class="btn primary" id="buy-submit" onclick="submitBuy(' + p.id + ')">确认订单</button>' +
+      '<button class="btn primary" id="buy-submit" onclick="submitBuy(' + p.id + ')">' + (isLuban ? '确认付款并接码' : '确认订单') + '</button>' +
     '</div>');
 
   const qty = $('#buy-qty');
@@ -694,9 +735,6 @@ function openBuy(id){
     if (!hasSku) return p.price;
     const sku = getSkuById(p, currentSkuId);
     return sku ? sku.price : p.price;
-  }
-  function getCurrentStock(){
-    return productStock(loadDB(), p, currentSkuId);
   }
   function refreshBalance(){
     const box = $('#balance-box');
@@ -723,7 +761,7 @@ function openBuy(id){
     refreshTotals();
   }
   function refreshTotals(){
-    const q = parseInt(qty.value) || 1;
+    const q = isLuban ? 1 : (parseInt(qty.value) || 1);
     const price = getCurrentPrice();
     const amount = price * q;
     const m = getCurrentMember(loadDB());
@@ -745,22 +783,6 @@ function openBuy(id){
       wrap.style.pointerEvents = 'auto';
     }
   }
-  function refreshStock(){
-    const st = getCurrentStock();
-    const maxQ = Math.min(50, st);
-    qty.setAttribute('max', maxQ);
-    if (parseInt(qty.value) > maxQ) qty.value = maxQ;
-    $('#buy-stock-label').textContent = st;
-    const submitBtn = $('#buy-submit');
-    if (st <= 0){
-      submitBtn.disabled = true;
-      submitBtn.textContent = '该规格缺货';
-    } else {
-      submitBtn.disabled = false;
-      submitBtn.textContent = '确认订单';
-    }
-    refreshTotals();
-  }
 
   if (hasSku){
     document.querySelectorAll('#buy-skus .sku-option').forEach(function(el){
@@ -769,17 +791,19 @@ function openBuy(id){
         document.querySelectorAll('#buy-skus .sku-option').forEach(function(x){ x.classList.remove('active'); });
         el.classList.add('active');
         currentSkuId = parseInt(el.dataset.sku);
-        refreshStock();
+        refreshTotals();
       });
     });
   }
-  qty.addEventListener('input', function(){
-    let v = parseInt(qty.value) || 1;
-    const maxQ = Math.min(50, getCurrentStock());
-    v = Math.max(1, Math.min(maxQ, v));
-    qty.value = v;
-    refreshTotals();
-  });
+  if (qty){
+    qty.addEventListener('input', function(){
+      let v = parseInt(qty.value) || 1;
+      const maxQ = Math.min(50, productStock(loadDB(), p, currentSkuId));
+      v = Math.max(1, Math.min(maxQ, v));
+      qty.value = v;
+      refreshTotals();
+    });
+  }
   secretEl.addEventListener('keydown', function(e){ if (e.key === 'Enter') submitBuy(p.id); });
   document.querySelectorAll('#pay-methods .pay-method').forEach(function(el){
     el.addEventListener('click', function(){
@@ -791,8 +815,7 @@ function openBuy(id){
   });
   window.__buyCurrentSkuId = function(){ return currentSkuId; };
   refreshBalance();
-  qty.focus();
-  qty.select();
+  if (qty){ qty.focus(); qty.select(); }
 }
 
 function submitBuy(id){
@@ -800,20 +823,24 @@ function submitBuy(id){
   const cfg = getConfig(db);
   const p = db.products.filter(function(x){ return x.id === id; })[0];
   if (!p){ toast('商品不存在','error'); return; }
+  const isLuban = p.source === 'luban';
   const hasSku = hasSkus(p);
   const currentSkuId = (typeof window.__buyCurrentSkuId === 'function') ? window.__buyCurrentSkuId() : 0;
-  const qtyEl = $('#buy-qty');
   const secretEl = $('#buy-secret');
-  let qty = parseInt(qtyEl.value) || 1;
   const secret = secretEl.value.trim();
   const sErr = validateSecret(secret);
   if (sErr){ toast(sErr,'error'); secretEl.focus(); return; }
   const sku = hasSku ? getSkuById(p, currentSkuId) : null;
   if (hasSku && !sku){ toast('请选择规格','error'); return; }
   const price = hasSku ? sku.price : p.price;
-  const stock = productStock(db, p, hasSku ? sku.id : 0);
-  if (qty < 1){ toast('数量至少为 1','error'); return; }
-  if (qty > stock){ toast('库存不足，当前仅剩 ' + stock + ' 件','error'); return; }
+  let qty = 1;
+  if (!isLuban){
+    const qtyEl = $('#buy-qty');
+    qty = parseInt(qtyEl.value) || 1;
+    const stock = productStock(db, p, hasSku ? sku.id : 0);
+    if (qty < 1){ toast('数量至少为 1','error'); return; }
+    if (qty > stock){ toast('库存不足，当前仅剩 ' + stock + ' 件','error'); return; }
+  }
   const amount = price * qty;
   const balanceEnabled = cfg.balance_enabled !== false;
   const member = getCurrentMember(db);
@@ -841,7 +868,12 @@ function submitBuy(id){
     balance_used: deduct, amount_due: due, secret: secret,
     username: member ? member.username : '',
     status: 'pending', pay_method: payMethod, cards: [],
-    note: p.note || '', created_at: now(), delivered_at: ''
+    note: p.note || '', created_at: now(), delivered_at: '',
+    source: p.source || 'local',
+    luban_type: p.luban_type || '',
+    luban_service_id: p.luban_service_id || '',
+    luban_service_name: p.luban_service_name || '',
+    luban_country: p.luban_country || ''
   };
   if (payMethod === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
   db.orders.unshift(order);
@@ -851,7 +883,7 @@ function submitBuy(id){
   closeModal();
   if (due === 0){
     payOrder(orderNo);
-    toast('余额支付成功，已自动发货 🎉','success');
+    toast('支付成功，正在处理…','success');
     if (location.hash === '#/order/' + orderNo) route();
     else location.hash = '#/order/' + orderNo;
   } else {
@@ -973,6 +1005,7 @@ function confirmPay(type, id){
       else location.hash = '#/order/' + id;
       return;
     }
+    // 支付宝 - 人工审核
     o.status = 'pending_review';
     o.submitted_at = now();
     saveDB(db);
@@ -996,10 +1029,25 @@ function confirmPay(type, id){
     else location.hash = '#/member';
   }
 }
+
 function payOrder(orderNo){
   const db = loadDB();
   const o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
   if (!o || o.status !== 'pending') return;
+
+  // LubanSms 接码商品：进入接码会话
+  if (o.source === 'luban') {
+    o.status = 'processing';
+    saveDB(db);
+    if (o.luban_type === 'common') {
+      lubanStartCommon(o.order_no, '', '');
+    } else {
+      lubanStartSession(o.order_no);
+    }
+    return;
+  }
+
+  // 本地商品：分配卡密
   const orderSku = o.sku_id || 0;
   const available = db.cards.filter(function(c){
     if (c.product_id !== o.product_id) return false;
@@ -1033,7 +1081,7 @@ function startUsdtPolling(orderNo){
         if (d.ok && d.status && d.status !== 'pending'){
           clearInterval(_usdtPollTimer);
           _usdtPollTimer = null;
-          toast('USDT 已到账，系统已自动发货 🎉', 'success');
+          toast('USDT 已到账，系统正在处理 🎉', 'success');
           fetch('/api/state?t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d2){
             if (d2.ok && d2.db){ window.__DB = d2.db; }
             route();
@@ -1050,7 +1098,7 @@ function forceCheckUsdt(orderNo){
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d.ok && d.status && d.status !== 'pending'){
-        toast('USDT 已到账，系统已自动发货 🎉', 'success');
+        toast('USDT 已到账', 'success');
         fetch('/api/state?t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d2){
           if (d2.ok && d2.db){ window.__DB = d2.db; }
           route();
@@ -1070,6 +1118,19 @@ function approveOrder(orderNo){
   if (!o) return;
   if (o.status !== 'pending_review'){ toast('订单状态不对', 'error'); return; }
   if (!confirm('确认已收款 ¥' + yuan(o.amount_due) + '，为客户发货？')) return;
+
+  // Luban 订单
+  if (o.source === 'luban') {
+    o.status = 'processing';
+    saveDB(db);
+    toast('已确认，正在请求号码…', 'success');
+    if (o.luban_type === 'common') lubanStartCommon(o.order_no, '', '');
+    else lubanStartSession(o.order_no);
+    renderOrders();
+    return;
+  }
+
+  // 本地订单
   const orderSku = o.sku_id || 0;
   const available = db.cards.filter(function(c){
     if (c.product_id !== o.product_id) return false;
@@ -1420,7 +1481,65 @@ function renderOrderView(orderNo, secret){
     return;
   }
   let body = '';
-  if (o.status === 'delivered' && o.cards.length){
+
+  // ============ Luban 接码会话 ============
+  if (o.source === 'luban'){
+    if (o.status === 'luban_error'){
+      body = '<div class="card panel" style="background:#fee2e2;border-color:#fca5a5">' +
+        '<b>❌ 接码失败</b>' +
+        '<p class="muted" style="font-size:13px;margin:6px 0 0">' + esc(o.luban_error || '请重新下单') + '</p>' +
+      '</div>';
+    } else if (o.status === 'rejected'){
+      body = '<div class="card panel" style="background:#f1f5f9;border-color:#cbd5e1">' +
+        '<b>号码已释放</b>' +
+        '<p class="muted" style="font-size:13px;margin:6px 0 0">' + esc(o.luban_error || '接码已结束') + '</p>' +
+      '</div>';
+    } else if (o.status === 'delivered' && o.luban_code){
+      body = '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:20px">' +
+        '<div style="font-size:15px;font-weight:700;margin-bottom:10px">🎉 收到验证码</div>' +
+        '<div class="codebox" style="margin-bottom:14px"><span class="mono" style="font-size:24px;font-weight:800">' + esc(o.luban_code) + '</span>' +
+        '<button data-v="' + esc(o.luban_code) + '" onclick="copyText(this.dataset.v,this)">复制</button></div>' +
+        '<div class="muted" style="font-size:12px">接收号码：' + esc(o.luban_number || '-') + '</div>' +
+      '</div>';
+    } else if (o.status === 'pending' && o.pay_method === 'balance'){
+      // 未触发
+      body = '';
+    } else if (o.status === 'processing' || o.status === 'waiting_sms'){
+      var remain = 0;
+      if (o.luban_deadline) remain = Math.max(0, Math.floor((o.luban_deadline - Date.now()) / 1000));
+      var mins = Math.floor(remain / 60);
+      var secs = remain % 60;
+      var remainText = mins + '分' + (secs < 10 ? '0' + secs : secs) + '秒';
+      var keywordRow = o.luban_keyword ? '<div class="kv" style="margin-top:8px"><span class="k" style="color:rgba(255,255,255,.85)">关键词过滤</span><span class="v" style="color:#fff">' + esc(o.luban_keyword) + '</span></div>' : '';
+      body = '<div class="session-box">' +
+        '<div class="lbl">接收号码（请使用此号码注册）</div>' +
+        '<div class="num">' + esc(o.luban_number || '正在分配中…') + '</div>' +
+        '<div class="timer">⏱ 剩余 ' + remainText + '</div>' +
+        keywordRow +
+      '</div>' +
+      '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 18px;font-size:13px;color:#075985;line-height:1.8;margin-bottom:14px">' +
+        '📌 <b>使用步骤：</b><br>' +
+        '1. 打开目标平台，输入上方号码进行注册/登录<br>' +
+        '2. 目标平台会发送验证码到这个号码<br>' +
+        '3. 系统每 5 秒自动检查一次，收到后此页面会自动更新<br>' +
+        '4. 未收到短信前不要关闭本页面<br>' +
+        '5. 20 分钟超时号码将被自动释放<br>' +
+      '</div>' +
+      '<div class="row" style="justify-content:flex-end;gap:8px;margin-bottom:14px">' +
+        '<button class="btn ghost" onclick="lubanRelease(\'' + esc(o.order_no) + '\')">释放号码</button>' +
+        '<button class="btn primary" onclick="lubanManualCheck(\'' + esc(o.order_no) + '\')">立即检查</button>' +
+      '</div>' +
+      '<div class="muted" style="font-size:12px;text-align:center">如果号码一直收不到验证码，可以点「释放号码」后重新下单</div>';
+
+      // 启动轮询
+      setTimeout(function(){
+        if (o.luban_type === 'common') lubanCommonPoll(o.order_no, 0);
+        else lubanPollSms(o.order_no, 0);
+      }, 1500);
+    }
+  }
+  // ============ 本地商品 ============
+  else if (o.status === 'delivered' && o.cards.length){
     const cardsHtml = o.cards.map(function(c){
       return '<div class="codebox"><span class="mono">' + esc(c) + '</span><button data-v="' + esc(c) + '" onclick="copyText(this.dataset.v,this)">复制</button></div>';
     }).join('');
@@ -1434,7 +1553,7 @@ function renderOrderView(orderNo, secret){
     if (o.pay_method === 'usdt'){
       body = '<div class="card panel" style="background:#f0f9ff;border-color:#bae6fd">' +
         '<b>⏳ 等待 USDT 到账</b>' +
-        '<p class="muted" style="font-size:13px;margin:6px 0 12px">系统每 30 秒自动检测一次链上转账，到账后自动发货，请勿关闭本页面。</p>' +
+        '<p class="muted" style="font-size:13px;margin:6px 0 12px">系统每 30 秒自动检测一次链上转账，到账后自动处理，请勿关闭本页面。</p>' +
         '<button class="btn ghost" onclick="showPayModal(\'order\',\'' + esc(o.order_no) + '\')">查看收款信息</button>' +
         '<button class="btn primary" style="margin-left:8px" onclick="forceCheckUsdt(\'' + esc(o.order_no) + '\')">立即检测</button>' +
       '</div>';
@@ -1454,7 +1573,7 @@ function renderOrderView(orderNo, secret){
   } else if (o.status === 'pending_review'){
     body = '<div class="card panel" style="background:#fef3c7;border-color:#fcd34d">' +
       '<b>🕐 订单已提交，待管理员审核</b>' +
-      '<p class="muted" style="font-size:13px;margin:6px 0 0">管理员核对收款后会为您发货，通常几分钟内完成。请稍后刷新本页面查看。</p>' +
+      '<p class="muted" style="font-size:13px;margin:6px 0 0">管理员核对收款后会为您处理，通常几分钟内完成。请稍后刷新本页面查看。</p>' +
     '</div>';
   } else if (o.status === 'rejected'){
     body = '<div class="card panel" style="background:#fee2e2;border-color:#fca5a5">' +
@@ -1462,31 +1581,38 @@ function renderOrderView(orderNo, secret){
       '<p class="muted" style="font-size:13px;margin:6px 0 0">管理员未收到您的付款，如有疑问请联系客服。</p>' +
     '</div>';
   }
+
   const helpBox = tgUrl ? '<div class="card panel" style="max-width:640px;margin:16px auto 0;text-align:center">' +
     '<div style="font-size:14px;font-weight:700;margin-bottom:10px">订单有问题？</div>' +
     '<a class="btn tg-btn" style="display:inline-flex!important" href="' + tgUrl + '" target="_blank" rel="noopener">联系 TG 客服（发送订单号）</a>' +
   '</div>' : '';
   const skuBadge = o.sku_name ? ' <span class="badge cat" style="margin-left:6px">' + esc(o.sku_name) + '</span>' : '';
+  const srcBadge = o.source === 'luban' ? ' <span class="badge src-luban" style="margin-left:6px">接码</span>' : '';
+  const numberKv = (o.source === 'luban' && o.luban_number) ? '<div class="kv"><span class="k">接收号码</span><span class="v mono">' + esc(o.luban_number) + '</span></div>' : '';
+  const codeKv = (o.source === 'luban' && o.luban_code) ? '<div class="kv"><span class="k">验证码</span><span class="v mono" style="color:#10b981">' + esc(o.luban_code) + '</span></div>' : '';
+
   $('#app').innerHTML = '<div class="card panel" style="max-width:640px;margin:24px auto">' +
       '<div class="spread" style="margin-bottom:6px">' +
         '<h2 style="margin:0">订单详情</h2>' +
         '<span class="badge ' + (STATUS_CLASS[o.status] || 'gray') + '">' + (STATUS_TEXT[o.status] || o.status) + '</span>' +
       '</div>' +
       '<div class="kv"><span class="k">订单号</span><span class="v mono">' + esc(o.order_no) + '</span></div>' +
-      '<div class="kv"><span class="k">商品</span><span class="v">' + esc(o.product_name) + skuBadge + '</span></div>' +
+      '<div class="kv"><span class="k">商品</span><span class="v">' + esc(o.product_name) + skuBadge + srcBadge + '</span></div>' +
       '<div class="kv"><span class="k">数量</span><span class="v">' + o.quantity + '</span></div>' +
       '<div class="kv"><span class="k">订单金额</span><span class="v">¥' + yuan(o.amount) + '</span></div>' +
       (o.balance_used > 0 ? '<div class="kv"><span class="k">余额抵扣</span><span class="v" style="color:#b45309">-¥' + yuan(o.balance_used) + '</span></div>' : '') +
       (o.amount_due > 0 ? '<div class="kv"><span class="k">实付金额</span><span class="v" style="color:#e11d48">¥' + yuan(o.amount_due) + '</span></div>' : '') +
       '<div class="kv"><span class="k">支付方式</span><span class="v">' + (o.pay_method === 'balance' ? '余额' : (o.pay_method === 'alipay' ? '支付宝' : 'USDT')) + '</span></div>' +
       (o.redpacket_code ? '<div class="kv"><span class="k">红包口令</span><span class="v mono" style="color:#e91e63">' + esc(o.redpacket_code) + '</span></div>' : '') +
+      numberKv + codeKv +
       '<div class="kv"><span class="k">暗号</span><span class="v">' + esc(o.secret) + '</span></div>' +
       '<div class="kv"><span class="k">下单时间</span><span class="v">' + esc(o.created_at) + '</span></div>' +
-      (o.delivered_at ? '<div class="kv"><span class="k">发货时间</span><span class="v">' + esc(o.delivered_at) + '</span></div>' : '') +
+      (o.delivered_at ? '<div class="kv"><span class="k">完成时间</span><span class="v">' + esc(o.delivered_at) + '</span></div>' : '') +
       (o.pay_tx ? '<div class="kv"><span class="k">链上交易</span><span class="v mono" style="font-size:11px">' + esc(o.pay_tx) + '</span></div>' : '') +
     '</div>' +
     '<div style="max-width:640px;margin:0 auto">' + body + '</div>' +
     helpBox;
+
   if (o.pay_method === 'usdt' && o.status === 'pending'){
     startUsdtPolling(o.order_no);
   } else if (_usdtPollTimer && o.status !== 'pending'){
@@ -1562,6 +1688,7 @@ function renderAdminPanel(){
       '<button data-tab="cards" onclick="switchTab(\'cards\')">卡密</button>' +
       '<button data-tab="orders" onclick="switchTab(\'orders\')">订单</button>' +
       '<button data-tab="members" onclick="switchTab(\'members\')">会员</button>' +
+      '<button data-tab="luban" onclick="switchTab(\'luban\')">Luban接码</button>' +
       '<button data-tab="settings" onclick="switchTab(\'settings\')">设置</button>' +
     '</div>' +
     '<div id="tab-body"><div class="loading">加载中…</div></div>';
@@ -1580,6 +1707,7 @@ function switchTab(tab){
   if (tab === 'cards') return renderCards();
   if (tab === 'orders') return renderOrders();
   if (tab === 'members') return renderMembers();
+  if (tab === 'luban') return renderLuban();
   if (tab === 'settings') return renderSettings();
   renderStats();
 }function renderStats(){
@@ -1587,17 +1715,21 @@ function switchTab(tab){
   const orders = db.orders;
   const delivered = orders.filter(function(o){ return o.status === 'delivered'; }).length;
   const pendingReview = orders.filter(function(o){ return o.status === 'pending_review'; }).length;
+  const waitingSms = orders.filter(function(o){ return o.status === 'waiting_sms' || o.status === 'processing'; }).length;
   const revenue = orders.filter(function(o){ return o.status === 'delivered'; }).reduce(function(s, o){ return s + o.amount; }, 0);
   const unused = db.cards.filter(function(c){ return c.status === 'unused'; }).length;
   const used = db.cards.filter(function(c){ return c.status === 'used'; }).length;
   const totalBalance = db.members.reduce(function(s, m){ return s + (m.balance || 0); }, 0);
   const totalRecharge = db.recharges.filter(function(r){ return r.status === 'success'; }).reduce(function(s, r){ return s + r.amount; }, 0);
+  const lubanProducts = db.products.filter(function(p){ return p.source === 'luban'; }).length;
   $('#tab-body').innerHTML = '<div class="stat-grid">' +
       '<div class="stat"><div class="n">' + db.products.length + '</div><div class="l">商品数</div></div>' +
+      '<div class="stat"><div class="n">' + lubanProducts + '</div><div class="l">接码商品</div></div>' +
       '<div class="stat"><div class="n">' + db.categories.length + '</div><div class="l">分类数</div></div>' +
       '<div class="stat"><div class="n">' + orders.length + '</div><div class="l">总订单</div></div>' +
       '<div class="stat"><div class="n">' + delivered + '</div><div class="l">已发货</div></div>' +
       '<div class="stat"><div class="n" style="color:#b45309">' + pendingReview + '</div><div class="l">待审核</div></div>' +
+      (waitingSms > 0 ? '<div class="stat"><div class="n" style="color:#0369a1">' + waitingSms + '</div><div class="l">接码中</div></div>' : '') +
       '<div class="stat"><div class="n">' + unused + '</div><div class="l">可用卡密</div></div>' +
       '<div class="stat"><div class="n">' + used + '</div><div class="l">已售卡密</div></div>' +
       '<div class="stat"><div class="n">¥' + yuan(revenue) + '</div><div class="l">累计收入</div></div>' +
@@ -1631,9 +1763,10 @@ function renderPending(){
     const rpCell = o.redpacket_code ? '<span class="rp-code-cell" data-v="' + esc(o.redpacket_code) + '" onclick="copyText(this.dataset.v,this)" style="cursor:pointer" title="点击复制">' + esc(o.redpacket_code) + '</span>' : '<span class="muted">-</span>';
     const skuLine = o.sku_name ? '<div class="muted" style="font-size:11px">' + esc(o.sku_name) + '</div>' : '';
     const userLine = o.username ? '<div style="font-size:11px">@' + esc(o.username) + '</div>' : '';
+    const srcTag = o.source === 'luban' ? ' <span class="badge src-luban">接码</span>' : '';
     return '<tr>' +
       '<td class="mono" style="font-size:12px">' + esc(o.order_no) + '</td>' +
-      '<td>' + esc(o.product_name) + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
+      '<td>' + esc(o.product_name) + srcTag + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
       '<td style="font-weight:700;color:#e11d48">¥' + yuan(o.amount_due) + '</td>' +
       '<td>' + (o.pay_method === 'alipay' ? '支付宝' : 'USDT') + '</td>' +
       '<td>' + rpCell + '</td>' +
@@ -1641,7 +1774,7 @@ function renderPending(){
       '<td class="muted" style="font-size:12px">' + esc(o.submitted_at || o.created_at) + '</td>' +
       '<td style="text-align:right;white-space:nowrap">' +
         '<button class="btn sm ghost" onclick="resendTg(\'' + esc(o.order_no) + '\')" title="重新发送 TG 通知">📤</button> ' +
-        '<button class="btn sm primary" onclick="approveOrder(\'' + esc(o.order_no) + '\')">确认发货</button> ' +
+        '<button class="btn sm primary" onclick="approveOrder(\'' + esc(o.order_no) + '\')">确认处理</button> ' +
         '<button class="btn sm danger" onclick="rejectOrder(\'' + esc(o.order_no) + '\')">驳回</button>' +
       '</td>' +
     '</tr>';
@@ -1656,9 +1789,9 @@ function renderPending(){
       '<ol style="margin:6px 0 0;padding-left:20px">' +
         '<li>客户发送口令红包后，订单会出现在这里</li>' +
         '<li>打开支付宝 → 输入订单的<b>红包口令</b>领取红包（点口令可直接复制）</li>' +
-        '<li>核对金额 → 确认收款后点「确认发货」</li>' +
+        '<li>核对金额 → 确认收款后点「确认处理」</li>' +
         '<li>未收到红包 → 点「驳回」</li>' +
-        '<li>没收到 TG 通知 → 点订单右侧的 📤 手动重发</li>' +
+        '<li>接码订单确认后，系统会自动请求号码并进入接码流程</li>' +
       '</ol>' +
     '</div>' +
     '<div style="overflow-x:auto"><table>' +
@@ -1821,18 +1954,22 @@ function renderProducts(){
     const skus = getSkus(p);
     const skuInfo = skus.length ? '<div class="sku-tags" style="margin-top:4px">' + skus.map(function(s){ return '<span class="sku-tag">' + esc(s.name) + ' ¥' + yuan(s.price) + '</span>'; }).join('') + '</div>' : '';
     const priceDisplay = skus.length ? '¥' + yuan(getMinPrice(p)) + ' 起' : '¥' + yuan(p.price);
-    return '<tr><td><b>' + esc(p.name) + '</b><div class="muted" style="font-size:12px">' + esc(p.description || '') + '</div>' + skuInfo + '</td>' +
+    const srcBadge = p.source === 'luban' ? '<span class="badge src-luban" style="margin-left:4px">接码</span>' : '';
+    const stockShow = p.source === 'luban' ? '不限' : stock;
+    const nameShow = p.name.length > 30 ? p.name.slice(0,30) + '…' : p.name;
+    return '<tr><td><b>' + esc(nameShow) + '</b>' + srcBadge + '<div class="muted" style="font-size:12px">' + esc((p.description||'').slice(0,70)) + '</div>' + skuInfo + '</td>' +
       '<td><span class="badge ' + (cat ? 'cat' : 'gray') + '">' + esc(cat ? cat.name : '未分类') + '</span></td>' +
       '<td>' + priceDisplay + '</td>' +
-      '<td><span class="badge ' + (stock > 0 ? 'ok' : 'no') + '">' + stock + '</span></td>' +
+      '<td>' + stockShow + '</td>' +
       '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
       '<td style="text-align:right;white-space:nowrap">' +
-        '<button class="btn sm ghost" onclick="editProduct(' + p.id + ')">编辑</button> ' +
+        (p.source === 'luban' ? '' : '<button class="btn sm ghost" onclick="editProduct(' + p.id + ')">编辑</button> ') +
         '<button class="btn sm danger" onclick="deleteProduct(' + p.id + ')">删除</button>' +
       '</td></tr>';
   }).join('') : '<tr><td colspan="6" class="empty">暂无商品</td></tr>';
   $('#tab-body').innerHTML = '<div class="card panel">' +
-      '<h2>新增商品</h2>' +
+      '<h2>新增商品（本地）</h2>' +
+      '<p class="muted" style="font-size:12px;margin-top:-8px;margin-bottom:14px">如需添加接码商品，请到「Luban接码」标签一键同步。</p>' +
       '<div class="row" style="align-items:flex-start;flex-wrap:wrap">' +
         '<div style="flex:1;min-width:180px"><label class="field"><span>商品名称</span><input id="np-name" placeholder="如：某视频会员"></label></div>' +
         '<div style="width:140px"><label class="field"><span>基础价格（元）</span><input id="np-price" type="number" min="0" step="0.01" placeholder="9.90"></label></div>' +
@@ -1863,7 +2000,7 @@ function createProduct(){
     description: $('#np-desc').value.trim(),
     note: $('#np-note').value.trim(),
     category_id: parseInt($('#np-cat').value) || 0,
-    active: true, created_at: now(), skus: skus
+    active: true, created_at: now(), skus: skus, source: 'local'
   });
   saveDB(db);
   toast(skus.length ? '创建成功，已添加 ' + skus.length + ' 个规格' : '创建成功','success');
@@ -1873,6 +2010,7 @@ function editProduct(id){
   const db = loadDB();
   const p = db.products.filter(function(x){ return x.id === id; })[0];
   if (!p) return;
+  if (p.source === 'luban'){ toast('接码商品不能手动编辑，请重新同步', 'error'); return; }
   const skus = getSkus(p);
   openModal('<h3>编辑商品</h3>' +
     '<label class="field"><span>商品名称</span><input id="ep-name" value="' + esc(p.name) + '"></label>' +
@@ -1920,14 +2058,16 @@ function deleteProduct(id){
   renderProducts();
 }function renderCards(){
   const db = loadDB();
-  const opts = db.products.map(function(p){
+  const localProducts = db.products.filter(function(p){ return p.source !== 'luban'; });
+  const opts = localProducts.map(function(p){
     const skus = getSkus(p);
     const label = skus.length ? esc(p.name) + '（多规格）' : esc(p.name) + '（可用 ' + stockOf(db, p.id) + '）';
     return '<option value="' + p.id + '">' + label + '</option>';
   }).join('');
   $('#tab-body').innerHTML = '<div class="card panel">' +
       '<h2>批量导入卡密</h2>' +
-      '<label class="field"><span>选择商品</span><select id="ic-pid" onchange="onCardProductChange()">' + (opts || '<option value="">请先创建商品</option>') + '</select></label>' +
+      '<p class="muted" style="font-size:12px;margin-top:-8px;margin-bottom:14px">仅本地商品支持导入卡密。接码商品由上游自动分配号码。</p>' +
+      '<label class="field"><span>选择商品</span><select id="ic-pid" onchange="onCardProductChange()">' + (opts || '<option value="">请先创建本地商品</option>') + '</select></label>' +
       '<div id="ic-sku-wrap"></div>' +
       '<label class="field"><span>卡密内容（一行一条，自动去重）</span>' +
         '<textarea id="ic-text" rows="6" placeholder="CARD-0001-XXXX-YYYY&#10;CARD-0002-AAAA-BBBB"></textarea>' +
@@ -2049,9 +2189,14 @@ function renderOrders(){
     const skuLine = o.sku_name ? '<div class="muted" style="font-size:11px">' + esc(o.sku_name) + '</div>' : '';
     const userLine = o.username ? '<div style="font-size:11px">@' + esc(o.username) + '</div>' : '';
     const balanceLine = o.balance_used > 0 ? '<div class="muted" style="font-size:11px">余额抵扣¥' + yuan(o.balance_used) + '</div>' : '';
+    const srcTag = o.source === 'luban' ? ' <span class="badge src-luban">接码</span>' : '';
     let actionBtns = '';
     if (o.status === 'pending_review'){
-      actionBtns += '<button class="btn sm primary" onclick="approveOrder(\'' + esc(o.order_no) + '\')">发货</button> <button class="btn sm danger" onclick="rejectOrder(\'' + esc(o.order_no) + '\')">驳回</button> ';
+      actionBtns += '<button class="btn sm primary" onclick="approveOrder(\'' + esc(o.order_no) + '\')">处理</button> <button class="btn sm danger" onclick="rejectOrder(\'' + esc(o.order_no) + '\')">驳回</button> ';
+    }
+    if (o.status === 'waiting_sms' || o.status === 'processing'){
+      actionBtns += '<button class="btn sm ghost" onclick="lubanManualCheck(\'' + esc(o.order_no) + '\')">查短信</button> ';
+      actionBtns += '<button class="btn sm danger" onclick="lubanRelease(\'' + esc(o.order_no) + '\')">释放</button> ';
     }
     if (o.status === 'out_of_stock'){
       actionBtns += '<button class="btn sm primary" onclick="redeliver(\'' + esc(o.order_no) + '\')">补发</button> ';
@@ -2062,7 +2207,7 @@ function renderOrders(){
     actionBtns += '<button class="btn sm danger" onclick="deleteOrder(\'' + esc(o.order_no) + '\')" title="删除此订单">🗑</button>';
     return '<tr>' +
       '<td class="mono" style="font-size:12px">' + esc(o.order_no) + '</td>' +
-      '<td>' + esc(o.product_name) + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
+      '<td>' + esc(o.product_name) + srcTag + skuLine + '<div class="muted" style="font-size:12px">×' + o.quantity + '</div></td>' +
       '<td>¥' + yuan(o.amount) + balanceLine + '</td>' +
       '<td>' + (o.pay_method === 'balance' ? '余额' : (o.pay_method === 'alipay' ? '支付宝' : 'USDT')) + '</td>' +
       '<td>' + rpCell + '</td>' +
@@ -2078,7 +2223,7 @@ function renderOrders(){
       '<h2 style="margin:0">订单列表（' + orders.length + '）</h2>' +
       '<div class="row" style="gap:8px">' + clearBtn + '<button class="btn ghost sm" onclick="switchTab(\'orders\')">刷新</button></div>' +
     '</div>' +
-    '<p class="muted" style="font-size:12px;margin:10px 0 0">💡 点击订单右侧的 🗑 可单独删除；「清理已发货」会批量删除所有已发货和已驳回的订单（待支付和待审核订单会保留）。</p>' +
+    '<p class="muted" style="font-size:12px;margin:10px 0 0">💡 点击订单右侧的 🗑 可单独删除；「清理已发货」批量删除已发货和已驳回订单。</p>' +
     '<div style="overflow-x:auto;margin-top:16px"><table>' +
       '<thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>红包口令</th><th>暗号</th><th>状态</th><th>时间</th><th></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>' +
@@ -2099,7 +2244,7 @@ function clearCompletedOrders(){
   const db = loadDB();
   const done = db.orders.filter(function(o){ return o.status === 'delivered' || o.status === 'rejected'; });
   if (!done.length){ toast('没有可清理的订单', 'error'); return; }
-  if (!confirm('确定批量删除 ' + done.length + ' 条「已发货/已驳回」订单？\n\n待支付、待审核的订单会保留。\n删除后不可恢复。')) return;
+  if (!confirm('确定批量删除 ' + done.length + ' 条「已发货/已驳回」订单？\n\n待支付、待审核、接码中的订单会保留。\n删除后不可恢复。')) return;
   db.orders = db.orders.filter(function(o){ return o.status !== 'delivered' && o.status !== 'rejected'; });
   saveDB(db);
   toast('已清理 ' + done.length + ' 条订单', 'success');
@@ -2233,7 +2378,446 @@ function deleteMember(username){
   saveDB(db);
   toast('会员已删除','success');
   renderMembers();
-}function setTgColorPreset(color){
+}/* ==================================================================
+   LubanSms 接码
+   ================================================================== */
+
+function renderLuban(){
+  var db = loadDB();
+  var lubanProducts = db.products.filter(function(p){ return p.source === 'luban'; });
+  var reqCount = db.orders.filter(function(o){ return o.source === 'luban' && (o.status === 'waiting_sms' || o.status === 'processing'); }).length;
+  var cfg = getConfig(db);
+
+  $('#tab-body').innerHTML = '<div class="card panel">' +
+      '<div class="spread" style="flex-wrap:wrap;gap:8px">' +
+        '<h2 style="margin:0">📱 LubanSms 接码</h2>' +
+        '<div class="row" style="gap:8px;flex-wrap:wrap">' +
+          '<button class="btn ghost" onclick="lubanShowBalance()">💰 查询余额</button>' +
+          '<button class="btn primary" onclick="lubanSyncServices()">🔄 同步验证码服务</button>' +
+          '<button class="btn ghost" onclick="lubanClearAll()">清空商品</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="luban-hint">' +
+        '<b>💡 说明：</b>点击「同步验证码服务」拉取 LubanSms 全部可接码服务（含国家、成本价）。' +
+        '系统自动加价 <b>30%</b> 后生成商品。客户下单后进入实时接码会话，号码和验证码会自动更新。' +
+        '<br><b>已上架：</b>' + lubanProducts.length + ' 个 ｜ <b>进行中会话：</b>' + reqCount + ' 个' +
+        '<br><b>⚠️ 若同步报错，可能是路径名不对，请联系 LubanSms 客服确认准确路径</b>' +
+      '</div>' +
+      '<div id="luban-balance-box"></div>' +
+    '</div>' +
+    '<div class="card panel">' +
+      '<h2>接码商品列表（' + lubanProducts.length + '）</h2>' +
+      (lubanProducts.length > 0 ? '<div style="overflow-x:auto"><table>' +
+        '<thead><tr><th>服务</th><th>国家</th><th>成本</th><th>售价</th><th>类型</th><th>状态</th><th></th></tr></thead>' +
+        '<tbody>' + lubanProducts.map(function(p){
+          var nameShow = p.name.length > 35 ? p.name.slice(0, 35) + '…' : p.name;
+          return '<tr>' +
+            '<td><b>' + esc(nameShow) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.luban_service_id) + '</div></td>' +
+            '<td>' + esc(p.luban_country || '-') + '</td>' +
+            '<td class="muted">$' + (p.luban_origin_cost || 0) + '</td>' +
+            '<td style="font-weight:700;color:#e11d48">¥' + yuan(p.price) + '</td>' +
+            '<td><span class="badge cat">' + (p.luban_type === 'common' ? '通用' : '验证码') + '</span></td>' +
+            '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
+            '<td style="text-align:right;white-space:nowrap">' +
+              '<button class="btn sm ghost" onclick="lubanToggleProduct(' + p.id + ')">' + (p.active ? '下架' : '上架') + '</button> ' +
+              '<button class="btn sm danger" onclick="deleteProduct(' + p.id + ')">删除</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table></div>'
+        : '<div class="empty">还没有同步任何接码服务，点击上方「同步验证码服务」开始</div>') +
+    '</div>';
+}
+
+function lubanShowBalance(){
+  toast('正在查询…');
+  fetch('/api/luban?action=balance')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var box = $('#luban-balance-box');
+      if (d.code === 0 && d.balance !== undefined) {
+        box.innerHTML = '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:16px 20px">' +
+          '<div class="spread"><div><div class="muted" style="font-size:12px">LubanSms 账户余额</div>' +
+          '<div style="font-size:28px;font-weight:800;color:#15803d">$' + d.balance + '</div></div>' +
+          '<div class="muted" style="font-size:12px">约 ¥' + (parseFloat(d.balance) * 7.2).toFixed(2) + '</div></div></div>';
+        toast('余额：$' + d.balance, 'success');
+      } else {
+        box.innerHTML = '<div class="card panel" style="background:#fee2e2;border-color:#fca5a5;padding:16px 20px">' +
+          '❌ 查询失败：' + esc(d.msg || '未知错误') + '（可能是路径名不对）</div>';
+        toast('查询失败：' + (d.msg || ''), 'error');
+      }
+    })
+    .catch(function(e){ toast('网络错误：' + e.message, 'error'); });
+}
+
+function lubanSyncServices(){
+  if (!confirm('将从 LubanSms 拉取服务列表并加价 30% 上架，已存在的会更新价格。继续？')) return;
+  toast('正在拉取服务列表…');
+
+  var allServices = [];
+  var page = 1;
+  var MAX_PAGES = 10;
+
+  function fetchPage(){
+    return fetch('/api/luban?action=services&language=zh&page=' + page)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.code !== 0) throw new Error(d.msg || 'LubanSms 拉取失败（可能路径名不对）');
+        var list = Array.isArray(d.msg) ? d.msg : [];
+        allServices = allServices.concat(list);
+        if (list.length >= 20 && page < MAX_PAGES) {
+          page++;
+          return fetchPage();
+        }
+        return null;
+      });
+  }
+
+  fetchPage().then(function(){
+    if (!allServices.length) {
+      toast('服务列表为空，可能路径名不对，请联系客服确认', 'error');
+      return;
+    }
+
+    var db = loadDB();
+    var added = 0, updated = 0;
+
+    allServices.forEach(function(s){
+      // 后端已返回加价后的 cost，origin_cost 是原始成本
+      var origin = parseFloat(s.origin_cost);
+      if (isNaN(origin)) origin = (parseFloat(s.cost) || 0) / 1.3;
+      var ourPriceFen = Math.round(origin * 7.2 * 100); // USD → CNY
+
+      var exist = null;
+      for (var i = 0; i < db.products.length; i++){
+        if (db.products[i].source === 'luban' && db.products[i].luban_service_id === String(s.service_id)){
+          exist = db.products[i];
+          break;
+        }
+      }
+
+      if (exist){
+        exist.price = ourPriceFen;
+        exist.luban_origin_cost = origin.toFixed(2);
+        exist.name = '[接码] ' + s.service_name + ' · ' + (s.country_name_zh || s.country_name_en || '');
+        updated++;
+      } else {
+        db.seq.product++;
+        db.products.push({
+          id: db.seq.product,
+          name: '[接码] ' + s.service_name + ' · ' + (s.country_name_zh || s.country_name_en || ''),
+          price: ourPriceFen,
+          description: '国家：' + (s.country_name_zh || s.country_name_en || '') + ' ｜ 服务：' + s.service_name + ' ｜ 下单后自动分配号码',
+          note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放',
+          category_id: 0,
+          active: true,
+          created_at: now(),
+          skus: [],
+          source: 'luban',
+          luban_type: 'sms',
+          luban_service_id: String(s.service_id),
+          luban_service_name: s.service_name,
+          luban_country: s.country_name_zh || s.country_name_en || '',
+          luban_origin_cost: origin.toFixed(2)
+        });
+        added++;
+      }
+    });
+
+    saveDB(db);
+    toast('同步完成：新增 ' + added + ' 个，更新 ' + updated + ' 个', 'success');
+    renderLuban();
+  }).catch(function(e){
+    toast('同步失败：' + e.message, 'error');
+  });
+}
+
+function lubanToggleProduct(id){
+  var db = loadDB();
+  for (var i = 0; i < db.products.length; i++){
+    if (db.products[i].id === id){
+      db.products[i].active = !db.products[i].active;
+      saveDB(db);
+      toast(db.products[i].active ? '已上架' : '已下架', 'success');
+      renderLuban();
+      return;
+    }
+  }
+}
+
+function lubanClearAll(){
+  var count = loadDB().products.filter(function(p){ return p.source === 'luban'; }).length;
+  if (count === 0){ toast('没有可清空的商品', 'error'); return; }
+  if (!confirm('确定清空全部 ' + count + ' 个接码商品？')) return;
+  var db = loadDB();
+  db.products = db.products.filter(function(p){ return p.source !== 'luban'; });
+  saveDB(db);
+  toast('已清空', 'success');
+  renderLuban();
+}
+
+/* ---------- 接码会话核心逻辑 ---------- */
+
+function lubanStartSession(orderNo){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o) return;
+
+  o.status = 'waiting_sms';
+  o.luban_started_at = Date.now();
+  o.luban_deadline = Date.now() + 20 * 60 * 1000;
+  saveDB(db);
+
+  var url = '/api/luban?action=request_number&service_id=' + encodeURIComponent(o.luban_service_id);
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (!o2) return;
+
+      if (d.code === 0 && d.number) {
+        o2.luban_number = d.number;
+        o2.luban_request_id = String(d.request_id);
+        o2.luban_stage = 'waiting';
+        saveDB(db2);
+        toast('号码已分配：' + d.number, 'success');
+        lubanPollSms(orderNo, 0);
+      } else {
+        o2.status = 'luban_error';
+        o2.luban_error = d.msg || '请求号码失败';
+        saveDB(db2);
+        toast('请求号码失败：' + (d.msg || ''), 'error');
+      }
+      if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+    })
+    .catch(function(e){
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (o2) {
+        o2.status = 'luban_error';
+        o2.luban_error = '网络错误：' + e.message;
+        saveDB(db2);
+      }
+      toast('网络错误：' + e.message, 'error');
+      if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+    });
+}
+
+function lubanPollSms(orderNo, attempt){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o || !o.luban_request_id) return;
+  if (o.status !== 'waiting_sms') return;
+  if (o.luban_deadline && Date.now() > o.luban_deadline) {
+    lubanAutoRelease(orderNo, '接码超时（20分钟）');
+    return;
+  }
+  if (attempt > 240) return;
+
+  var url = '/api/luban?action=get_sms&request_id=' + encodeURIComponent(o.luban_request_id);
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.code === 0 && d.msg === 'success' && d.sms_code) {
+        var db2 = loadDB();
+        var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+        if (!o2) return;
+        o2.luban_code = d.sms_code;
+        o2.luban_stage = 'received';
+        o2.status = 'delivered';
+        o2.delivered_at = now();
+        saveDB(db2);
+        toast('🎉 收到验证码：' + d.sms_code, 'success');
+        if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+        return;
+      }
+      setTimeout(function(){ lubanPollSms(orderNo, attempt + 1); }, 5000);
+    })
+    .catch(function(){
+      setTimeout(function(){ lubanPollSms(orderNo, attempt + 1); }, 5000);
+    });
+}
+
+function lubanStartCommon(orderNo, phone, keyword){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o) return;
+
+  o.status = 'waiting_sms';
+  o.luban_type = 'common';
+  o.luban_keyword = keyword || '';
+  o.luban_started_at = Date.now();
+  o.luban_deadline = Date.now() + 20 * 60 * 1000;
+  saveDB(db);
+
+  var url = '/api/luban?action=common_request' + (phone ? '&phone=' + encodeURIComponent(phone) : '');
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (!o2) return;
+      if (d.code === 0 && d.phone) {
+        o2.luban_number = d.phone;
+        o2.luban_stage = 'waiting';
+        saveDB(db2);
+        toast('号码已分配：' + d.phone, 'success');
+        lubanCommonPoll(orderNo, 0);
+      } else {
+        o2.status = 'luban_error';
+        o2.luban_error = d.msg || '请求号码失败';
+        saveDB(db2);
+        toast('请求号码失败：' + (d.msg || ''), 'error');
+      }
+      if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+    })
+    .catch(function(e){
+      toast('网络错误：' + e.message, 'error');
+    });
+}
+
+function lubanCommonPoll(orderNo, attempt){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o || !o.luban_number) return;
+  if (o.status !== 'waiting_sms') return;
+  if (o.luban_deadline && Date.now() > o.luban_deadline) {
+    lubanAutoRelease(orderNo, '接码超时（20分钟）');
+    return;
+  }
+  if (attempt > 240) return;
+
+  var url = '/api/luban?action=common_get_sms&phone=' + encodeURIComponent(o.luban_number) +
+    '&keyword=' + encodeURIComponent(o.luban_keyword || '');
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.code === 0 && d.msg && String(d.msg).length > 5 && d.msg !== 'wait') {
+        var db2 = loadDB();
+        var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+        if (!o2) return;
+        o2.luban_code = String(d.msg);
+        o2.luban_stage = 'received';
+        o2.status = 'delivered';
+        o2.delivered_at = now();
+        saveDB(db2);
+        toast('🎉 收到短信！', 'success');
+        if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+        return;
+      }
+      setTimeout(function(){ lubanCommonPoll(orderNo, attempt + 1); }, 5000);
+    })
+    .catch(function(){
+      setTimeout(function(){ lubanCommonPoll(orderNo, attempt + 1); }, 5000);
+    });
+}
+
+function lubanAutoRelease(orderNo, reason){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o) return;
+  o.status = 'rejected';
+  o.luban_error = reason;
+  o.luban_released_at = now();
+  saveDB(db);
+  toast('接码超时，号码已自动释放', 'error');
+  if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+}
+
+function lubanRelease(orderNo){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o) return;
+  if (!confirm('确定释放号码？释放后无法再接收短信。')) return;
+
+  var url = o.luban_type === 'common'
+    ? '/api/luban?action=common_release&phone=' + encodeURIComponent(o.luban_number)
+    : '/api/luban?action=change_status&request_id=' + encodeURIComponent(o.luban_request_id) + '&status=reject';
+
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (!o2) return;
+      o2.status = 'rejected';
+      o2.luban_released_at = now();
+      o2.luban_error = '客户主动释放';
+      saveDB(db2);
+      toast('号码已释放', 'success');
+      if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+    })
+    .catch(function(e){ toast('网络错误：' + e.message, 'error'); });
+}
+
+function lubanManualCheck(orderNo){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o) return;
+  toast('正在检查…');
+
+  var url = o.luban_type === 'common'
+    ? '/api/luban?action=common_get_sms&phone=' + encodeURIComponent(o.luban_number) + '&keyword=' + encodeURIComponent(o.luban_keyword || '')
+    : '/api/luban?action=get_sms&request_id=' + encodeURIComponent(o.luban_request_id);
+
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (!o2) return;
+      if (d.code === 0 && d.msg === 'success' && d.sms_code) {
+        o2.luban_code = d.sms_code;
+        o2.status = 'delivered';
+        o2.delivered_at = now();
+        saveDB(db2);
+        toast('🎉 收到验证码：' + d.sms_code, 'success');
+      } else if (o2.luban_type === 'common' && d.code === 0 && d.msg && String(d.msg).length > 5 && d.msg !== 'wait') {
+        o2.luban_code = String(d.msg);
+        o2.status = 'delivered';
+        o2.delivered_at = now();
+        saveDB(db2);
+        toast('🎉 收到短信！', 'success');
+      } else {
+        toast('暂未收到短信，请稍后重试', 'error');
+      }
+      if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+    })
+    .catch(function(e){ toast('网络错误：' + e.message, 'error'); });
+}
+
+function lubanReactivate(orderNo){
+  var db = loadDB();
+  var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+  if (!o) return;
+  if (!confirm('重新激活会再次产生费用（已加价 30%），确定继续？')) return;
+
+  toast('正在重新激活…');
+  fetch('/api/luban?action=reactivate&request_id=' + encodeURIComponent(o.luban_request_id))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (!o2) return;
+      if (d.code === 0) {
+        o2.luban_number = d.number || o2.luban_number;
+        o2.luban_request_id = String(d.request_id || o2.luban_request_id);
+        o2.status = 'waiting_sms';
+        o2.luban_stage = 'waiting';
+        o2.luban_deadline = Date.now() + 20 * 60 * 1000;
+        saveDB(db2);
+        toast('已重新激活：' + o2.luban_number, 'success');
+        lubanPollSms(orderNo, 0);
+      } else {
+        toast('激活失败：' + (d.msg || ''), 'error');
+      }
+      if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
+    })
+    .catch(function(e){ toast('网络错误：' + e.message, 'error'); });
+}
+
+/* ---------------- 设置 ---------------- */
+function setTgColorPreset(color){
   const input = $('#cfg-tg-color');
   if (input) input.value = color;
   document.documentElement.style.setProperty('--tg-btn-color', color);
@@ -2267,35 +2851,27 @@ function renderSettings(){
           '<input type="color" id="cfg-tg-color" value="' + esc(cfg.tg_btn_color || '#0088cc') + '" style="width:60px;height:42px;padding:2px;cursor:pointer;border-radius:8px;border:1px solid var(--line)">' +
           '<div class="color-swatches">' + colorSwatches + '</div>' +
         '</div>' +
-        '<div class="muted" style="font-size:12px;margin-top:8px">选择颜色后，所有客服按钮（顶部导航 + 右下角悬浮球 + 首页底部）都会同步变色。</div>' +
       '</label>' +
     '</div>' +
 
     '<div class="card panel" style="max-width:620px">' +
       '<h2>🔔 订单 TG 通知</h2>' +
       '<div class="tg-hint">' +
-        '<b>作用：</b>客户提交订单后，自动发送消息到你的 TG，让你第一时间去审核。<br>' +
-        '<b>配置步骤：</b>' +
-        '<ol style="margin:6px 0 0;padding-left:20px">' +
-          '<li>TG 里找 <code>@BotFather</code> → 发 <code>/newbot</code> → 按提示创建，拿到 <b>Bot Token</b></li>' +
-          '<li>把 bot 拉进一个群（或直接和 bot 私聊）</li>' +
-          '<li>浏览器访问 <code>https://api.telegram.org/bot你的Token/getUpdates</code>，找到 <code>chat.id</code> 那个数字</li>' +
-          '<li>把 Token 和 Chat ID 填到下方，勾选启用</li>' +
-        '</ol>' +
+        '<b>作用：</b>客户提交订单后，自动发送消息到你的 TG。<br>' +
+        '<b>配置：</b>@BotFather 创建 bot 拿 Token，把 bot 拉群，访问 https://api.telegram.org/bot你的Token/getUpdates 拿 chat.id' +
       '</div>' +
       '<label class="field">' +
         '<span><input type="checkbox" id="cfg-tg-notify" ' + (cfg.tg_notify_enabled ? 'checked' : '') + '> 启用新订单 TG 通知</span>' +
       '</label>' +
-      '<label class="field"><span>Bot Token（从 BotFather 获取）</span>' +
+      '<label class="field"><span>Bot Token</span>' +
         '<input id="cfg-tg-bot-token" value="' + esc(cfg.tg_bot_token || '') + '" placeholder="123456:ABC-DEF..."></label>' +
-      '<label class="field"><span>Chat ID（数字，可能是负数）</span>' +
+      '<label class="field"><span>Chat ID</span>' +
         '<input id="cfg-tg-chat-id" value="' + esc(cfg.tg_chat_id || '') + '" placeholder="-1001234567890 或 123456789"></label>' +
       '<button class="btn ghost sm" onclick="testTgNotify()">🧪 发送测试消息</button>' +
     '</div>' +
 
     '<div class="card panel" style="max-width:620px">' +
       '<h2>🔐 管理密码</h2>' +
-      '<p class="muted" style="font-size:13px;margin-top:-8px">修改后会同步到所有设备。忘记密码时将无法在后台修改，请谨慎操作。</p>' +
       '<label class="field"><span>当前管理密码</span>' +
         '<input id="pwd-old" type="password" placeholder="请输入当前密码"></label>' +
       '<label class="field"><span>新密码（至少 6 位）</span>' +
@@ -2320,19 +2896,16 @@ function renderSettings(){
       '</label>' +
       '<label class="field"><span>收款方式</span>' +
         '<select id="cfg-alipay-mode">' +
-          '<option value="redpacket" ' + (alipayMode === 'redpacket' ? 'selected' : '') + '>口令红包（推荐，无需上传收款码）</option>' +
-          '<option value="qr" ' + (alipayMode === 'qr' ? 'selected' : '') + '>收款码（旧方式，需上传图片）</option>' +
+          '<option value="redpacket" ' + (alipayMode === 'redpacket' ? 'selected' : '') + '>口令红包（推荐）</option>' +
+          '<option value="qr" ' + (alipayMode === 'qr' ? 'selected' : '') + '>收款码（旧方式）</option>' +
         '</select>' +
       '</label>' +
       '<div id="rp-settings" style="' + rpStyle + '">' +
-        '<div style="background:#fff5f5;border:1px solid #fc8181;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#742a2a;line-height:1.7">' +
-          '<b>口令红包原理：</b>每笔订单生成一个唯一口令，客户在支付宝发红包时输入该口令，你在支付宝凭口令领取。' +
-        '</div>' +
-        '<label class="field"><span>口令前缀（2-6 位字母，会拼在口令开头）</span>' +
+        '<label class="field"><span>口令前缀（2-6 位字母）</span>' +
           '<input id="cfg-rp-prefix" value="' + esc(cfg.pay_alipay_redpacket_prefix || 'YFK') + '" maxlength="6" placeholder="YFK"></label>' +
       '</div>' +
       '<div id="qr-settings" style="' + qrStyle + '">' +
-        '<label class="field"><span>收款码图片 URL（或从下方上传）</span>' +
+        '<label class="field"><span>收款码图片 URL</span>' +
           '<input id="cfg-alipay-qr" value="' + esc(cfg.pay_alipay_qr) + '" placeholder="https://..."></label>' +
         '<label class="field"><span>上传收款码图片</span>' +
           '<input type="file" id="cfg-alipay-file" accept="image/*"></label>' +
@@ -2340,21 +2913,17 @@ function renderSettings(){
       '<label class="field"><span>支付提示</span>' +
         '<input id="cfg-alipay-note" value="' + esc(cfg.pay_alipay_note) + '"></label>' +
 
-      '<h3 style="font-size:14px;margin:20px 0 10px">🪙 USDT（自动检测）</h3>' +
+      '<h3 style="font-size:14px;margin:20px 0 10px">🪙 USDT</h3>' +
       '<label class="field">' +
         '<span><input type="checkbox" id="cfg-usdt-enabled" ' + (cfg.pay_usdt_enabled !== false ? 'checked' : '') + '> 启用 USDT 支付</span>' +
       '</label>' +
-      '<div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1e40af;line-height:1.6">' +
-        'USDT 订单<b>自动检测</b>：系统每 30 秒查一次链上转账，到账后自动发货 + TG 通知。<br>' +
-        '建议去 <a href="https://www.trongrid.io" target="_blank" style="color:#1e40af;text-decoration:underline">trongrid.io</a> 注册免费 API Key，在 Cloudflare 环境变量加 <code>TRONGRID_API_KEY</code>。' +
-      '</div>' +
       '<label class="field"><span>收款地址</span>' +
         '<input id="cfg-usdt-address" value="' + esc(cfg.pay_usdt_address) + '" placeholder="TRC20 地址"></label>' +
       '<label class="field"><span>网络</span>' +
         '<input id="cfg-usdt-network" value="' + esc(cfg.pay_usdt_network) + '" placeholder="TRC20 / ERC20"></label>' +
       '<label class="field"><span>汇率（1 USDT = ? CNY）</span>' +
         '<input id="cfg-usdt-rate" type="number" step="0.01" value="' + cfg.pay_usdt_rate + '"></label>' +
-      '<label class="field"><span>USDT 收款码图片 URL（或从下方上传）</span>' +
+      '<label class="field"><span>USDT 收款码图片 URL</span>' +
         '<input id="cfg-usdt-qr" value="' + esc(cfg.pay_usdt_qr) + '" placeholder="https://..."></label>' +
       '<label class="field"><span>上传 USDT 收款码图片</span>' +
         '<input type="file" id="cfg-usdt-file" accept="image/*"></label>' +
@@ -2451,7 +3020,7 @@ function saveSettings(){
     pay_alipay_mode: alipayMode,
     pay_alipay_redpacket_prefix: ($('#cfg-rp-prefix').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'YFK').slice(0, 6),
     pay_alipay_qr: $('#cfg-alipay-qr') ? $('#cfg-alipay-qr').value.trim() : (db.config.pay_alipay_qr || ''),
-    pay_alipay_note: $('#cfg-alipay-note').value.trim() || '请使用支付宝扫码支付，支付后点击下方按钮',
+    pay_alipay_note: $('#cfg-alipay-note').value.trim() || '请使用支付宝扫码支付，点击下方按钮',
     pay_usdt_enabled: $('#cfg-usdt-enabled').checked,
     pay_usdt_address: $('#cfg-usdt-address').value.trim(),
     pay_usdt_network: $('#cfg-usdt-network').value.trim() || 'TRC20',
@@ -2523,7 +3092,21 @@ window.loadDB = loadDB;
 window.saveDB = saveDB;
 window.route = route;
 window.applySiteConfig = applySiteConfig;
-</script><!-- ================= 多设备同步补丁 ================= -->
+window.renderLuban = renderLuban;
+window.lubanShowBalance = lubanShowBalance;
+window.lubanSyncServices = lubanSyncServices;
+window.lubanToggleProduct = lubanToggleProduct;
+window.lubanClearAll = lubanClearAll;
+window.lubanStartSession = lubanStartSession;
+window.lubanStartCommon = lubanStartCommon;
+window.lubanPollSms = lubanPollSms;
+window.lubanCommonPoll = lubanCommonPoll;
+window.lubanRelease = lubanRelease;
+window.lubanManualCheck = lubanManualCheck;
+window.lubanReactivate = lubanReactivate;
+</script>
+
+<!-- ================= 多设备同步补丁 ================= -->
 <script>
 (function(){
   var API = '/api/state';

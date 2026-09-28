@@ -6127,5 +6127,154 @@ window.lubanStartCommonNew = function(orderNo, params){
     }
 })();
 </script>
+<!-- 云发卡平台 - 终极最终版（挂载到7×24下方，绝对不闪烁） -->
+<script>
+(function() {
+    // 1. 注入样式，打造舒服的排版
+    var style = document.createElement('style');
+    style.innerHTML = `
+        #yf-banner-sms-btn {
+            margin-top: 16px !important;
+            background: #ffffff !important;
+            border-radius: 10px !important;
+            padding: 12px 20px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            cursor: pointer !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+            transition: all 0.2s ease !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            border: 1px solid rgba(255, 255, 255, 0.8) !important;
+        }
+        #yf-banner-sms-btn:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15) !important;
+            background: #f8f7ff !important;
+        }
+        .yf-sms-btn-left {
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            color: #8463f6 !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        .yf-sms-btn-right {
+            font-size: 13px !important;
+            color: #9ca3af !important;
+        }
+    `;
+    document.head.appendChild(style);
+
+    // 2. 清理之前放错位置的按钮，防止冲突
+    function cleanOldButtons() {
+        var old1 = document.getElementById('yf-global-cate-item');
+        var old2 = document.getElementById('yf-global-float-btn');
+        if (old1 && old1.parentNode) old1.parentNode.removeChild(old1);
+        if (old2 && old2.parentNode) old2.parentNode.removeChild(old2);
+    }
+
+    var topGlobalBtn = null;
+
+    function injectBannerButton() {
+        cleanOldButtons();
+
+        // 如果按钮已经存在，跳过，绝不重复插入（防闪烁）
+        if (document.getElementById('yf-banner-sms-btn')) return;
+
+        var allEls = document.querySelectorAll('div, span, p, h1, h2, h3');
+
+        // 寻找顶部原有的“全球接码”按钮（用于绑定点击事件）
+        if (!topGlobalBtn) {
+            for (var i = 0; i < allEls.length; i++) {
+                if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                    topGlobalBtn = allEls[i];
+                    topGlobalBtn.style.display = 'none';
+                    break;
+                }
+            }
+        }
+        if (!topGlobalBtn) return;
+
+        // 寻找包含“7×24 小时全自动发货”的文本元素
+        var targetTextEl = null;
+        for (var j = 0; j < allEls.length; j++) {
+            if (allEls[j].children.length === 0 && allEls[j].innerText && allEls[j].innerText.includes('7×24')) {
+                targetTextEl = allEls[j];
+                break;
+            }
+        }
+        if (!targetTextEl) return;
+
+        // 构建全新的按钮
+        var btn = document.createElement('div');
+        btn.id = 'yf-banner-sms-btn';
+        btn.innerHTML = `
+            <span class="yf-sms-btn-left">🌐 全球接码</span>
+            <span class="yf-sms-btn-right">实时搜索 · 自动分配号码 →</span>
+        `;
+
+        btn.onclick = function(e) {
+            e.stopPropagation();
+            topGlobalBtn.click();
+        };
+
+        // 将其插入到“7×24”文本的后面（即下方）
+        targetTextEl.parentNode.insertBefore(btn, targetTextEl.nextSibling);
+    }
+
+    // 3. 使用 MutationObserver 安全监听（只在按钮被意外删除时才重建）
+    var observer = new MutationObserver(function() {
+        injectBannerButton();
+    });
+
+    function start() {
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+            document.addEventListener('DOMContentLoaded', start);
+            return;
+        }
+        injectBannerButton(); // 立即执行一次
+    }
+    start();
+
+    // 4. 安卓手机右下角客服图标修复
+    if (/android/i.test(navigator.userAgent)) {
+        setInterval(function() {
+            var allEls = document.querySelectorAll('div, span, a, button, li');
+            for (var k = 0; k < allEls.length; k++) {
+                var cTxt = allEls[k].innerText ? allEls[k].innerText.trim() : '';
+                if (cTxt === '客服' && allEls[k].children.length === 0) {
+                    var cp = allEls[k].parentNode;
+                    var isFloat = false;
+                    while (cp && cp !== document.body) {
+                        if (window.getComputedStyle(cp).position === 'fixed') { isFloat = true; break; }
+                        cp = cp.parentNode;
+                    }
+                    if (isFloat || allEls[k].style.position === 'fixed') {
+                        var btn2 = allEls[k];
+                        btn2.style.setProperty('position', 'fixed', 'important');
+                        btn2.style.setProperty('right', '20px', 'important');
+                        btn2.style.setProperty('bottom', '80px', 'important');
+                        btn2.style.setProperty('display', 'flex', 'important');
+                        btn2.style.setProperty('justify-content', 'center', 'important');
+                        btn2.style.setProperty('align-items', 'center', 'important');
+                        btn2.style.setProperty('width', '50px', 'important');
+                        btn2.style.setProperty('height', '50px', 'important');
+                        btn2.style.setProperty('border-radius', '50%', 'important');
+                        btn2.style.setProperty('background-color', '#ef4444', 'important');
+                        btn2.style.setProperty('color', '#ffffff', 'important');
+                        btn2.style.setProperty('z-index', '999999', 'important');
+                        btn2.style.setProperty('box-shadow', '0 4px 12px rgba(239, 68, 68, 0.4)', 'important');
+                        break;
+                    }
+                }
+            }
+        }, 2000);
+    }
+})();
+</script>
 </body>
 </html>

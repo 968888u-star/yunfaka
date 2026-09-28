@@ -7116,5 +7116,102 @@ window.lubanStartCommonNew = function(orderNo, params){
     }, 2000); 
 })();
 </script>
+<!-- 云发卡平台 - 彻底修复版（拒绝误删，强制清理，完美排版） -->
+<script>
+(function() {
+    setTimeout(function() {
+        // 1. 隐藏顶部导航栏原生的“全球接码”
+        var allEls = document.querySelectorAll('div, span, a, button, li, p');
+        var topGlobalBtn = null;
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                topGlobalBtn = allEls[i];
+                topGlobalBtn.style.display = 'none';
+                break;
+            }
+        }
+
+        // 2. 彻底清理紫色 Banner 内部错误的白条（暴力检测+删除）
+        // 先找到包含“付款即发货”的 Banner
+        var bannerEl = null;
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].innerText && allEls[i].innerText.includes('付款即发货') && allEls[i].innerText.length < 200) {
+                bannerEl = allEls[i];
+                break;
+            }
+        }
+
+        if (bannerEl) {
+            // 查找 Banner 内所有包含“全球接码”的子元素并删除
+            var bannerChildren = bannerEl.querySelectorAll('div, span');
+            for (var j = 0; j < bannerChildren.length; j++) {
+                var child = bannerChildren[j];
+                if (child.id === 'yf-final-card-v9') continue; // 不删自己
+                if (child.innerText && child.innerText.includes('全球接码') && child.innerText.includes('实时搜索')) {
+                    if (child.parentNode) child.parentNode.removeChild(child);
+                }
+            }
+        }
+
+        // 如果顶部入口不存在，说明页面结构变了，直接终止，绝不乱动
+        if (!topGlobalBtn) return;
+
+        // 3. 找“注册会员”卡片
+        var regCard = null;
+        for (var k = 0; k < allEls.length; k++) {
+            var txt = allEls[k].innerText || '';
+            if (txt.includes('注册会员') && txt.includes('享余额支付') && txt.length < 100) {
+                var p = allEls[k];
+                while (p && p !== document.body) {
+                    var style = window.getComputedStyle(p);
+                    if (style.borderRadius !== '0px' && style.boxShadow !== 'none') {
+                        regCard = p;
+                        break;
+                    }
+                    p = p.parentNode;
+                }
+                if (regCard) break;
+            }
+        }
+        if (!regCard || !regCard.parentNode) return;
+
+        // 4. 删除之前所有版本可能留下的残缺卡片
+        var oldCards = document.querySelectorAll('#yf-sms-entry-card, #yf-sms-entry-card-final, .yf-sms-card-wrap');
+        for (var m = 0; m < oldCards.length; m++) {
+            if (oldCards[m].parentNode) oldCards[m].parentNode.removeChild(oldCards[m]);
+        }
+
+        // 5. 全新构建完美的卡片（内联样式，绝不冲突）
+        var card = document.createElement('div');
+        card.id = 'yf-final-card-v9';
+        // 强制定义卡片样式，完全对齐“注册会员”
+        card.style.cssText = 'margin-top:12px; background:#fff; border-radius:12px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,0.03); border:1px solid #f3f4f6; cursor:pointer; box-sizing:border-box; width:100%; transition:all 0.2s ease;';
+
+        // 强制定义左侧图标、标题、副标题、右侧按钮的样式，全部内联
+        card.innerHTML = `
+            <div style="display:flex; align-items:center; flex:1;">
+                <div style="width:36px; height:36px; background:#f3e8ff; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; margin-right:12px; flex-shrink:0;">🌐</div>
+                <div style="display:flex; flex-direction:column;">
+                    <div style="font-size:15px; font-weight:600; color:#1f2937; margin-bottom:2px;">全球接码</div>
+                    <div style="font-size:12px; color:#9ca3af;">实时搜索 · 自动分配号码</div>
+                </div>
+            </div>
+            <div style="background:#8463f6; color:#fff; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:500; white-space:nowrap; flex-shrink:0; margin-left:10px; box-shadow:0 2px 6px rgba(132,99,246,0.2);">立即接码</div>
+        `;
+
+        // 绑定点击事件
+        card.onclick = function(e) {
+            e.stopPropagation();
+            topGlobalBtn.click();
+        };
+
+        // 插入到“注册会员”卡片正下方
+        regCard.parentNode.insertBefore(card, regCard.nextSibling);
+
+        console.log('云发卡平台：全球接码入口重构完成！');
+
+    }, 2000); // 只执行一次
+})();
+</script>
 </body>
 </html>

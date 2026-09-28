@@ -5719,5 +5719,133 @@ window.lubanStartCommonNew = function(orderNo, params){
     setTimeout(injectGlobalBtn, 100);
 })();
 </script>
+<!-- 云发卡平台 - 彻底解决闪烁消失（挂载到外层容器） -->
+<script>
+(function() {
+    // 1. 注入固定紫色样式，绝对不变色
+    var style = document.createElement('style');
+    style.innerHTML = `
+        #yf-global-cate-item {
+            background-color: #8463f6 !important;
+            color: #ffffff !important;
+            border-radius: 20px !important;
+            border: none !important;
+            padding: 6px 16px !important;
+            margin-right: 12px !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
+            cursor: pointer !important;
+            white-space: nowrap !important;
+            display: inline-block !important;
+            flex-shrink: 0 !important;
+            box-shadow: 0 2px 6px rgba(132, 99, 246, 0.3) !important;
+            text-align: center !important;
+            transition: opacity 0.2s !important;
+        }
+        #yf-global-cate-item:hover { opacity: 0.85 !important; }
+    `;
+    document.head.appendChild(style);
+
+    function applyUI() {
+        // 如果按钮已经在页面上，立刻停止，什么都不做（防止闪烁）
+        if (document.getElementById('yf-global-cate-item')) return;
+
+        var allEls = document.querySelectorAll('div, span, a, button, li');
+        var topGlobalBtn = null;
+
+        // 2. 隐藏顶部原有的“全球接码”
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                topGlobalBtn = allEls[i];
+                topGlobalBtn.style.display = 'none';
+                break;
+            }
+        }
+        if (!topGlobalBtn) return;
+
+        // 3. 查找分类栏里的“全部”按钮
+        var allBtn = null;
+        for (var j = 0; j < allEls.length; j++) {
+            var txt = allEls[j].innerText ? allEls[j].innerText.trim() : '';
+            if (txt.indexOf('全部') === 0 && txt.length < 15 && allEls[j].children.length === 0) {
+                var p = allEls[j].parentNode;
+                if (p && p.innerText && (p.innerText.includes('游戏点卡') || p.innerText.includes('软件工具') || p.innerText.includes('会员卡券')) && !p.innerText.includes('立即购买')) {
+                    allBtn = allEls[j];
+                    break;
+                }
+            }
+        }
+        if (!allBtn) return;
+
+        var cateBar = allBtn.parentNode;
+        if (!cateBar) return;
+
+        // 【核心突破】找到分类栏的父级容器（外层白底卡片）
+        var wrapper = cateBar.parentNode;
+        if (!wrapper || wrapper.tagName === 'BODY') return;
+
+        // 把外层容器改成 flex 布局，这样我们的按钮可以完美贴在分类栏左侧
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.flexWrap = 'nowrap'; // 防止换行
+
+        // 让原来的分类栏占满剩余空间，并允许水平滚动
+        cateBar.style.flex = '1';
+        cateBar.style.overflowX = 'auto';
+        cateBar.style.flexWrap = 'nowrap';
+
+        // 4. 创建“全球接码”按钮
+        var globalBtn = document.createElement('div');
+        globalBtn.id = 'yf-global-cate-item';
+        globalBtn.innerText = '全球接码';
+        globalBtn.onclick = function(e) {
+            e.stopPropagation();
+            topGlobalBtn.click();
+        };
+
+        // 5. 把按钮插到外层容器里，放在分类栏的正前方
+        wrapper.insertBefore(globalBtn, cateBar);
+
+        // 6. 安卓手机右下角客服图标修复
+        if (/android/i.test(navigator.userAgent)) {
+            var customerBtn = null;
+            for (var k = 0; k < allEls.length; k++) {
+                var cTxt = allEls[k].innerText ? allEls[k].innerText.trim() : '';
+                if (cTxt === '客服' && allEls[k].children.length === 0) {
+                    var cp = allEls[k].parentNode;
+                    var isFloat = false;
+                    while (cp && cp !== document.body) {
+                        if (window.getComputedStyle(cp).position === 'fixed') { isFloat = true; break; }
+                        cp = cp.parentNode;
+                    }
+                    if (isFloat || allEls[k].style.position === 'fixed') {
+                        customerBtn = allEls[k];
+                        break;
+                    }
+                }
+            }
+            if (customerBtn) {
+                customerBtn.style.setProperty('position', 'fixed', 'important');
+                customerBtn.style.setProperty('right', '20px', 'important');
+                customerBtn.style.setProperty('bottom', '80px', 'important');
+                customerBtn.style.setProperty('display', 'flex', 'important');
+                customerBtn.style.setProperty('justify-content', 'center', 'important');
+                customerBtn.style.setProperty('align-items', 'center', 'important');
+                customerBtn.style.setProperty('width', '50px', 'important');
+                customerBtn.style.setProperty('height', '50px', 'important');
+                customerBtn.style.setProperty('border-radius', '50%', 'important');
+                customerBtn.style.setProperty('background-color', '#ef4444', 'important');
+                customerBtn.style.setProperty('color', '#ffffff', 'important');
+                customerBtn.style.setProperty('z-index', '999999', 'important');
+                customerBtn.style.setProperty('box-shadow', '0 4px 12px rgba(239, 68, 68, 0.4)', 'important');
+            }
+        }
+    }
+
+    // 7. 采用防抖机制，只检测按钮是否存在，绝不重复插入，彻底消灭闪烁
+    setInterval(applyUI, 1000);
+    setTimeout(applyUI, 200);
+})();
+</script>
 </body>
 </html>

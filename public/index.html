@@ -4278,5 +4278,109 @@ function finishSearch(serviceRaw, tryList){
   }
 }
 </script>
+<script>
+/* ============ 全球接码 v9 · 内置中文国家列表 ============ */
+(function(){
+  // 内置常用国家（中文名显示，value 也用中文——language=zh 时 LubanSms 需要中文）
+  var COUNTRIES = [
+    {cn:'中国',code:'CN'},
+    {cn:'美国',code:'US'},
+    {cn:'英国',code:'GB'},
+    {cn:'俄罗斯',code:'RU'},
+    {cn:'印度',code:'IN'},
+    {cn:'印度尼西亚',code:'ID'},
+    {cn:'菲律宾',code:'PH'},
+    {cn:'越南',code:'VN'},
+    {cn:'泰国',code:'TH'},
+    {cn:'马来西亚',code:'MY'},
+    {cn:'新加坡',code:'SG'},
+    {cn:'日本',code:'JP'},
+    {cn:'韩国',code:'KR'},
+    {cn:'中国香港',code:'HK'},
+    {cn:'中国台湾',code:'TW'},
+    {cn:'中国澳门',code:'MO'},
+    {cn:'德国',code:'DE'},
+    {cn:'法国',code:'FR'},
+    {cn:'意大利',code:'IT'},
+    {cn:'西班牙',code:'ES'},
+    {cn:'荷兰',code:'NL'},
+    {cn:'波兰',code:'PL'},
+    {cn:'乌克兰',code:'UA'},
+    {cn:'罗马尼亚',code:'RO'},
+    {cn:'捷克',code:'CZ'},
+    {cn:'葡萄牙',code:'PT'},
+    {cn:'希腊',code:'GR'},
+    {cn:'瑞士',code:'CH'},
+    {cn:'瑞典',code:'SE'},
+    {cn:'挪威',code:'NO'},
+    {cn:'丹麦',code:'DK'},
+    {cn:'芬兰',code:'FI'},
+    {cn:'爱尔兰',code:'IE'},
+    {cn:'奥地利',code:'AT'},
+    {cn:'比利时',code:'BE'},
+    {cn:'匈牙利',code:'HU'},
+    {cn:'保加利亚',code:'BG'},
+    {cn:'塞尔维亚',code:'RS'},
+    {cn:'克罗地亚',code:'HR'},
+    {cn:'斯洛伐克',code:'SK'},
+    {cn:'斯洛文尼亚',code:'SI'},
+    {cn:'立陶宛',code:'LT'},
+    {cn:'拉脱维亚',code:'LV'},
+    {cn:'爱沙尼亚',code:'EE'},
+    {cn:'哈萨克斯坦',code:'KZ'},
+    {cn:'乌兹别克斯坦',code:'UZ'},
+    {cn:'格鲁吉亚',code:'GE'},
+    {cn:'亚美尼亚',code:'AM'},
+    {cn:'阿塞拜疆',code:'AZ'},
+    {cn:'土耳其',code:'TR'},
+    {cn:'以色列',code:'IL'},
+    {cn:'沙特阿拉伯',code:'SA'},
+    {cn:'阿联酋',code:'AE'},
+    {cn:'卡塔尔',code:'QA'},
+    {cn:'科威特',code:'KW'},
+    {cn:'巴基斯坦',code:'PK'},
+    {cn:'孟加拉国',code:'BD'},
+    {cn:'斯里兰卡',code:'LK'},
+    {cn:'尼泊尔',code:'NP'},
+    {cn:'缅甸',code:'MM'},
+    {cn:'柬埔寨',code:'KH'},
+    {cn:'老挝',code:'LA'},
+    {cn:'蒙古',code:'MN'},
+    {cn:'加拿大',code:'CA'},
+    {cn:'墨西哥',code:'MX'},
+    {cn:'巴西',code:'BR'},
+    {cn:'阿根廷',code:'AR'},
+    {cn:'智利',code:'CL'},
+    {cn:'哥伦比亚',code:'CO'},
+    {cn:'秘鲁',code:'PE'},
+    {cn:'委内瑞拉',code:'VE'},
+    {cn:'澳大利亚',code:'AU'},
+    {cn:'新西兰',code:'NZ'},
+    {cn:'南非',code:'ZA'},
+    {cn:'埃及',code:'EG'},
+    {cn:'摩洛哥',code:'MA'},
+    {cn:'尼日利亚',code:'NG'},
+    {cn:'肯尼亚',code:'KE'},
+    {cn:'加纳',code:'GH'},
+    {cn:'埃塞俄比亚',code:'ET'}
+  ];
+
+  // 覆盖：不再请求 API，直接用内置列表，永久稳定
+  window.loadLubanCountries = function(){
+    var sel = $('#luban-c-country');
+    if (!sel) return;
+    var html = '<option value="">🌍 全部国家/地区</option>';
+    COUNTRIES.forEach(function(c){
+      html += '<option value="' + c.cn + '">' + c.cn + '（' + c.code + '）</option>';
+    });
+    sel.innerHTML = html;
+    // 默认选中「中国」
+    sel.value = '中国';
+  };
+
+  // 保存到全局，方便其他函数调用
+  window.LUBAN_COUNTRIES = COUNTRIES;
+})();
+</script>
 </body>
 </html>

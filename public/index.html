@@ -3377,5 +3377,182 @@ window.lubanSyncServices = function(){
   });
 };
 </script>
+<script>
+/* ============ Luban 无限翻页补丁 v4 ============ */
+window.lubanSyncServices = function(){
+  var countryEl = $('#luban-filter-country');
+  var serviceEl = $('#luban-filter-service');
+  var country = countryEl ? countryEl.value.trim() : '';
+  var service = serviceEl ? serviceEl.value.trim() : '';
+
+  try {
+    localStorage.setItem('luban_filters', JSON.stringify({country: country, service: service}));
+  } catch(e){}
+
+  var tip = '将从 LubanSms 拉取';
+  if (country) tip += '【' + country + '】';
+  if (service) tip += '【' + service + '】';
+  tip += ' 的【全部】服务（自动翻页直到拉完），加价 30% 上架。继续？';
+  if (!confirm(tip)) return;
+  toast('开始拉取，正在自动翻页…');
+
+  var allServices = [];
+  var page = 1;
+  var MAX_PAGES = 999;
+  var emptyStreak = 0;
+
+  function fetchPage(){
+    var url = '/api/luban?action=services&language=zh&page=' + page;
+    if (country) url += '&countryName=' + encodeURIComponent(country);
+    if (service) url += '&service=' + encodeURIComponent(service);
+
+    return fetch(url)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.code !== 0) throw new Error(d.msg || 'LubanSms 拉取失败');
+        var list = Array.isArray(d.msg) ? d.msg : [];
+
+        // 实时更新提示
+        if (page > 1) {
+          toast('已拉取 ' + (page - 1) + ' 页，共 ' + allServices.length + ' 个服务…', 'info');
+        }
+
+        if (list.length > 0) {
+          allServices = allServices.concat(list);
+          emptyStreak = 0;
+          page++;
+          if (page > MAX_PAGES) return null;
+          return new Promise(function(resolve){
+            setTimeout(function(){ resolve(fetchPage()); }, 150);
+          });
+        }
+
+        // 本页为空，看看是否需要再试
+        emptyStreak++;
+        if (emptyStreak >= 2) {
+          // 连续 2 页为空才算真正结束
+          return null;
+        }
+        // 再试下一页（可能中间有空页）
+        page++;
+        return new Promise(function(resolve){
+          setTimeout(function(){ resolve(fetchPage()); }, 300);
+        });
+      });
+  }
+
+  fetchPage().then(function(){
+    if (!allServices.length) {
+      toast('没有找到匹配的服务，试试换个关键词或国家', 'error');
+      return;
+    }
+
+    // 去重
+    var seenIds = {};
+    var uniqueServices = [];
+    allServices.forEach(function(s){
+      var key = String(s.service_id);
+      if (seenIds[key]) return;
+      seenIds[key] = true;
+      uniqueServices.push(s);
+    });
+
+    var db = loadDB();
+    var added = 0, updated = 0;
+
+    uniqueServices.forEach(function(s){
+      var origin = parseFloat(s.origin_cost);
+      if (isNaN(origin)) origin = (parseFloat(s.cost) || 0) / 1.3;
+      var ourPriceFen = Math.round(origin * 7.2 * 100);
+
+      var exist = null;
+      for (var i = 0; i < db.products.length; i++){
+        if (db.products[i].source === 'luban' && db.products[i].luban_service_id === String(s.service_id)){
+          exist = db.products[i];
+          break;
+        }
+      }
+
+      if (exist){
+        exist.price = ourPriceFen;
+        exist.luban_origin_cost = origin.toFixed(2);
+        exist.name = '[接码] ' + s.service_name + ' · ' + (s.country_name_zh || s.country_name_en || '');
+        updated++;
+      } else {
+        db.seq.product++;
+        db.products.push({
+          id: db.seq.product,
+          name: '[接码] ' + s.service_name + ' · ' + (s.country_name_zh || s.country_name_en || ''),
+          price: ourPriceFen,
+          description: '国家：' + (s.country_name_zh || s.country_name_en || '') + ' ｜ 服务：' + s.service_name + ' ｜ 下单后自动分配号码',
+          note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放',
+          category_id: 0,
+          active: true,
+          created_at: now(),
+          skus: [],
+          source: 'luban',
+          luban_type: 'sms',
+          luban_service_id: String(s.service_id),
+          luban_service_name: s.service_name,
+          luban_country: s.country_name_zh || s.country_name_en || '',
+          luban_origin_cost: origin.toFixed(2)
+        });
+        added++;
+      }
+    });
+
+    saveDB(db);
+    toast('拉取完成！共 ' + uniqueServices.length + ' 个服务，新增 ' + added + ' 个，更新 ' + updated + ' 个', 'success');
+    renderLuban();
+  }).catch(function(e){
+    // 即使中途出错也保存已拉到的数据
+    if (allServices.length > 0) {
+      var db = loadDB();
+      var seenIds = {};
+      var uniqueServices = [];
+      allServices.forEach(function(s){
+        var key = String(s.service_id);
+        if (seenIds[key]) return;
+        seenIds[key] = true;
+        uniqueServices.push(s);
+      });
+      var added = 0;
+      uniqueServices.forEach(function(s){
+        var origin = parseFloat(s.origin_cost);
+        if (isNaN(origin)) origin = (parseFloat(s.cost) || 0) / 1.3;
+        var ourPriceFen = Math.round(origin * 7.2 * 100);
+        var exist = null;
+        for (var i = 0; i < db.products.length; i++){
+          if (db.products[i].source === 'luban' && db.products[i].luban_service_id === String(s.service_id)){
+            exist = db.products[i]; break;
+          }
+        }
+        if (!exist){
+          db.seq.product++;
+          db.products.push({
+            id: db.seq.product,
+            name: '[接码] ' + s.service_name + ' · ' + (s.country_name_zh || s.country_name_en || ''),
+            price: ourPriceFen,
+            description: '国家：' + (s.country_name_zh || s.country_name_en || '') + ' ｜ 服务：' + s.service_name,
+            note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放',
+            category_id: 0, active: true, created_at: now(), skus: [],
+            source: 'luban', luban_type: 'sms',
+            luban_service_id: String(s.service_id),
+            luban_service_name: s.service_name,
+            luban_country: s.country_name_zh || s.country_name_en || '',
+            luban_origin_cost: origin.toFixed(2)
+          });
+          added++;
+        }
+      });
+      saveDB(db);
+      toast('翻页中断，但已保存 ' + added + ' 个服务：' + e.message, 'error');
+      renderLuban();
+    } else {
+      toast('同步失败：' + e.message, 'error');
+    }
+  });
+};
+</script>
 </body>
 </html>

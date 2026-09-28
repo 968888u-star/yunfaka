@@ -660,6 +660,11 @@ function openBuy(id){
   const totalStock = stockOf(db, id);
   if (!isLuban && totalStock <= 0){ toast('该商品暂时缺货','error'); return; }
   let defaultSkuId = 0;
+  // 支付方式切换时刷新金额显示
+  document.addEventListener('change', function(e){
+    if (e.target && e.target.name === 'pay-method') refreshTotals();
+  });
+
   if (hasSku){
     let firstOk = null;
     for (let i = 0; i < skus.length; i++){
@@ -774,11 +779,20 @@ function openBuy(id){
     const useBalance = cb && cb.checked && balanceEnabled && m;
     let deduct = useBalance ? Math.min(balance, amount) : 0;
     const due = amount - deduct;
-    $('#buy-unit').textContent = usdt(price) + ' USDT';
-    $('#buy-amount').textContent = usdt(amount) + ' USDT';
-    $('#buy-deduct').textContent = '-' + usdt(deduct) + ' USDT';
-    $('#buy-due').textContent = usdt(due) + ' USDT';
-    if ($('#buy-cny-hint')) $('#buy-cny-hint').innerHTML = '支付宝付款约 ¥' + yuan(due) + '（按汇率换算）';
+    const paySel = document.querySelector('input[name="pay-method"]:checked');
+    const isAlipay = paySel && paySel.value === 'alipay';
+    const fmt = function(fen){ return isAlipay ? '¥' + yuan(fen) : usdt(fen) + ' USDT'; };
+    $('#buy-unit').textContent = fmt(price);
+    $('#buy-amount').textContent = fmt(amount);
+    $('#buy-deduct').textContent = isAlipay ? '-¥' + yuan(deduct) : '-' + usdt(deduct) + ' USDT';
+    $('#buy-due').textContent = fmt(due);
+    if ($('#buy-cny-hint')){
+      if (isAlipay){
+        $('#buy-cny-hint').textContent = 'USDT计价约 ' + usdt(due) + ' USDT（按汇率换算）';
+      } else {
+        $('#buy-cny-hint').textContent = '支付宝付款约 ¥' + yuan(due) + '（按汇率换算）';
+      }
+    }
     const wrap = $('#pay-method-wrap');
     if (due === 0){
       wrap.style.opacity = '0.4';

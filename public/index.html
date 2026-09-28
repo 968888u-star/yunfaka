@@ -5313,7 +5313,7 @@ window.lubanStartCommonNew = function(orderNo, params){
   window.addEventListener('hashchange', function(){ setTimeout(tick, 100); });
 })();
 </script>
-<!-- ============ 终极修复补丁 v13 ============ -->
+<!-- ============ 终极修复补丁 v14（防丢失口令 + 支付宝唤起） ============ -->
 <script>
 (function(){
   'use strict';
@@ -5322,7 +5322,7 @@ window.lubanStartCommonNew = function(orderNo, params){
   window.renderLubanClient = function(){
     var tab = window.__lubanTab || 'sms';
     var db = loadDB();
-    var cfg = getConfig(db);                    // ✅ 关键：补上 cfg
+    var cfg = getConfig(db);
     var commonPrice = cfg.luban_common_price || 200;
 
     var tabBar =
@@ -5413,7 +5413,6 @@ window.lubanStartCommonNew = function(orderNo, params){
       return;
     }
 
-    // sms 分支
     $('#app').innerHTML = hero + tabBar +
       '<div class="card panel">' +
         '<h2>🔍 搜索服务</h2>' +
@@ -5508,72 +5507,58 @@ window.lubanStartCommonNew = function(orderNo, params){
   ].join('\n');
   document.head.appendChild(fixStyle);
 
-  /* ============ 修复 3：一键跳转支付宝口令红包 ============ */
+  /* ============ 修复 3：一键跳转支付宝 + 动态修复丢失的口令 ============ */
 
-  // 一键跳转（复制口令 + 唤起支付宝）
-  window.yfOpenAlipayRedpacket = function(code){
-    if (!code){ toast('口令为空', 'error'); return; }
-
-    // 1. 先复制口令到剪贴板（支付宝会自动读取）
-    try {
-      if (navigator.clipboard && window.isSecureContext){
-        navigator.clipboard.writeText(code).catch(function(){ yfFallbackCopy(code); });
-      } else {
-        yfFallbackCopy(code);
-      }
-    } catch(e){}
-
-    // 2. 环境判断
-    var ua = (navigator.userAgent || '').toLowerCase();
-    var isMobile = /iphone|ipad|ipod|android/.test(ua);
-
-    if (!isMobile){
-      toast('口令已复制，请在手机支付宝中粘贴使用', 'info');
-      return;
-    }
-
-    toast('口令已复制，正在打开支付宝…', 'success');
-
-    // 3. 唤起支付宝（打开首页，支付宝会识别剪贴板里的红包口令）
-    var scheme = 'alipays://platformapi/startapp?appId=20000067';
-
-    var hiddenFlag = false;
-    var onHide = function(){
-      hiddenFlag = true;
-      document.removeEventListener('visibilitychange', onHide);
-    };
-    document.addEventListener('visibilitychange', onHide);
-
-    try { window.location.href = scheme; } catch(e){}
-
-    // 4. 2 秒后兜底
-    setTimeout(function(){
-      if (hiddenFlag || document.hidden) return;
-      toast('未检测到支付宝 APP，请手动打开支付宝粘贴口令', 'info');
-    }, 2200);
-  };
-
-  function yfFallbackCopy(text){
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); } catch(e){}
-    document.body.removeChild(ta);
-  }
-
-  // 自动在支付宝红包弹窗里注入「一键打开」按钮
+  // 动态修复 + 注入按钮
   function injectAlipayJumpBtn(){
     if (document.getElementById('yf-btn-jump-alipay')) return;
 
     var box = document.querySelector('#modal-box .redpacket-box');
     if (!box) return;
+
+    // --- 核心修复：检查是否有口令，没有就动态生成 ---
     var codeEl = box.querySelector('.code');
-    if (!codeEl) return;
-    var code = (codeEl.textContent || '').trim();
-    if (!code) return;
+    var code = codeEl ? (codeEl.textContent || '').trim() : '';
+    
+    if (!code) {
+      // 生成新口令
+      code = genRedpacketCode('YFK');
+      if (!codeEl) {
+        codeEl = document.createElement('div');
+        codeEl.className = 'code';
+        // 插入到 lbl 后面
+        var lbl = box.querySelector('.lbl');
+        if (lbl) lbl.parentNode.insertBefore(codeEl, lbl.nextSibling);
+        else box.insertBefore(codeEl, box.firstChild);
+      }
+      codeEl.textContent = code;
+
+      // 尝试把生成的口令保存到数据库（找订单号）
+      var noEl = document.querySelector('#modal-box .mono');
+      if (noEl) {
+        var orderNo = noEl.textContent.trim();
+        if (orderNo) {
+          var db = loadDB();
+          var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+          if (o && !o.redpacket_code) {
+            o.redpacket_code = code;
+            saveDB(db);
+          }
+        }
+      }
+    }
+
+    // 检查是否有复制按钮，没有就补上
+    if (!box.querySelector('.copy-btn')) {
+      var copyBtn = document.createElement('button');
+      copyBtn.className = 'copy-btn';
+      copyBtn.type = 'button';
+      copyBtn.innerHTML = '📋 复制口令';
+      copyBtn.dataset.v = code;
+      copyBtn.onclick = function(){ copyText(code, copyBtn); };
+      box.appendChild(copyBtn);
+    }
+    // -------------------------------------------------
 
     // 找到弹窗底部按钮行
     var rows = document.querySelectorAll('#modal-box .row');
@@ -5596,14 +5581,67 @@ window.lubanStartCommonNew = function(orderNo, params){
     targetRow.insertBefore(btn, targetRow.firstChild);
   }
 
-  // 监听 modal 内容变化，自动注入按钮
+  // 一键跳转支付宝
+  window.yfOpenAlipayRedpacket = function(code){
+    if (!code){ toast('口令为空', 'error'); return; }
+
+    // 1. 复制口令到剪贴板
+    try {
+      if (navigator.clipboard && window.isSecureContext){
+        navigator.clipboard.writeText(code).catch(function(){ yfFallbackCopy(code); });
+      } else {
+        yfFallbackCopy(code);
+      }
+    } catch(e){}
+
+    var ua = (navigator.userAgent || '').toLowerCase();
+    var isMobile = /iphone|ipad|ipod|android/.test(ua);
+
+    if (!isMobile){
+      toast('口令已复制，请在手机支付宝中粘贴使用', 'info');
+      return;
+    }
+
+    // 提示用户
+    toast('口令已复制！请打开支付宝，点击【发红包】-【口令红包】粘贴', 'success');
+
+    // 2. 唤起支付宝（只能拉起首页）
+    var scheme = 'alipays://platformapi/startapp?appId=20000067';
+
+    var hiddenFlag = false;
+    var onHide = function(){
+      hiddenFlag = true;
+      document.removeEventListener('visibilitychange', onHide);
+    };
+    document.addEventListener('visibilitychange', onHide);
+
+    try { window.location.href = scheme; } catch(e){}
+
+    setTimeout(function(){
+      if (hiddenFlag || document.hidden) return;
+      toast('未检测到支付宝 APP，请手动打开支付宝粘贴口令', 'info');
+    }, 2200);
+  };
+
+  function yfFallbackCopy(text){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e){}
+    document.body.removeChild(ta);
+  }
+
+  // 监听 modal 变化
   var modalBox = document.getElementById('modal-box');
   if (modalBox && window.MutationObserver){
     new MutationObserver(function(){ injectAlipayJumpBtn(); })
       .observe(modalBox, { childList: true, subtree: false });
   }
 
-  // 兜底：包装 openModal
+  // 包装 openModal
   var _origOpenModal = window.openModal;
   if (typeof _origOpenModal === 'function'){
     window.openModal = function(html, wide){
@@ -5613,7 +5651,7 @@ window.lubanStartCommonNew = function(orderNo, params){
     };
   }
 
-  console.log('[云发卡] 修复补丁 v13 已加载：通用短信 / 弹窗适配 / 支付宝一键跳转');
+  console.log('[云发卡] 修复补丁 v14 已加载：通用短信 / 弹窗适配 / 支付宝一键跳转+防丢失');
 })();
 </script>
 </body>

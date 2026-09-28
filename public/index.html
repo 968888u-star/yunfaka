@@ -4109,5 +4109,174 @@ window.lubanClientSearch = function(page){
     });
 };
 </script>
+<script>
+/* ============ 全球接码 v8 · 国家中文传参 + 多策略搜索 ============ */
+
+// 覆盖：下拉框 value 用中文名（language=zh 时 LubanSms 需要中文）
+window.loadLubanCountries = function(){
+  fetch('/api/luban?action=countries')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var sel = $('#luban-c-country');
+      if (!sel) return;
+      if (d.code === 0 && Array.isArray(d.msg)) {
+        var html = '<option value="">全部国家/地区</option>';
+        d.msg.forEach(function(c){
+          var name = c.name_cn || c.name_en || '';
+          if (!name) return;
+          var code = (c.code || '').toUpperCase();
+          // ✅ 关键：value 用中文名（因为请求 language=zh）
+          html += '<option value="' + esc(name) + '">' + esc(name) + (code ? '（' + esc(code) + '）' : '') + '</option>';
+        });
+        sel.innerHTML = html;
+      } else {
+        sel.innerHTML = '<option value="">加载失败</option>';
+      }
+    })
+    .catch(function(){
+      var sel = $('#luban-c-country');
+      if (sel) sel.innerHTML = '<option value="">加载失败</option>';
+    });
+};
+
+// 覆盖：多策略搜索（原词 → 拼音 → 合并结果）
+window.lubanClientSearch = function(page){
+  var country = ($('#luban-c-country') && $('#luban-c-country').value) || '';
+  var serviceRaw = ($('#luban-c-service') && $('#luban-c-service').value.trim()) || '';
+
+  if (page !== 1) {
+    // 加载更多：直接请求下一页
+    loadLubanPage(country, serviceRaw, page);
+    return;
+  }
+
+  // 首次搜索：清理状态
+  _lubanResults = [];
+  $('#luban-c-results').innerHTML = '<div class="loading">正在搜索…</div>';
+  $('#luban-c-loadmore').innerHTML = '';
+  $('#luban-c-count').textContent = '';
+
+  // 尝试词列表：原词 + 拼音/英文映射
+  var tryList = [serviceRaw];
+  var lower = serviceRaw.toLowerCase();
+  if (LUBAN_SERVICE_ALIAS[lower]) {
+    tryList.push(LUBAN_SERVICE_ALIAS[lower]);
+  } else if (LUBAN_SERVICE_ALIAS[serviceRaw]) {
+    tryList.push(LUBAN_SERVICE_ALIAS[serviceRaw]);
+  }
+  // 去重
+  var seen = {};
+  var finalTry = [];
+  tryList.forEach(function(w){
+    if (!w) return;
+    if (seen[w]) return;
+    seen[w] = true;
+    finalTry.push(w);
+  });
+
+  // 依次尝试每个词，合并结果
+  function tryNext(idx){
+    if (idx >= finalTry.length) {
+      // 全部尝试完
+      finishSearch(serviceRaw, finalTry);
+      return;
+    }
+    var kw = finalTry[idx];
+    var url = '/api/luban?action=client_services&language=zh&page=1';
+    if (country) url += '&countryName=' + encodeURIComponent(country);
+    if (kw) url += '&service=' + encodeURIComponent(kw);
+
+    fetch(url)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.code === 0 && Array.isArray(d.msg) && d.msg.length > 0) {
+          // 找到了！合并进 _lubanResults
+          var existSet = {};
+          _lubanResults.forEach(function(x){ existSet[String(x.service_id)] = true; });
+          d.msg.forEach(function(x){
+            var sid = String(x.service_id);
+            if (!existSet[sid]) {
+              existSet[sid] = true;
+              _lubanResults.push(x);
+            }
+          });
+        }
+        tryNext(idx + 1);
+      })
+      .catch(function(){
+        tryNext(idx + 1);
+      });
+  }
+
+  tryNext(0);
+};
+
+// 加载更多（复用 luban.js 的分页）
+function loadLubanPage(country, service, page){
+  $('#luban-c-loadmore').innerHTML = '<div class="loading">加载中…</div>';
+  var url = '/api/luban?action=client_services&language=zh&page=' + page;
+  if (country) url += '&countryName=' + encodeURIComponent(country);
+  if (service) url += '&service=' + encodeURIComponent(service);
+
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.code !== 0) {
+        $('#luban-c-loadmore').innerHTML = '';
+        return;
+      }
+      var list = Array.isArray(d.msg) ? d.msg : [];
+      if (list.length === 0) {
+        $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px">已显示全部结果</div>';
+        return;
+      }
+      // 去重合并
+      var existSet = {};
+      _lubanResults.forEach(function(x){ existSet[String(x.service_id)] = true; });
+      list.forEach(function(x){
+        var sid = String(x.service_id);
+        if (!existSet[sid]) {
+          existSet[sid] = true;
+          _lubanResults.push(x);
+        }
+      });
+      renderLubanResults();
+      $('#luban-c-count').textContent = '共 ' + _lubanResults.length + ' 个';
+      if (list.length >= 15) {
+        $('#luban-c-loadmore').innerHTML =
+          '<button class="btn ghost" onclick="loadLubanPage(\'' + esc(country) + '\',\'' + esc(service) + '\',' + (page + 1) + ')">加载更多</button>';
+      } else {
+        $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px">已显示全部结果</div>';
+      }
+    })
+    .catch(function(){
+      $('#luban-c-loadmore').innerHTML = '';
+    });
+}
+
+// 完成搜索，展示结果
+function finishSearch(serviceRaw, tryList){
+  if (_lubanResults.length === 0) {
+    var hint = '';
+    if (serviceRaw && tryList.length > 1) {
+      hint = '（已尝试用「' + tryList.join('」「') + '」搜索）';
+    }
+    $('#luban-c-results').innerHTML = '<div class="empty">没有找到匹配的服务 ' + hint + '</div>';
+    $('#luban-c-count').textContent = '';
+    $('#luban-c-loadmore').innerHTML = '';
+    return;
+  }
+  renderLubanResults();
+  $('#luban-c-count').textContent = '共 ' + _lubanResults.length + ' 个';
+  if (_lubanResults.length >= 15 && tryList.length === 1 && tryList[0]) {
+    // 只用了原词搜索，可能还有更多
+    var country = ($('#luban-c-country') && $('#luban-c-country').value) || '';
+    $('#luban-c-loadmore').innerHTML =
+      '<button class="btn ghost" onclick="loadLubanPage(\'' + esc(country) + '\',\'' + esc(tryList[0]) + '\',2)">加载更多</button>';
+  } else {
+    $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px">已显示全部结果</div>';
+  }
+}
+</script>
 </body>
 </html>

@@ -7213,5 +7213,105 @@ window.lubanStartCommonNew = function(orderNo, params){
     }, 2000); // 只执行一次
 })();
 </script>
+<!-- 云发卡平台 - 绝地反击版（彻底清理 + 绝对不冲突 + 完美排版） -->
+<script>
+(function() {
+    // 延迟3秒执行，等页面完全加载完毕，只执行一次，执行完就结束
+    setTimeout(function() {
+        
+        // ===== 第一步：暴力清理之前所有版本留下的垃圾 =====
+        var killIds = ['yf-global-cate-item', 'yf-global-float-btn', 'yf-banner-sms-btn', 'yf-sms-entry-card', 'yf-sms-entry-card-final', 'yf-final-card-v9'];
+        killIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+        });
+        var killClass = document.querySelectorAll('.yf-sms-card-wrap');
+        for (var i = 0; i < killClass.length; i++) {
+            if (killClass[i].parentNode) killClass[i].parentNode.removeChild(killClass[i]);
+        }
+
+        // ===== 第二步：清理顶部紫色 Banner 里的残留白条 =====
+        // 找包含“付款即发货”的 Banner 区域
+        var allEls = document.querySelectorAll('div, span, a, button, li');
+        var bannerArea = null;
+        for (var j = 0; j < allEls.length; j++) {
+            if (allEls[j].innerText && allEls[j].innerText.includes('付款即发货') && allEls[j].innerText.length < 200) {
+                bannerArea = allEls[j];
+                break;
+            }
+        }
+        if (bannerArea) {
+            // 在 Banner 内部查找并删除任何包含“全球接码”和“实时搜索”的白条
+            var trash = bannerArea.querySelectorAll('div, span');
+            for (var k = 0; k < trash.length; k++) {
+                if (trash[k].innerText && trash[k].innerText.includes('全球接码') && trash[k].innerText.includes('实时搜索')) {
+                    if (trash[k].parentNode) trash[k].parentNode.removeChild(trash[k]);
+                }
+            }
+        }
+
+        // ===== 第三步：找并隐藏顶部导航栏原生的“全球接码” =====
+        var topNavSmsBtn = null;
+        for (var m = 0; m < allEls.length; m++) {
+            if (allEls[m].children.length === 0 && allEls[m].innerText.trim() === '全球接码') {
+                topNavSmsBtn = allEls[m];
+                topNavSmsBtn.style.setProperty('display', 'none', 'important'); // 强行隐藏
+                break;
+            }
+        }
+        if (!topNavSmsBtn) return; // 如果找不到原生的入口，终止操作
+
+        // ===== 第四步：精准查找“注册会员”卡片 =====
+        var regCard = null;
+        for (var n = 0; n < allEls.length; n++) {
+            var txt = allEls[n].innerText || '';
+            if (txt.includes('注册会员') && txt.includes('享余额支付') && txt.length < 100) {
+                var p = allEls[n];
+                // 向上寻找真正的卡片容器（带有圆角或阴影的父节点）
+                while (p && p !== document.body) {
+                    var style = window.getComputedStyle(p);
+                    if (style.borderRadius !== '0px' && style.boxShadow !== 'none') {
+                        regCard = p;
+                        break;
+                    }
+                    p = p.parentNode;
+                }
+                if (regCard) break;
+            }
+        }
+        if (!regCard || !regCard.parentNode) return;
+
+        // ===== 第五步：创建完美的新卡片（所有样式内联，绝不冲突） =====
+        var card = document.createElement('div');
+        card.id = 'yf-clean-final-card';
+        // 卡片外部样式（白底、圆角、阴影、边距）
+        card.style.cssText = 'margin-top:12px; background:#ffffff; border-radius:12px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,0.03); border:1px solid #f3f4f6; cursor:pointer; box-sizing:border-box; width:100%; transition:all 0.2s ease;';
+
+        // 卡片内部结构（图标、标题、副标题、按钮全部带独立样式）
+        card.innerHTML = `
+            <div style="display:flex; align-items:center; flex:1;">
+                <div style="width:36px; height:36px; background:#f3e8ff; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; margin-right:12px; flex-shrink:0;">🌐</div>
+                <div style="display:flex; flex-direction:column;">
+                    <div style="font-size:15px; font-weight:600; color:#1f2937; margin-bottom:2px;">全球接码</div>
+                    <div style="font-size:12px; color:#9ca3af;">实时搜索 · 自动分配号码</div>
+                </div>
+            </div>
+            <div style="background:#8463f6; color:#ffffff; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:500; white-space:nowrap; flex-shrink:0; margin-left:10px; box-shadow:0 2px 6px rgba(132,99,246,0.2);">立即接码</div>
+        `;
+
+        // 绑定点击事件（触发被隐藏的顶部原生按钮）
+        card.onclick = function(e) {
+            e.stopPropagation();
+            topNavSmsBtn.click();
+        };
+
+        // 插入到“注册会员”卡片正下方
+        regCard.parentNode.insertBefore(card, regCard.nextSibling);
+
+        console.log('云发卡平台：终极修复完成！');
+
+    }, 3000); // 3秒后执行一次，绝不卡死
+})();
+</script>
 </body>
 </html>

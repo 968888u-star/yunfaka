@@ -3214,5 +3214,168 @@ window.lubanReactivate = lubanReactivate;
   window.addEventListener('online', function(){ pullState(false); });
 })();
 </script>
+<script>
+/* ============ Luban 筛选同步补丁 v2 ============ */
+window.renderLuban = function(){
+  var db = loadDB();
+  var lubanProducts = db.products.filter(function(p){ return p.source === 'luban'; });
+  var reqCount = db.orders.filter(function(o){ return o.source === 'luban' && (o.status === 'waiting_sms' || o.status === 'processing'); }).length;
+  var lastFilters = {};
+  try { lastFilters = JSON.parse(localStorage.getItem('luban_filters') || '{}'); } catch(e){}
+  var lastCountry = lastFilters.country || '';
+  var lastService = lastFilters.service || '';
+
+  $('#tab-body').innerHTML = '<div class="card panel">' +
+      '<div class="spread" style="flex-wrap:wrap;gap:8px">' +
+        '<h2 style="margin:0">📱 LubanSms 接码</h2>' +
+        '<div class="row" style="gap:8px;flex-wrap:wrap">' +
+          '<button class="btn ghost" onclick="lubanShowBalance()">💰 查询余额</button>' +
+          '<button class="btn ghost" onclick="lubanClearAll()">清空商品</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="luban-hint">' +
+        '<b>💡 用法：</b>输入国家 + 服务关键词，点击「按筛选同步」拉取对应的接码服务。' +
+        '<br>系统自动加价 <b>30%</b> 后生成商品。国家填中文名（如：中国、美国、英国），留空 = 搜索全部。' +
+        '<br><b>已上架：</b>' + lubanProducts.length + ' 个 ｜ <b>进行中会话：</b>' + reqCount + ' 个' +
+      '</div>' +
+      '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:16px;margin-top:14px">' +
+        '<div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">' +
+          '<div style="flex:1;min-width:160px">' +
+            '<div class="muted" style="font-size:12px;margin-bottom:6px">国家（中文名，如：中国 / 美国 / 英国）</div>' +
+            '<input id="luban-filter-country" placeholder="留空 = 搜索全部国家" value="' + esc(lastCountry) + '">' +
+          '</div>' +
+          '<div style="flex:1;min-width:160px">' +
+            '<div class="muted" style="font-size:12px;margin-bottom:6px">服务关键词（如：Tinder / 微信 / Apple）</div>' +
+            '<input id="luban-filter-service" placeholder="留空 = 搜索全部服务" value="' + esc(lastService) + '">' +
+          '</div>' +
+          '<button class="btn primary" onclick="lubanSyncServices()">📥 按筛选同步</button>' +
+        '</div>' +
+        '<div class="muted" style="font-size:12px;margin-top:10px">' +
+          '💡 例：想卖「中国 Apple 接码」→ 国家填 <b>中国</b>，服务填 <b>Apple</b>，点同步。' +
+        '</div>' +
+      '</div>' +
+      '<div id="luban-balance-box" style="margin-top:14px"></div>' +
+    '</div>' +
+    '<div class="card panel">' +
+      '<h2>接码商品列表（' + lubanProducts.length + '）</h2>' +
+      (lubanProducts.length > 0 ? '<div style="overflow-x:auto"><table>' +
+        '<thead><tr><th>服务</th><th>国家</th><th>成本</th><th>售价</th><th>类型</th><th>状态</th><th></th></tr></thead>' +
+        '<tbody>' + lubanProducts.map(function(p){
+          var nameShow = p.name.length > 35 ? p.name.slice(0, 35) + '…' : p.name;
+          return '<tr>' +
+            '<td><b>' + esc(nameShow) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.luban_service_id) + '</div></td>' +
+            '<td>' + esc(p.luban_country || '-') + '</td>' +
+            '<td class="muted">$' + (p.luban_origin_cost || 0) + '</td>' +
+            '<td style="font-weight:700;color:#e11d48">¥' + yuan(p.price) + '</td>' +
+            '<td><span class="badge cat">' + (p.luban_type === 'common' ? '通用' : '验证码') + '</span></td>' +
+            '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
+            '<td style="text-align:right;white-space:nowrap">' +
+              '<button class="btn sm ghost" onclick="lubanToggleProduct(' + p.id + ')">' + (p.active ? '下架' : '上架') + '</button> ' +
+              '<button class="btn sm danger" onclick="deleteProduct(' + p.id + ')">删除</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table></div>'
+        : '<div class="empty">还没有同步任何接码服务，输入筛选条件后点击「按筛选同步」开始</div>') +
+    '</div>';
+};
+
+window.lubanSyncServices = function(){
+  var countryEl = $('#luban-filter-country');
+  var serviceEl = $('#luban-filter-service');
+  var country = countryEl ? countryEl.value.trim() : '';
+  var service = serviceEl ? serviceEl.value.trim() : '';
+
+  try {
+    localStorage.setItem('luban_filters', JSON.stringify({country: country, service: service}));
+  } catch(e){}
+
+  var tip = '将从 LubanSms 拉取';
+  if (country) tip += '【' + country + '】';
+  if (service) tip += '【' + service + '】';
+  tip += ' 的服务列表并加价 30% 上架，已存在的会更新价格。继续？';
+  if (!confirm(tip)) return;
+  toast('正在拉取服务列表…');
+
+  var allServices = [];
+  var page = 1;
+  var MAX_PAGES = 30;
+  var hasCountry = !!country;
+
+  function fetchPage(){
+    var url = '/api/luban?action=services&language=zh&page=' + page;
+    if (country) url += '&countryName=' + encodeURIComponent(country);
+    if (service) url += '&service=' + encodeURIComponent(service);
+    return fetch(url)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.code !== 0) throw new Error(d.msg || 'LubanSms 拉取失败');
+        var list = Array.isArray(d.msg) ? d.msg : [];
+        allServices = allServices.concat(list);
+        if (list.length >= 15 && page < MAX_PAGES && !hasCountry) {
+          page++;
+          return fetchPage();
+        }
+        return null;
+      });
+  }
+
+  fetchPage().then(function(){
+    if (!allServices.length) {
+      toast('没有找到匹配的服务，试试换个关键词或国家', 'error');
+      return;
+    }
+
+    var db = loadDB();
+    var added = 0, updated = 0;
+
+    allServices.forEach(function(s){
+      var origin = parseFloat(s.origin_cost);
+      if (isNaN(origin)) origin = (parseFloat(s.cost) || 0) / 1.3;
+      var ourPriceFen = Math.round(origin * 7.2 * 100);
+
+      var exist = null;
+      for (var i = 0; i < db.products.length; i++){
+        if (db.products[i].source === 'luban' && db.products[i].luban_service_id === String(s.service_id)){
+          exist = db.products[i];
+          break;
+        }
+      }
+
+      if (exist){
+        exist.price = ourPriceFen;
+        exist.luban_origin_cost = origin.toFixed(2);
+        exist.name = '[接码] ' + s.service_name + ' · ' + (s.country_name_zh || s.country_name_en || '');
+        updated++;
+      } else {
+        db.seq.product++;
+        db.products.push({
+          id: db.seq.product,
+          name: '[接码] ' + s.service_name + ' · ' + (s.country_name_zh || s.country_name_en || ''),
+          price: ourPriceFen,
+          description: '国家：' + (s.country_name_zh || s.country_name_en || '') + ' ｜ 服务：' + s.service_name + ' ｜ 下单后自动分配号码',
+          note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放',
+          category_id: 0,
+          active: true,
+          created_at: now(),
+          skus: [],
+          source: 'luban',
+          luban_type: 'sms',
+          luban_service_id: String(s.service_id),
+          luban_service_name: s.service_name,
+          luban_country: s.country_name_zh || s.country_name_en || '',
+          luban_origin_cost: origin.toFixed(2)
+        });
+        added++;
+      }
+    });
+
+    saveDB(db);
+    toast('同步完成：新增 ' + added + ' 个，更新 ' + updated + ' 个', 'success');
+    renderLuban();
+  }).catch(function(e){
+    toast('同步失败：' + e.message, 'error');
+  });
+};
+</script>
 </body>
 </html>

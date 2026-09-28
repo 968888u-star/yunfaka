@@ -716,12 +716,13 @@ function openBuy(id){
     '</div>' +
     '<div class="spread" style="margin-bottom:8px"><span class="muted" style="font-size:13px">余额抵扣</span><span id="buy-deduct" style="font-weight:700;color:#b45309">-¥0.00</span></div>' +
     '<div class="spread" style="margin-bottom:16px"><span class="muted" style="font-size:13px">还需支付</span><span id="buy-due" style="font-size:20px;font-weight:800;color:#e11d48">' + usdt(initialPrice) + ' USDT</span></div>' +
+    '<div id="buy-cny-hint" style="text-align:right;font-size:12px;color:#6b7280;margin-top:4px">支付宝付款约 ¥' + yuan(initialPrice) + '（按汇率换算）</div>' +
     lubanTip +
     '<div id="pay-method-wrap">' +
       '<label class="field" style="margin-bottom:14px"><span>支付方式</span>' +
         '<div class="pay-methods" id="pay-methods">' +
-          (alipayEnabled ? '<label class="pay-method active" data-method="alipay"><input type="radio" name="pay-method" value="alipay" checked><span class="logo">💰</span> 支付宝</label>' : '') +
-          (usdtEnabled ? '<label class="pay-method ' + (!alipayEnabled?'active':'') + '" data-method="usdt"><input type="radio" name="pay-method" value="usdt" ' + (!alipayEnabled?'checked':'') + '><span class="logo">🪙</span> USDT</label>' : '') +
+          (usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="pay-method" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : '') +
+          (alipayEnabled ? '<label class="pay-method ' + (!usdtEnabled?'active':'') + '" data-method="alipay"><input type="radio" name="pay-method" value="alipay" ' + (!usdtEnabled?'checked':'') + '><span class="logo">💰</span> 支付宝</label>' : '') +
         '</div>' +
       '</label>' +
     '</div>' +
@@ -777,6 +778,7 @@ function openBuy(id){
     $('#buy-amount').textContent = usdt(amount) + ' USDT';
     $('#buy-deduct').textContent = '-' + usdt(deduct) + ' USDT';
     $('#buy-due').textContent = usdt(due) + ' USDT';
+    if ($('#buy-cny-hint')) $('#buy-cny-hint').innerHTML = '支付宝付款约 ¥' + yuan(due) + '（按汇率换算）';
     const wrap = $('#pay-method-wrap');
     if (due === 0){
       wrap.style.opacity = '0.4';
@@ -976,8 +978,7 @@ function showPayModal(type, id){
       extra +
       '<div class="kv"><span class="k">应付金额</span><span class="v">' + usdt(amount) + ' USDT</span></div>' +
       '<div class="kv"><span class="k">折合人民币</span><span class="v">¥' + yuan(amount) + '</span></div>' +
-      '<div class="kv"><span class="k">实付 USDT</span>' +
-      '<div class="kv"><span class="k">折算 USDT</span><span class="v" style="color:#10b981;font-size:18px">' + usdtAmount + ' USDT</span></div>' +
+      '<div class="kv"><span class="k">实付 USDT</span><span class="v" style="color:#10b981;font-size:18px">' + usdtAmount + ' USDT</span></div>' +
       '<div class="kv" style="margin-bottom:12px"><span class="k">网络</span><span class="v">' + esc(cfg.pay_usdt_network || 'TRC20') + '</span></div>' +
       qrSelf + qrAuto + addrHtml +
       '<div style="background:#dbeafe;border:1px dashed #93c5fd;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#1e40af;line-height:1.6">' +

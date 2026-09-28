@@ -3808,13 +3808,13 @@ function renderLubanPayBox(priceFen){
     '</div>';
   }
   html += '<div class="spread" style="margin:12px 0"><span class="muted" style="font-size:13px">还需支付</span>' +
-    '<span id="luban-due" style="font-size:20px;font-weight:800;color:#e11d48">¥' + (due / 100).toFixed(2) + '</span></div>';
+    '<span id="luban-due" data-fen="' + due + '" style="font-size:20px;font-weight:800;color:#e11d48">' + (due/100/usdtRate()).toFixed(2) + ' USDT</span></div>';
 
   if (due > 0) {
     html += '<label class="field"><span>支付方式</span>' +
       '<div class="pay-methods" id="luban-pay-methods">' +
-        (alipayEnabled ? '<label class="pay-method active" data-method="alipay"><input type="radio" name="luban-pay" value="alipay" checked><span class="logo">💰</span> 支付宝</label>' : '') +
-        (usdtEnabled ? '<label class="pay-method ' + (!alipayEnabled ? 'active' : '') + '" data-method="usdt"><input type="radio" name="luban-pay" value="usdt" ' + (!alipayEnabled ? 'checked' : '') + '><span class="logo">🪙</span> USDT</label>' : '') +
+        (usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="luban-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : '') +
+        (alipayEnabled ? '<label class="pay-method \' + (!usdtEnabled ? \'active\' : \'\') + \'" data-method="alipay"><input type="radio" name="luban-pay" value="alipay" \' + (!usdtEnabled ? \'checked\' : \'\') + \'><span class="logo">💰</span> 支付宝</label>' : '') +
       '</div></label>';
   } else {
     html += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;font-size:13px;color:#15803d">✅ 余额充足，无需额外支付</div>';
@@ -4503,7 +4503,7 @@ function finishSearch(serviceRaw, tryList){
       '<div class="kv"><span class="k">类型</span><span class="v">通用短信接收</span></div>' +
       '<div class="kv"><span class="k">关键词</span><span class="v">' + esc(keyword) + '</span></div>' +
       extraRows +
-      '<div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px">¥' + (priceFen / 100).toFixed(2) + '</span></div>' +
+      '<div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px" id="luban-price-display" data-fen="' + priceFen + '">' + (priceFen/100/usdtRate()).toFixed(2) + ' USDT</span></div>' +
       '<label class="field"><span>暗号（用于查询订单 / 找回密码）</span>' +
         '<input id="luban-common-secret" type="text" placeholder="自定义内容" maxlength="60" value="' + esc(member ? (member.secret || '') : '') + '">' +
       '</label>' +
@@ -4544,8 +4544,8 @@ function finishSearch(serviceRaw, tryList){
     if (due > 0) {
       html += '<label class="field"><span>支付方式</span>' +
         '<div class="pay-methods" id="luban-common-pay-methods">' +
-          (alipayEnabled ? '<label class="pay-method active" data-method="alipay"><input type="radio" name="luban-common-pay" value="alipay" checked><span class="logo">💰</span> 支付宝</label>' : '') +
-          (usdtEnabled ? '<label class="pay-method ' + (!alipayEnabled ? 'active' : '') + '" data-method="usdt"><input type="radio" name="luban-common-pay" value="usdt" ' + (!alipayEnabled ? 'checked' : '') + '><span class="logo">🪙</span> USDT</label>' : '') +
+          (usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="luban-common-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : '') +
+        (alipayEnabled ? '<label class="pay-method \' + (!usdtEnabled ? \'active\' : \'\') + \'" data-method="alipay"><input type="radio" name="luban-common-pay" value="alipay" \' + (!usdtEnabled ? \'checked\' : \'\') + \'><span class="logo">💰</span> 支付宝</label>' : '') +
         '</div></label>';
     } else {
       html += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;font-size:13px;color:#15803d">✅ 余额充足，无需额外支付</div>';
@@ -4791,7 +4791,7 @@ window.renderLubanClient = function(){
         '</div>' +
         '<div class="spread" style="margin:18px 0;padding-top:14px;border-top:1px dashed var(--line)">' +
           '<span class="muted" style="font-size:13px">接码价格</span>' +
-          '<span style="font-size:22px;font-weight:800;color:#e11d48">¥2.00</span>' +
+          '<span style="font-size:22px;font-weight:800;color:#e11d48" data-fen="' + (cfg.luban_common_price||200) + '">' + ((cfg.luban_common_price||200)/100/usdtRate()).toFixed(2) + ' USDT</span>' +
         '</div>' +
         '<button class="btn primary block" onclick="lubanCommonBuy()">📱 立即接码</button>' +
       '</div>';
@@ -4887,7 +4887,7 @@ window.lubanCommonBuy = function(){
     '<div class="kv"><span class="k">类型</span><span class="v">通用短信接收</span></div>' +
     '<div class="kv"><span class="k">关键词</span><span class="v">' + esc(keyword) + '</span></div>' +
     extraRows +
-    '<div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px">¥' + (priceFen / 100).toFixed(2) + '</span></div>' +
+    '<div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px" id="luban-price-display" data-fen="' + priceFen + '">' + (priceFen/100/usdtRate()).toFixed(2) + ' USDT</span></div>' +
     '<label class="field"><span>暗号（用于查询订单 / 找回密码）</span>' +
       '<input id="luban-common-secret" type="text" placeholder="自定义内容" maxlength="60" value="' + esc(member ? (member.secret || '') : '') + '">' +
     '</label>' +
@@ -4928,8 +4928,8 @@ function renderLubanCommonPayBox(priceFen){
   if (due > 0) {
     html += '<label class="field"><span>支付方式</span>' +
       '<div class="pay-methods" id="luban-common-pay-methods">' +
-        (alipayEnabled ? '<label class="pay-method active" data-method="alipay"><input type="radio" name="luban-common-pay" value="alipay" checked><span class="logo">💰</span> 支付宝</label>' : '') +
-        (usdtEnabled ? '<label class="pay-method ' + (!alipayEnabled ? 'active' : '') + '" data-method="usdt"><input type="radio" name="luban-common-pay" value="usdt" ' + (!alipayEnabled ? 'checked' : '') + '><span class="logo">🪙</span> USDT</label>' : '') +
+        (usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="luban-common-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : '') +
+        (alipayEnabled ? '<label class="pay-method \' + (!usdtEnabled ? \'active\' : \'\') + \'" data-method="alipay"><input type="radio" name="luban-common-pay" value="alipay" \' + (!usdtEnabled ? \'checked\' : \'\') + \'><span class="logo">💰</span> 支付宝</label>' : '') +
       '</div></label>';
   } else {
     html += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;font-size:13px;color:#15803d">✅ 余额充足，无需额外支付</div>';
@@ -5205,6 +5205,37 @@ window.lubanStartCommonNew = function(orderNo, params){
 })();
 </script>
 
+
+<!-- 全局金额联动：所有支付方式切换时金额自动切换货币 -->
+<script>
+(function(){
+  function getRate(){
+    try { var d = JSON.parse(localStorage.getItem('yunfaka_db_v15')); if(d && d.config && d.config.pay_usdt_rate) return Number(d.config.pay_usdt_rate)||7.2; } catch(e){}
+    return 7.2;
+  }
+  function fmt(fen, method){
+    fen = Number(fen||0);
+    if (method === 'alipay') return '¥' + (fen/100).toFixed(2);
+    return (fen/100/getRate()).toFixed(2) + ' USDT';
+  }
+  function updateAll(){
+    var sel = document.querySelector('input[name="pay-method"]:checked, input[name="luban-pay"]:checked, input[name="luban-common-pay"]:checked');
+    var method = sel ? sel.value : 'usdt';
+    // 更新带 data-fen 属性的金额元素
+    document.querySelectorAll('[data-fen]').forEach(function(el){
+      var fen = el.getAttribute('data-fen');
+      if (fen) el.textContent = fmt(fen, method);
+    });
+  }
+  setInterval(updateAll, 400);
+  document.addEventListener('click', function(e){
+    if (e.target.closest && e.target.closest('.pay-method')) setTimeout(updateAll, 80);
+  });
+  document.addEventListener('change', function(e){
+    if (e.target && e.target.name && e.target.name.indexOf('pay')>=0) updateAll();
+  });
+})();
+</script>
 <!-- 精简UI注入：隐藏顶部全球接码 + 注册会员下方融合卡片（唯一版本） -->
 <script>
 (function(){

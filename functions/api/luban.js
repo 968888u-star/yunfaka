@@ -1,8 +1,3 @@
-// ==================================================================
-// LubanSms API 统一入口（正确路径版）
-// 真实路径来自官方文档，不要修改
-// ==================================================================
-
 export async function onRequest(context) {
   const { request, env } = context;
   const corsHeaders = {
@@ -33,21 +28,17 @@ export async function onRequest(context) {
   function ok(data) { return Response.json(data, { headers: corsHeaders }); }
 
   try {
-    // ---------- 账户 ----------
     if (action === 'balance') {
       const r = await fetch(buildUrl('getBalance', {}));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
 
-    // ---------- 国家列表（countries）----------
     if (action === 'countries') {
       const r = await fetch(buildUrl('countries', {}));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
 
-    // ---------- 服务列表（List，大写 L）----------
+    // 后台用（带成本价）
     if (action === 'services') {
       const params = {
         language: url.searchParams.get('language') || 'zh',
@@ -59,7 +50,6 @@ export async function onRequest(context) {
       if (service) params.service = service;
       const r = await fetch(buildUrl('List', params));
       const d = await r.json();
-      // 加价 30%
       if (d.code === 0 && Array.isArray(d.msg)) {
         d.msg = d.msg.map(function(item){
           if (item.cost !== undefined) {
@@ -72,69 +62,76 @@ export async function onRequest(context) {
       return ok(d);
     }
 
-    // ---------- 请求号码（验证码接收）----------
+    // 客户端用（只返回人民币最终售价，不暴露成本）
+    if (action === 'client_services') {
+      const params = {
+        language: url.searchParams.get('language') || 'zh',
+        page: url.searchParams.get('page') || '1',
+      };
+      const countryName = url.searchParams.get('countryName');
+      const service = url.searchParams.get('service');
+      if (countryName) params.country = countryName;
+      if (service) params.service = service;
+      const r = await fetch(buildUrl('List', params));
+      const d = await r.json();
+      if (d.code === 0 && Array.isArray(d.msg)) {
+        d.msg = d.msg.map(function(item){
+          if (item.cost !== undefined) {
+            const originUsd = parseFloat(item.cost) || 0;
+            const finalUsd = originUsd * MARKUP;
+            item.price_cny = Math.round(finalUsd * USD_TO_CNY * 100);
+            delete item.cost;
+            delete item.origin_cost;
+          }
+          return item;
+        });
+      }
+      return ok(d);
+    }
+
     if (action === 'request_number') {
       const serviceId = url.searchParams.get('service_id');
       if (!serviceId) return ok({ ok: false, msg: '缺少 service_id' });
       const r = await fetch(buildUrl('getNumber', { service_id: serviceId }));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
-
-    // ---------- 获取短信（验证码接收）----------
     if (action === 'get_sms') {
       const requestId = url.searchParams.get('request_id');
       if (!requestId) return ok({ ok: false, msg: '缺少 request_id' });
       const r = await fetch(buildUrl('getSms', { request_id: requestId }));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
-
-    // ---------- 更改请求状态（释放号码）----------
     if (action === 'change_status') {
       const requestId = url.searchParams.get('request_id');
       const status = url.searchParams.get('status') || 'reject';
       if (!requestId) return ok({ ok: false, msg: '缺少 request_id' });
       const r = await fetch(buildUrl('setStatus', { request_id: requestId, status: status }));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
-
-    // ---------- 重新激活号码（getAgainNmber，官方拼写如此）----------
     if (action === 'reactivate') {
       const requestId = url.searchParams.get('request_id');
       if (!requestId) return ok({ ok: false, msg: '缺少 request_id' });
       const r = await fetch(buildUrl('getAgainNmber', { request_id: requestId }));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
-
-    // ---------- 通用短信：请求号码（getKeywordNumber）----------
     if (action === 'common_request') {
       const phone = url.searchParams.get('phone') || '';
       const params = phone ? { phone: phone } : {};
       const r = await fetch(buildUrl('getKeywordNumber', params));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
-
-    // ---------- 通用短信：获取短信（getKeywordSms）----------
     if (action === 'common_get_sms') {
       const phone = url.searchParams.get('phone');
       const keyword = url.searchParams.get('keyword') || '';
       if (!phone) return ok({ ok: false, msg: '缺少 phone' });
       const r = await fetch(buildUrl('getKeywordSms', { phone: phone, keyword: keyword }));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
-
-    // ---------- 通用短信：释放号码（delKeywordNumber）----------
     if (action === 'common_release') {
       const phone = url.searchParams.get('phone');
       if (!phone) return ok({ ok: false, msg: '缺少 phone' });
       const r = await fetch(buildUrl('delKeywordNumber', { phone: phone }));
-      const d = await r.json();
-      return ok(d);
+      return ok(await r.json());
     }
 
     return ok({ ok: false, msg: '未知 action: ' + action });

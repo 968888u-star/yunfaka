@@ -660,10 +660,19 @@ function openBuy(id){
   const totalStock = stockOf(db, id);
   if (!isLuban && totalStock <= 0){ toast('该商品暂时缺货','error'); return; }
   let defaultSkuId = 0;
-  // 支付方式切换时刷新金额显示
+  // 支付方式切换时刷新金额显示（三重保险：事件+点击+轮询）
   document.addEventListener('change', function(e){
     if (e.target && e.target.name === 'pay-method') refreshTotals();
   });
+  document.querySelectorAll('.pay-method').forEach(function(lb){
+    lb.addEventListener('click', function(){ setTimeout(refreshTotals, 50); });
+  });
+  if (window.__payPoll) clearInterval(window.__payPoll);
+  window.__payPoll = setInterval(function(){
+    if (!document.querySelector('input[name="pay-method"]')){ clearInterval(window.__payPoll); return; }
+    refreshTotals();
+  }, 500);
+  setTimeout(refreshTotals, 100);
 
   if (hasSku){
     let firstOk = null;

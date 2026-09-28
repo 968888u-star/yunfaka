@@ -6276,5 +6276,158 @@ window.lubanStartCommonNew = function(orderNo, params){
     }
 })();
 </script>
+<!-- 云发卡平台 - 终极最终版（绝对不消失 + 挂在Banner下方 + 舒服排版） -->
+<script>
+(function() {
+    // 1. 注入排版样式
+    var style = document.createElement('style');
+    style.innerHTML = `
+        #yf-banner-sms-btn {
+            margin-top: 12px !important;
+            background: #ffffff !important;
+            border-radius: 10px !important;
+            padding: 12px 20px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            cursor: pointer !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+            transition: all 0.2s ease !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            border: 1px solid rgba(255, 255, 255, 0.8) !important;
+        }
+        #yf-banner-sms-btn:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+            background: #f8f7ff !important;
+        }
+        .yf-sms-btn-left {
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            color: #8463f6 !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        .yf-sms-btn-right {
+            font-size: 13px !important;
+            color: #9ca3af !important;
+        }
+    `;
+    document.head.appendChild(style);
+
+    function applyUI() {
+        // 如果新按钮已经存在，立刻停止，绝不重复操作（防闪烁）
+        if (document.getElementById('yf-banner-sms-btn')) return;
+
+        // 清理之前所有可能残留的错误按钮
+        ['yf-global-cate-item', 'yf-global-float-btn'].forEach(function(id) {
+            var old = document.getElementById(id);
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+        });
+
+        var allEls = document.querySelectorAll('div, span, a, button, li');
+        var topGlobalBtn = null;
+
+        // 2. 寻找顶部原有的“全球接码”按钮（仅寻找，暂不隐藏）
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                topGlobalBtn = allEls[i];
+                break;
+            }
+        }
+
+        // 3. 寻找 Banner 里的“付款即发货”或“7×24”文字，以此定位 Banner
+        var bannerEl = null;
+        for (var j = 0; j < allEls.length; j++) {
+            var txt = allEls[j].innerText || '';
+            if (txt.includes('付款即发货') && txt.length < 200) {
+                bannerEl = allEls[j];
+                break;
+            }
+        }
+
+        // 如果找不到 Banner，跳过，不做任何隐藏
+        if (!bannerEl) return;
+
+        // 4. 创建新的卡片按钮
+        var btn = document.createElement('div');
+        btn.id = 'yf-banner-sms-btn';
+        btn.innerHTML = `
+            <span class="yf-sms-btn-left">🌐 全球接码</span>
+            <span class="yf-sms-btn-right">实时搜索 · 自动分配号码 →</span>
+        `;
+
+        if (topGlobalBtn) {
+            btn.onclick = function(e) {
+                e.stopPropagation();
+                topGlobalBtn.click();
+            };
+        }
+
+        // 5. 挂载到 Banner 的父级节点，放在 Banner 的后面（绝对不闪烁）
+        var bannerWrapper = bannerEl.parentNode;
+        if (bannerWrapper && bannerWrapper.parentNode) {
+            bannerWrapper.parentNode.insertBefore(btn, bannerWrapper.nextSibling);
+            
+            // 6. 只有当新按钮成功插入到页面后，才去隐藏顶部的旧按钮
+            if (topGlobalBtn) {
+                topGlobalBtn.style.display = 'none';
+            }
+        }
+    }
+
+    // 7. 安全监听：只负责在按钮被意外删除时重建，绝不反复插入
+    var observer = new MutationObserver(function() {
+        applyUI();
+    });
+
+    function start() {
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+            document.addEventListener('DOMContentLoaded', start);
+            return;
+        }
+        applyUI(); // 首次执行
+    }
+    start();
+
+    // 8. 修复安卓手机右下角客服图标
+    if (/android/i.test(navigator.userAgent)) {
+        setInterval(function() {
+            var allEls = document.querySelectorAll('div, span, a, button, li');
+            for (var k = 0; k < allEls.length; k++) {
+                var cTxt = allEls[k].innerText ? allEls[k].innerText.trim() : '';
+                if (cTxt === '客服' && allEls[k].children.length === 0) {
+                    var cp = allEls[k].parentNode;
+                    var isFloat = false;
+                    while (cp && cp !== document.body) {
+                        if (window.getComputedStyle(cp).position === 'fixed') { isFloat = true; break; }
+                        cp = cp.parentNode;
+                    }
+                    if (isFloat || allEls[k].style.position === 'fixed') {
+                        var btn2 = allEls[k];
+                        btn2.style.setProperty('position', 'fixed', 'important');
+                        btn2.style.setProperty('right', '20px', 'important');
+                        btn2.style.setProperty('bottom', '80px', 'important');
+                        btn2.style.setProperty('display', 'flex', 'important');
+                        btn2.style.setProperty('justify-content', 'center', 'important');
+                        btn2.style.setProperty('align-items', 'center', 'important');
+                        btn2.style.setProperty('width', '50px', 'important');
+                        btn2.style.setProperty('height', '50px', 'important');
+                        btn2.style.setProperty('border-radius', '50%', 'important');
+                        btn2.style.setProperty('background-color', '#ef4444', 'important');
+                        btn2.style.setProperty('color', '#ffffff', 'important');
+                        btn2.style.setProperty('z-index', '999999', 'important');
+                        btn2.style.setProperty('box-shadow', '0 4px 12px rgba(239, 68, 68, 0.4)', 'important');
+                        break;
+                    }
+                }
+            }
+        }, 2000);
+    }
+})();
+</script>
 </body>
 </html>

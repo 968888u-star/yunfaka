@@ -3885,5 +3885,35 @@ function lubanSubmitClientBuy(serviceId){
   }
 }
 </script>
+<script>
+/* ============ 全球接码 路由监听修复 v6 ============ */
+(function(){
+  function isLuban(){
+    var h = location.hash.replace(/^#/, '') || '/';
+    return h.indexOf('/luban') === 0;
+  }
+  function tryRender(){
+    if (!isLuban()) return false;
+    setTimeout(function(){
+      if (typeof renderLubanClient === 'function') {
+        renderLubanClient();
+      } else {
+        console.error('renderLubanClient 未定义，检查补丁是否粘贴成功');
+      }
+    }, 50);
+    return true;
+  }
+
+  // 专门监听 #/luban 的 hash 变化
+  window.addEventListener('hashchange', function(){
+    tryRender();
+  });
+
+  // 页面首次打开就是 #/luban 的情况
+  window.addEventListener('DOMContentLoaded', function(){
+    setTimeout(tryRender, 600);
+  });
+})();
+</script>
 </body>
 </html>

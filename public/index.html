@@ -6429,5 +6429,188 @@ window.lubanStartCommonNew = function(orderNo, params){
     }
 })();
 </script>
+<!-- 云发卡平台 - 最终完美版（复刻图二卡片，放在注册会员正下方） -->
+<script>
+(function() {
+    // 1. 注入卡片样式（复刻图二白底卡片）
+    var style = document.createElement('style');
+    style.innerHTML = `
+        #yf-sms-entry-card {
+            margin-top: 12px !important;
+            background: #ffffff !important;
+            border-radius: 12px !important;
+            padding: 16px 20px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05) !important;
+            cursor: pointer !important;
+            transition: all 0.2s ease !important;
+            border: 1px solid #f3f4f6 !important;
+            box-sizing: border-box !important;
+            width: 100% !important;
+        }
+        #yf-sms-entry-card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+        }
+        .yf-sms-icon {
+            width: 36px !important;
+            height: 36px !important;
+            background: #f3e8ff !important;
+            border-radius: 10px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 18px !important;
+            margin-right: 12px !important;
+            flex-shrink: 0 !important;
+        }
+        .yf-sms-text-wrap {
+            flex: 1 !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        .yf-sms-title {
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            color: #1f2937 !important;
+            margin-bottom: 2px !important;
+        }
+        .yf-sms-sub {
+            font-size: 12px !important;
+            color: #9ca3af !important;
+        }
+        .yf-sms-btn {
+            background: #8463f6 !important;
+            color: #ffffff !important;
+            padding: 8px 16px !important;
+            border-radius: 8px !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            margin-left: 10px !important;
+            box-shadow: 0 2px 6px rgba(132, 99, 246, 0.3) !important;
+        }
+    `;
+    document.head.appendChild(style);
+
+    function applyUI() {
+        // 如果卡片已经存在，立刻停止（防闪烁）
+        if (document.getElementById('yf-sms-entry-card')) return;
+
+        // 清理之前挂在底部的错误卡片
+        var oldBtn = document.getElementById('yf-banner-sms-btn');
+        if (oldBtn && oldBtn.parentNode) oldBtn.parentNode.removeChild(oldBtn);
+        
+        // 清理分类栏里的旧按钮
+        var oldCate = document.getElementById('yf-global-cate-item');
+        if (oldCate && oldCate.parentNode) oldCate.parentNode.removeChild(oldCate);
+
+        var allEls = document.querySelectorAll('div, span, a, button, li');
+        var topGlobalBtn = null;
+
+        // 2. 找并隐藏顶部原有的“全球接码”
+        for (var i = 0; i < allEls.length; i++) {
+            if (allEls[i].children.length === 0 && allEls[i].innerText.trim() === '全球接码') {
+                topGlobalBtn = allEls[i];
+                break;
+            }
+        }
+
+        // 3. 找“注册会员，享余额支付”所在的卡片
+        var regCard = null;
+        for (var j = 0; j < allEls.length; j++) {
+            var txt = allEls[j].innerText || '';
+            if (txt.includes('注册会员') && txt.includes('享余额支付') && txt.length < 200) {
+                regCard = allEls[j];
+                break;
+            }
+        }
+
+        if (!regCard || !regCard.parentNode) return;
+
+        // 4. 创建新卡片
+        var card = document.createElement('div');
+        card.id = 'yf-sms-entry-card';
+        card.innerHTML = `
+            <div style="display:flex; align-items:center; flex:1;">
+                <div class="yf-sms-icon">🌐</div>
+                <div class="yf-sms-text-wrap">
+                    <div class="yf-sms-title">全球接码</div>
+                    <div class="yf-sms-sub">实时搜索 · 自动分配号码</div>
+                </div>
+            </div>
+            <div class="yf-sms-btn">立即接码</div>
+        `;
+
+        if (topGlobalBtn) {
+            card.onclick = function(e) {
+                e.stopPropagation();
+                topGlobalBtn.click();
+            };
+        }
+
+        // 5. 插入到“注册会员”卡片的正下方
+        regCard.parentNode.insertBefore(card, regCard.nextSibling);
+
+        // 6. 成功插入后，才隐藏顶部旧按钮（保底策略）
+        if (topGlobalBtn && document.getElementById('yf-sms-entry-card')) {
+            topGlobalBtn.style.display = 'none';
+        }
+    }
+
+    // 7. 安全监听 DOM 变动，防闪烁
+    var observer = new MutationObserver(function() {
+        applyUI();
+    });
+
+    function start() {
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+            document.addEventListener('DOMContentLoaded', start);
+            return;
+        }
+        applyUI(); // 首次执行
+    }
+    start();
+
+    // 8. 修复安卓手机右下角客服图标（保持不变）
+    if (/android/i.test(navigator.userAgent)) {
+        setInterval(function() {
+            var allEls = document.querySelectorAll('div, span, a, button, li');
+            for (var k = 0; k < allEls.length; k++) {
+                var cTxt = allEls[k].innerText ? allEls[k].innerText.trim() : '';
+                if (cTxt === '客服' && allEls[k].children.length === 0) {
+                    var cp = allEls[k].parentNode;
+                    var isFloat = false;
+                    while (cp && cp !== document.body) {
+                        if (window.getComputedStyle(cp).position === 'fixed') { isFloat = true; break; }
+                        cp = cp.parentNode;
+                    }
+                    if (isFloat || allEls[k].style.position === 'fixed') {
+                        var btn2 = allEls[k];
+                        btn2.style.setProperty('position', 'fixed', 'important');
+                        btn2.style.setProperty('right', '20px', 'important');
+                        btn2.style.setProperty('bottom', '80px', 'important');
+                        btn2.style.setProperty('display', 'flex', 'important');
+                        btn2.style.setProperty('justify-content', 'center', 'important');
+                        btn2.style.setProperty('align-items', 'center', 'important');
+                        btn2.style.setProperty('width', '50px', 'important');
+                        btn2.style.setProperty('height', '50px', 'important');
+                        btn2.style.setProperty('border-radius', '50%', 'important');
+                        btn2.style.setProperty('background-color', '#ef4444', 'important');
+                        btn2.style.setProperty('color', '#ffffff', 'important');
+                        btn2.style.setProperty('z-index', '999999', 'important');
+                        btn2.style.setProperty('box-shadow', '0 4px 12px rgba(239, 68, 68, 0.4)', 'important');
+                        break;
+                    }
+                }
+            }
+        }, 2000);
+    }
+})();
+</script>
 </body>
 </html>

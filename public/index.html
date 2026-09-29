@@ -5316,53 +5316,39 @@ window.lubanStartCommonNew = function(orderNo, params){
 </script>
 
 <script>
-/* 口令红包一键跳转 v3：自动复制口令 + 预填金额 + remark带口令 + ulink通用链接兜底 */
+/* 口令红包一键跳转 v4：单次跳转·无循环重试·原生scheme直接拉起·防重复点击 */
+var __yfJumping = false;
 function yfOpenAlipayRedpacket(code, amount){
+  if(__yfJumping){ if(window.toast) toast('已在跳转中，请勿重复点击','info'); return; }
   if(!code){ if(window.toast) toast('口令为空','error'); return; }
+  __yfJumping = true;
+  /* 3秒后重置防重锁（若跳转失败用户可再点） */
+  setTimeout(function(){ __yfJumping = false; }, 3000);
   amount = amount || '';
-  /* 1. 复制口令到剪贴板（跳转后一键粘贴） */
+  /* 1. 复制口令到剪贴板（进入口令红包输入框后一键粘贴） */
   try{
     var ta = document.createElement('textarea');
     ta.value = code; ta.style.position='fixed'; ta.style.opacity='0';
     document.body.appendChild(ta); ta.select();
     document.execCommand('copy'); document.body.removeChild(ta);
-    if(window.toast) toast('口令 '+code+' 已复制，金额 ¥'+amount+'，正在跳转…','success');
-  }catch(e){ if(window.toast) toast('请记住口令：'+code+' 金额¥'+amount,'info'); }
-  /* 2. 构造带参 scheme：money/amount预填金额，remark显示口令便于查看/复制 */
+    if(window.toast) toast('口令 '+code+' 已复制·金额¥'+amount+'·正在拉起支付宝…','success');
+  }catch(e){ if(window.toast) toast('请记住口令:'+code+' 金额¥'+amount,'info'); }
+  /* 2. 单次跳转：原生 alipays:// scheme 直接拉起支付宝发红包页（桌面/手机通用）
+        money/amount预填金额，remark显示口令便于查看，appId=88886666=发红包页（最近口令红包入口） */
   var remark = encodeURIComponent('口令:' + code);
   var money = encodeURIComponent(amount);
-  var baseParams = '&appLaunchMode=3&canSearch=false&entryMode=personalStage&schemaMode=portalInside&target=personal';
-  var fullParams = baseParams + '&money=' + money + '&amount=' + money + '&remark=' + remark;
-  var simpleParams = '&money=' + money + '&amount=' + money + '&remark=' + remark;
-  /* 3. 按优先级依次尝试（ulink通用链接在iOS/微信内唤起率最高） */
-  var inner = 'alipays://platformapi/startapp?appId=88886666' + fullParams;
-  var schemes = [
-    'https://ulink.alipay.com/?scheme=' + encodeURIComponent(inner),
-    'alipays://platformapi/startapp?appId=88886666' + fullParams,
-    'alipays://platformapi/startapp?appId=88886666' + simpleParams,
-    'alipays://platformapi/startapp?saId=88886666' + simpleParams,
-    'alipay://platformapi/startapp?saId=88886666' + simpleParams,
-    'alipays://platformapi/startapp?appId=88886666',
-    'alipays://platformapi/startapp?appId=20000067',
-    'alipays://'
-  ];
-  var i = 0;
-  function tryNext(){
-    if(i >= schemes.length){
-      if(window.toast) toast('未检测到支付宝，请手动打开：支付宝→发红包→口令红包，粘贴已复制的口令，金额填¥'+amount,'info');
-      return;
+  var scheme = 'alipays://platformapi/startapp?appId=88886666'
+    + '&appLaunchMode=3&canSearch=false&entryMode=personalStage'
+    + '&schemaMode=portalInside&target=personal'
+    + '&money=' + money + '&amount=' + money + '&remark=' + remark;
+  /* 3. 只跳一次：location.href 原生拉起，不循环、不重试、不跳下载页 */
+  try{ window.location.href = scheme; }catch(e){}
+  /* 4. 若2.5秒后仍停留在本页（未安装/未拉起），提示手动操作（不再自动重试） */
+  setTimeout(function(){
+    if(!document.hidden && window.toast){
+      toast('若未打开支付宝，请手动进入：支付宝→发红包→口令红包，粘贴口令，金额¥'+amount,'info');
     }
-    var s = schemes[i++];
-    try{
-      var ifr = document.createElement('iframe');
-      ifr.style.display='none'; ifr.src = s;
-      document.body.appendChild(ifr);
-      setTimeout(function(){ try{ document.body.removeChild(ifr); }catch(e){} }, 1500);
-    }catch(e){}
-    setTimeout(function(){ try{ window.location.href = s; }catch(e){} }, 100);
-    setTimeout(function(){ if(!document.hidden){ tryNext(); } }, 2500);
-  }
-  tryNext();
+  }, 2500);
 }
 </script>
 </body>

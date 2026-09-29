@@ -3645,6 +3645,21 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var changed = false;
     if (db.config.smm_markup === undefined){ db.config.smm_markup = 1.5; changed = true; }
     /* smm_usd_cny 已废弃，统一使用后台 pay_usdt_rate（USDT汇率）联动换算 */
+    /* ===== 自动重算旧SMM商品价格（USDT结算单位） ===== */
+    var rate = usdtRate();
+    var markup = Number(db.config.smm_markup) || 1.5;
+    var recalc = 0;
+    db.products.forEach(function(p){
+      if (p.source === 'smm' && p.smm_rate_usd){
+        var expect = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * rate * 100));
+        if (p.smm_price_ver !== 2 || p.price !== expect){
+          p.price = expect;
+          p.smm_price_ver = 2;
+          recalc++;
+        }
+      }
+    });
+    if (recalc > 0){ changed = true; console.log('[SMM] 自动重算 ' + recalc + ' 个商品价格为USDT结算'); }
     if (changed) saveDB(db);
   })();
 
@@ -3716,6 +3731,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       if (p.source === 'smm' && p.smm_rate_usd){
         /* USDT售价 = USD成本 × 加价倍数；人民币分 = USDT售价 × 汇率 × 100 */
         p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * rate * 100));
+        p.smm_price_ver = 2;
         count++;
       }
     });
@@ -3768,7 +3784,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         var max = parseInt(s.max) || 100000;
         if (exist){
           exist.name = name; exist.price = priceFen; exist.description = desc;
-          exist.smm_rate_usd = rateUsd.toFixed(4);
+          exist.smm_rate_usd = rateUsd.toFixed(4); exist.smm_price_ver = 2;
           exist.smm_min = min; exist.smm_max = max;
           exist.smm_type = s.type || ''; exist.smm_category = s.category || '';
           exist.smm_refill = !!s.refill; exist.smm_cancel = !!s.cancel;
@@ -3782,7 +3798,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
             smm_service_id: serviceId, smm_service_name: s.name || '',
             smm_type: s.type || '', smm_category: s.category || '',
             smm_rate_usd: rateUsd.toFixed(4), smm_min: min, smm_max: max,
-            smm_refill: !!s.refill, smm_cancel: !!s.cancel
+            smm_refill: !!s.refill, smm_cancel: !!s.cancel, smm_price_ver: 2
           });
           added++;
         }
@@ -3889,7 +3905,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       var isAlipay = paySel && paySel.value === 'alipay';
       var rate = usdtRate();
       if (isAlipay){
-        $('#smm-amount').textContent = '¥' + yuan(amountFen);
+        $('#smm-amount').textContent = '¥' + yuan(amountFen) + '（口令红包）';
         $('#smm-unit').textContent = '¥' + yuan(p.price) + ' / 1000条';
         if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = 'USDT计价约 ' + usdt(amountFen) + ' USDT（按汇率 ' + rate + ' 换算）';
       } else {
@@ -3905,7 +3921,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     if (!usdtEnabled && !alipayEnabled){ $('#smm-pay-wrap').innerHTML = '<div style="color:#b91c1c">商家未开启支付方式</div>'; return; }
     $('#smm-pay-wrap').innerHTML = '<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">' +
       (usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="smm-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : '') +
-      (alipayEnabled ? '<label class="pay-method' + (!usdtEnabled ? ' active' : '') + '" data-method="alipay"><input type="radio" name="smm-pay" value="alipay"' + (!usdtEnabled ? ' checked' : '') + '><span class="logo">💰</span> 支付宝</label>' : '') +
+      (alipayEnabled ? '<label class="pay-method' + (!usdtEnabled ? ' active' : '') + '" data-method="alipay"><input type="radio" name="smm-pay" value="alipay"' + (!usdtEnabled ? ' checked' : '') + '><span class="logo">🧧</span> 支付宝口令红包</label>' : '') +
       '</div></label>';
     document.querySelectorAll('#smm-pay-methods .pay-method').forEach(function(el){
       el.addEventListener('click', function(){
@@ -3915,6 +3931,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         smmRefreshAmount();  /* 切换支付方式时联动换算金额显示 */
       });
     });
+    /* 初始刷新一次，确保金额单位与默认选中的支付方式一致 */
+    setTimeout(smmRefreshAmount, 50);
   };
 
   window.smmSubmit = function(id){

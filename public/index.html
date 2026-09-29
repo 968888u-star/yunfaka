@@ -321,7 +321,10 @@ const DEFAULT_CONFIG = {
   balance_enabled: true,
   recharge_min: 1000,
   luban_common_price: 200,   /* 通用接码价格（分） */
-  hero_subtitle: '7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额'
+  hero_subtitle: '7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额',
+  smm_hero_title: '社交媒体推广',
+  smm_hero_subtitle: '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理',
+  smm_usage_text: '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度'
 };
 
 function seedDB(){
@@ -583,7 +586,7 @@ function renderHome(){
       </div>`
     : `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px">
         <div><div style="font-weight:700">💎 注册会员，享余额支付</div><div class="muted" style="font-size:12px;margin-top:2px">支持余额抵扣、充值优惠，购物更便捷</div></div>
-        <a class="btn primary sm" href="#/member">注册 / 登录</a>
+        <a class="btn primary sm" style="min-width:108px;text-align:center" href="#/member">注册 / 登录</a>
       </div>`;
   const tgUrl = tgUrlOf(cfg);
   const tgBox = tgUrl ? `<div class="card panel" style="margin-top:24px;text-align:center">
@@ -3592,7 +3595,7 @@ Object.assign(window, {
       <div style="font-weight:700">🌐 全球接码</div>
       <div class="muted" style="font-size:12px;margin-top:2px">实时搜索 · 自动分配号码</div>
     </div>
-    <a class="btn primary sm" href="#/luban">立即接码</a>`;
+    <a class="btn primary sm" style="min-width:108px;text-align:center" href="#/luban">立即接码</a>`;
     card.addEventListener('click', e => { if (e.target.tagName !== 'A') location.hash = '#/luban'; });
     reg.parentNode.insertBefore(card, reg.nextSibling);
   }
@@ -3695,6 +3698,31 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     if (smmIsPackage(p)) return Math.round(p.price);  /* 套餐总价 */
     return Math.round(p.price * qty / 1000);           /* 按每1000单价 × 数量 */
   }
+  /* 按商品名称自动归类平台 */
+  function smmCatOf(name){
+    var n = String(name||'').toLowerCase();
+    if (/telegram|tg[\s\-]|纸飞机|电报/.test(n)) return 'Telegram';
+    if (/instagram|\bins\b|\big\b/.test(n)) return 'Instagram';
+    if (/youtube|油管|\byt\b/.test(n)) return 'YouTube';
+    if (/tiktok|抖音国际|\btt\b/.test(n)) return 'TikTok';
+    if (/facebook|\bfb\b|脸书/.test(n)) return 'Facebook';
+    if (/twitter|推特|tweet|x\.com|\bx\b/.test(n)) return 'Twitter/X';
+    if (/chatgpt|\bgpt\b|openai|claude|gemini|midjourney|\bai\b/.test(n)) return 'AI/ChatGPT';
+    if (/netflix|奈飞|网飞/.test(n)) return 'Netflix';
+    if (/spotify|声田|spot/.test(n)) return 'Spotify';
+    if (/discord|dc\b/.test(n)) return 'Discord';
+    if (/google|谷歌|gmail/.test(n)) return 'Google';
+    if (/apple|苹果|icloud|app store/.test(n)) return 'Apple';
+    if (/tencent|腾讯|qq|微信|wechat/.test(n)) return '腾讯/微信';
+    if (/bilibili|b站|哔哩/.test(n)) return 'B站';
+    if (/xiaohongshu|小红书|xhs/.test(n)) return '小红书';
+    if (/douyin|抖音/.test(n)) return '抖音';
+    if (/weibo|微博/.test(n)) return '微博';
+    if (/kuaishou|快手/.test(n)) return '快手';
+    return '其他';
+  }
+  var smmCatFilter = 'all';
+  function smmSetCat(c){ smmCatFilter = c; renderSmmClient(); window.scrollTo({top:0,behavior:'smooth'}); }
 
   /* ========== 后台 SMM Tab ========== */
   function renderSmmTab(){
@@ -3739,6 +3767,13 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '</div>' +
         '<div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">💡 上游为<b>人民币</b>计价：上游价 × 加价倍数 = 人民币售价；商品列表/USDT支付按「人民币售价 ÷ 上方汇率」显示<b>USDT</b>；支付宝口令红包直接显示<b>人民币</b>。修改汇率请到「设置」标签页。</div>' +
       '</div>' +
+      '<div class="card panel" style="background:#f8fafc;border-color:#e2e8f0;margin-top:14px">' +
+        '<h3 style="margin:0 0 12px;font-size:14px">✏️ 页面文案自定义</h3>' +
+        '<label class="field"><span>顶部大标题</span><input id="smm-hero-title" value="' + esc(cfg.smm_hero_title || '社交媒体推广') + '" maxlength="20"></label>' +
+        '<label class="field"><span>顶部副标题</span><input id="smm-hero-sub" value="' + esc(cfg.smm_hero_subtitle || '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理') + '" maxlength="60"></label>' +
+        '<label class="field"><span>使用说明（支持&lt;br&gt;换行）</span><textarea id="smm-usage-text" rows="3" style="resize:vertical">' + esc(cfg.smm_usage_text || '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度') + '</textarea></label>' +
+        '<button class="btn primary sm" onclick="smmSaveText()">保存文案</button>' +
+      '</div>' +
       '<div class="card panel"><h2>推广商品列表（' + items.length + '）</h2>' +
         '<div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本(USD)</th><th>USDT售价</th><th>≈¥参考</th><th>起订~上限</th><th>特性</th><th>状态</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '</div>';
@@ -3762,6 +3797,18 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     saveDB(db);
     toast('已保存，重算了 ' + count + ' 个商品（上游人民币计价，USDT显示=售价÷汇率' + rate + '）','success');
     renderSmmTab();
+  };
+
+  window.smmSaveText = function(){
+    var t = ($('#smm-hero-title') ? $('#smm-hero-title').value : '').trim() || '社交媒体推广';
+    var s = ($('#smm-hero-sub') ? $('#smm-hero-sub').value : '').trim();
+    var u = ($('#smm-usage-text') ? $('#smm-usage-text').value : '').trim();
+    var db = loadDB();
+    db.config.smm_hero_title = t;
+    db.config.smm_hero_subtitle = s;
+    db.config.smm_usage_text = u;
+    saveDB(db);
+    toast('文案已保存','success');
   };
 
   window.smmForceRecalc = function(){
@@ -3789,7 +3836,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       if (!box) return;
       if (r.ok && r.data && r.data.balance !== undefined){
         var bal = parseFloat(r.data.balance);
-        box.innerHTML = '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:16px 20px;margin-top:14px"><div class="spread"><div><div class="muted" style="font-size:12px">chinayinliu 账户余额</div><div style="font-size:28px;font-weight:800;color:#15803d">$' + bal.toFixed(4) + '</div></div><div class="muted" style="font-size:12px">约 ¥' + (bal*usdtRate()).toFixed(2) + '（汇率' + usdtRate() + '）</div></div></div>';
+        box.innerHTML = '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:16px 20px;margin-top:14px"><div class="spread"><div><div class="muted" style="font-size:12px">chinayinliu 账户余额（人民币计价）</div><div style="font-size:28px;font-weight:800;color:#15803d">¥' + bal.toFixed(2) + '</div></div><div class="muted" style="font-size:12px">约 ' + (bal/usdtRate()).toFixed(4) + ' USDT（汇率' + usdtRate() + '）</div></div></div>';
         toast('余额：$' + bal, 'success');
       } else {
         var errMsg = (r.data && (r.data.error || r.data.msg)) || r.msg || '查询失败';
@@ -3897,20 +3944,30 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
   /* ========== 客户端 SMM 页 ========== */
   function renderSmmClient(){
     var db = loadDB();
+    var cfg = getConfig(db);
     var items = db.products.filter(function(p){ return p.source === 'smm' && p.active; });
-    var cards = items.length ? items.map(function(p){
+    /* 按平台分类统计 */
+    var catCount = {};
+    items.forEach(function(p){ var c = smmCatOf(p.smm_service_name || p.name); catCount[c] = (catCount[c]||0)+1; });
+    var catOrder = ['Telegram','Instagram','YouTube','TikTok','Facebook','Twitter/X','AI/ChatGPT','Netflix','Spotify','Discord','Google','Apple','腾讯/微信','抖音','B站','小红书','微博','快手','其他'];
+    var cats = catOrder.filter(function(c){ return catCount[c]; });
+    var filtered = smmCatFilter === 'all' ? items : items.filter(function(p){ return smmCatOf(p.smm_service_name || p.name) === smmCatFilter; });
+    var catTabs = '<button class="cat-tab ' + (smmCatFilter==='all'?'active':'') + '" onclick="smmSetCat(\'all\')">全部<span class="n">' + items.length + '</span></button>' +
+      cats.map(function(c){ return '<button class="cat-tab ' + (smmCatFilter===c?'active':'') + '" onclick="smmSetCat(\'' + c + '\')">' + c + '<span class="n">' + catCount[c] + '</span></button>'; }).join('');
+    var cards = filtered.length ? filtered.map(function(p){
       return '<div class="card product">' +
         '<div class="spread"><div class="p-name">' + esc(p.smm_service_name || p.name) + '</div><span class="badge cat">' + esc(p.smm_category || '') + '</span></div>' +
         '<div class="p-desc">' + esc(p.description || '') + '</div>' +
-        '<div class="row" style="gap:6px;flex-wrap:wrap">' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">可补单</span>' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">可取消</span>' : '') + '</div>' +
+        '<div class="row" style="gap:6px;flex-wrap:wrap"><span class="badge cat" style="font-size:10px">' + smmCatOf(p.smm_service_name || p.name) + '</span>' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">可补单</span>' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">可取消</span>' : '') + '</div>' +
         '<div class="spread" style="margin-top:auto"><div class="p-price"><small>USDT </small>' + usdt(p.price) + (smmIsPackage(p) ? '<span class="from">/份</span>' : '<span class="from">/1000</span>') + '</div><div class="muted" style="font-size:12px">' + (smmIsPackage(p) ? '套餐·1份' : '起订 ' + esc(p.smm_min)) + '</div></div>' +
         '<button class="btn primary" onclick="smmBuy(' + p.id + ')">立即下单</button>' +
       '</div>';
-    }).join('') : '<div class="empty" style="grid-column:1/-1">暂无推广服务</div>';
+    }).join('') : '<div class="empty" style="grid-column:1/-1">该分类下暂无服务</div>';
 
     $('#app').innerHTML =
-      '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 社交媒体推广</h1><p>关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理</p></div>' +
-      '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;font-size:13px;color:#15803d;line-height:1.8;margin-bottom:16px">📌 <b>使用说明：</b><br>1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度</div>' +
+      '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 ' + esc(cfg.smm_hero_title || '社交媒体推广') + '</h1><p>' + esc(cfg.smm_hero_subtitle || '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理') + '</p></div>' +
+      '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;font-size:13px;color:#15803d;line-height:1.8;margin-bottom:16px">📌 <b>使用说明：</b><br>' + (cfg.smm_usage_text || '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度') + '</div>' +
+      '<div class="cats" style="margin-bottom:16px">' + catTabs + '</div>' +
       '<div class="grid">' + cards + '</div>';
   }
 
@@ -4222,7 +4279,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     card.id = 'yf-smm-home-card';
     card.className = 'card panel';
     card.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;cursor:pointer;';
-    card.innerHTML = '<div><div style="font-weight:700">📈 社交媒体推广</div><div class="muted" style="font-size:12px;margin-top:2px">关注 / 点赞 / 播放 / 评论 · ' + count + ' 个服务</div></div><a class="btn primary sm" href="#/smm">去看看</a>';
+    card.innerHTML = '<div><div style="font-weight:700">📈 社交媒体推广</div><div class="muted" style="font-size:12px;margin-top:2px">关注 / 点赞 / 播放 / 评论 · ' + count + ' 个服务</div></div><a class="btn primary sm" style="min-width:108px;text-align:center" href="#/smm">去看看</a>';
     card.addEventListener('click', function(e){ if (e.target.tagName !== 'A') location.hash = '#/smm'; });
     anchor.parentNode.insertBefore(card, anchor.nextSibling);
   }

@@ -3672,6 +3672,23 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     }).then(function(r){ return r.json(); });
   }
 
+  /* 判断是否为套餐类型（Package 或 min=max=1），套餐价格为总价而非每1000个单价 */
+  function smmIsPackage(p){
+    if (!p) return false;
+    if (p.smm_type === 'Package') return true;
+    var mn = parseInt(p.smm_min), mx = parseInt(p.smm_max);
+    return (mn === 1 && mx === 1);
+  }
+  /* SMM商品USDT售价（每1000个 或 套餐总价） */
+  function smmUsdtPrice(p){
+    return usdt(p.price);
+  }
+  /* SMM订单金额（分） */
+  function smmCalcAmount(p, qty){
+    if (smmIsPackage(p)) return Math.round(p.price);  /* 套餐总价 */
+    return Math.round(p.price * qty / 1000);           /* 按每1000单价 × 数量 */
+  }
+
   /* ========== 后台 SMM Tab ========== */
   function renderSmmTab(){
     var db = loadDB();
@@ -3682,8 +3699,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       return '<tr>' +
         '<td><b>' + esc(p.smm_service_name || p.name) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.smm_service_id) + '</div></td>' +
         '<td>' + esc(p.smm_category || '-') + '</td>' +
-        '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '<div style="font-size:10px">≈ ' + (parseFloat(p.smm_rate_usd||0)*(cfg.smm_markup||1.5)).toFixed(4) + ' USDT</div></td>' +
-        '<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT</td>' +
+        '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '</td>' +'<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT' + (smmIsPackage(p)?' <span style="font-size:10px;color:#b45309">套餐</span>':' /1000') + '</td>' +'<td class="muted" style="font-size:12px">¥' + yuan(p.price) + '</td>' +
+        
         '<td class="muted" style="font-size:12px">' + esc(p.smm_min) + '~' + esc(p.smm_max) + '</td>' +
         '<td>' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">补</span> ' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">退</span>' : '') + '</td>' +
         '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
@@ -3711,12 +3728,12 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">' +
           '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数（成本价 × 倍数 = USDT售价）</div><input id="smm-markup" type="number" step="0.05" min="1" value="' + cfg.smm_markup + '"></div>' +
           '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">USDT→CNY 汇率（后台「设置」统一管理）</div><input id="smm-usdt-rate" type="number" step="0.01" value="' + usdtRate() + '" disabled style="background:#f1f5f9;color:#6b7280;cursor:not-allowed"></div>' +
-          '<button class="btn primary" style="align-self:flex-end" onclick="smmSaveCfg()">保存并重算价格</button>' +
+          '<button class="btn primary" style="align-self:flex-end" onclick="smmSaveCfg()">保存并重算价格</button>' +'<button class="btn ghost" style="align-self:flex-end" onclick="smmForceRecalc()">🔄 强制重算</button>' +
         '</div>' +
         '<div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">💡 结算单位已升级为 <b>USDT</b>：上游成本(USD/1000条) × 加价倍数 = 售价(USDT/1000条)；支付宝人民币金额 = USDT金额 × 上方汇率，自动联动。修改汇率请到「设置」标签页。</div>' +
       '</div>' +
       '<div class="card panel"><h2>推广商品列表（' + items.length + '）</h2>' +
-        '<div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本</th><th>售价</th><th>起订~上限</th><th>特性</th><th>状态</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本(USD)</th><th>USDT售价</th><th>≈¥参考</th><th>起订~上限</th><th>特性</th><th>状态</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '</div>';
   }
 
@@ -3737,6 +3754,24 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     });
     saveDB(db);
     toast('已保存，按汇率 ' + rate + ' 重算了 ' + count + ' 个商品','success');
+    renderSmmTab();
+  };
+
+  window.smmForceRecalc = function(){
+    var db = loadDB();
+    var cfg = getConfig(db);
+    var markup = Number(cfg.smm_markup) || 1.5;
+    var rate = usdtRate();
+    var count = 0;
+    db.products.forEach(function(p){
+      if (p.source === 'smm' && p.smm_rate_usd){
+        p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * rate * 100));
+        p.smm_price_ver = 2;
+        count++;
+      }
+    });
+    saveDB(db);
+    toast('已强制重算 ' + count + ' 个商品（汇率 ' + rate + '，加价 ' + markup + 'x）','success');
     renderSmmTab();
   };
 
@@ -3861,7 +3896,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<div class="spread"><div class="p-name">' + esc(p.smm_service_name || p.name) + '</div><span class="badge cat">' + esc(p.smm_category || '') + '</span></div>' +
         '<div class="p-desc">' + esc(p.description || '') + '</div>' +
         '<div class="row" style="gap:6px;flex-wrap:wrap">' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">可补单</span>' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">可取消</span>' : '') + '</div>' +
-        '<div class="spread" style="margin-top:auto"><div class="p-price"><small>USDT </small>' + usdt(p.price) + '<span class="from">/1000</span></div><div class="muted" style="font-size:12px">起订 ' + esc(p.smm_min) + '</div></div>' +
+        '<div class="spread" style="margin-top:auto"><div class="p-price"><small>USDT </small>' + usdt(p.price) + (smmIsPackage(p) ? '<span class="from">/份</span>' : '<span class="from">/1000</span>') + '</div><div class="muted" style="font-size:12px">' + (smmIsPackage(p) ? '套餐·1份' : '起订 ' + esc(p.smm_min)) + '</div></div>' +
         '<button class="btn primary" onclick="smmBuy(' + p.id + ')">立即下单</button>' +
       '</div>';
     }).join('') : '<div class="empty" style="grid-column:1/-1">暂无推广服务</div>';
@@ -3881,40 +3916,41 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var cfg = getConfig(db);
     var member = getCurrentMember(db);
     var lastSecret = (member && member.secret) || localStorage.getItem(LS_SECRET) || '';
-    var defQty = Math.max(min, 1000); if (defQty > max) defQty = max;
+    var isPkg = smmIsPackage(p);
+    var defQty = isPkg ? 1 : Math.max(min, 1000); if (defQty > max) defQty = max;
 
-    var initAmount = Math.round(p.price * defQty / 1000);
+    var initAmount = smmCalcAmount(p, defQty);
     openModal('<h3>下单 · ' + esc(p.smm_service_name) + '</h3>' +
       '<div class="kv"><span class="k">服务</span><span class="v">' + esc(p.smm_service_name) + '</span></div>' +
-      '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="smm-unit">' + usdt(p.price) + ' USDT / 1000条</span></div>' +
+      '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="smm-unit">' + usdt(p.price) + ' USDT' + (isPkg ? ' /份' : ' /1000条') + '</span></div>' +
       '<label class="field"><span>目标链接（帖子/账号/视频 URL）</span><input id="smm-link" placeholder="https://..." autocomplete="off"></label>' +
-      '<label class="field"><span>数量（' + min + ' ~ ' + max + '）</span><input id="smm-qty" type="number" min="' + min + '" max="' + max + '" value="' + defQty + '"></label>' +
+      (isPkg ? '' : '<label class="field"><span>数量（' + min + ' ~ ' + max + '）</span><input id="smm-qty" type="number" min="' + min + '" max="' + max + '" value="' + defQty + '"></label>') +
       '<label class="field"><span>暗号（用于查询订单）</span><input id="smm-secret" maxlength="60" value="' + esc(lastSecret) + '"></label>' +
       '<div class="spread" style="margin:14px 0;padding-top:14px;border-top:1px dashed var(--line)"><span class="muted" style="font-size:13px">订单金额</span><span id="smm-amount" style="font-size:18px;font-weight:800;color:#e11d48">' + usdt(initAmount) + ' USDT</span></div>' +
       '<div id="smm-cny-hint" style="text-align:right;font-size:12px;color:#6b7280;margin-top:-8px;margin-bottom:10px">支付宝付款约 ¥' + yuan(initAmount) + '（按汇率 ' + usdtRate() + ' 换算）</div>' +
       '<div id="smm-pay-wrap"></div>' +
       '<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn primary" onclick="smmSubmit(' + p.id + ')">确认下单</button></div>');
 
-    var qtyEl = $('#smm-qty');
+    var qtyEl = isPkg ? null : $('#smm-qty');
     function smmRefreshAmount(){
       var q = parseInt(qtyEl.value) || 0;
       if (q < min) q = min; if (q > max) q = max;
       qtyEl.value = q;
-      var amountFen = Math.round(p.price * q / 1000);
+      var amountFen = smmCalcAmount(p, q);
       var paySel = document.querySelector('input[name="smm-pay"]:checked');
       var isAlipay = paySel && paySel.value === 'alipay';
       var rate = usdtRate();
       if (isAlipay){
         $('#smm-amount').textContent = '¥' + yuan(amountFen) + '（口令红包）';
-        $('#smm-unit').textContent = '¥' + yuan(p.price) + ' / 1000条';
+        $('#smm-unit').textContent = '¥' + yuan(p.price) + (isPkg ? ' /份' : ' / 1000条');
         if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = 'USDT计价约 ' + usdt(amountFen) + ' USDT（按汇率 ' + rate + ' 换算）';
       } else {
         $('#smm-amount').textContent = usdt(amountFen) + ' USDT';
-        $('#smm-unit').textContent = usdt(p.price) + ' USDT / 1000条';
+        $('#smm-unit').textContent = usdt(p.price) + ' USDT' + (isPkg ? ' /份' : ' / 1000条');
         if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = '支付宝付款约 ¥' + yuan(amountFen) + '（按汇率 ' + rate + ' 换算）';
       }
     }
-    qtyEl.addEventListener('input', smmRefreshAmount);
+    if (qtyEl) qtyEl.addEventListener('input', smmRefreshAmount);
 
     var usdtEnabled = cfg.pay_usdt_enabled !== false;
     var alipayEnabled = cfg.pay_alipay_enabled !== false;
@@ -3942,13 +3978,13 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     if (!p) return;
     var link = $('#smm-link').value.trim();
     var secret = $('#smm-secret').value.trim();
-    var qty = parseInt($('#smm-qty').value) || 0;
+    var qty = smmIsPackage(p) ? 1 : (parseInt($('#smm-qty').value) || 0);
     if (!link){ toast('请填写目标链接','error'); return; }
     if (!/^https?:\/\//i.test(link)){ toast('链接必须 http:// 或 https:// 开头','error'); return; }
     var sErr = validateSecret(secret);
     if (sErr){ toast(sErr,'error'); return; }
     if (qty < (p.smm_min || 1) || qty > (p.smm_max || 100000)){ toast('数量超范围','error'); return; }
-    var amount = Math.round(p.price * qty / 1000);
+    var amount = smmCalcAmount(p, qty);
     if (amount < 1){ toast('金额太小，请增加数量','error'); return; }
     var radio = document.querySelector('input[name="smm-pay"]:checked');
     if (!radio){ toast('请选择支付方式','error'); return; }

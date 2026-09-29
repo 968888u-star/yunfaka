@@ -3631,6 +3631,528 @@ function yfOpenAlipayRedpacket(code, amount){
 }
 window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
 </script>
+<!-- ============================================================
+     SMM 推广模块 · chinayinliu.com
+     ============================================================ -->
+<script>
+(function(){
+  'use strict';
 
+  /* 初始化配置 */
+  (function(){
+    var db = loadDB();
+    if (!db.config) db.config = {};
+    var changed = false;
+    if (db.config.smm_markup === undefined){ db.config.smm_markup = 1.5; changed = true; }
+    if (db.config.smm_usd_cny === undefined){ db.config.smm_usd_cny = 7.2; changed = true; }
+    if (changed) saveDB(db);
+  })();
+
+  /* 后端调用 */
+  function smmApi(action, payload){
+    return fetch('/api/smm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ action: action }, payload || {}))
+    }).then(function(r){ return r.json(); });
+  }
+
+  /* ========== 后台 SMM Tab ========== */
+  function renderSmmTab(){
+    var db = loadDB();
+    var cfg = getConfig(db);
+    var items = db.products.filter(function(p){ return p.source === 'smm'; });
+
+    var rows = items.length ? items.map(function(p){
+      return '<tr>' +
+        '<td><b>' + esc(p.smm_service_name || p.name) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.smm_service_id) + '</div></td>' +
+        '<td>' + esc(p.smm_category || '-') + '</td>' +
+        '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '</td>' +
+        '<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT</td>' +
+        '<td class="muted" style="font-size:12px">' + esc(p.smm_min) + '~' + esc(p.smm_max) + '</td>' +
+        '<td>' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">补</span> ' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">退</span>' : '') + '</td>' +
+        '<td><span class="badge ' + (p.active ? 'ok' : 'gray') + '">' + (p.active ? '上架' : '下架') + '</span></td>' +
+        '<td style="text-align:right;white-space:nowrap">' +
+          '<button class="btn sm ghost" onclick="smmToggle(' + p.id + ')">' + (p.active ? '下架' : '上架') + '</button> ' +
+          '<button class="btn sm danger" onclick="deleteProduct(' + p.id + ')">删除</button>' +
+        '</td></tr>';
+    }).join('') : '<tr><td colspan="8" class="empty">还没有同步任何推广服务</td></tr>';
+
+    $('#tab-body').innerHTML =
+      '<div class="card panel">' +
+        '<div class="spread" style="flex-wrap:wrap;gap:8px">' +
+          '<h2 style="margin:0">📈 chinayinliu 社媒推广</h2>' +
+          '<div class="row" style="gap:8px">' +
+            '<button class="btn ghost" onclick="smmBalance()">💰 余额</button>' +
+            '<button class="btn primary" onclick="smmSync()">🔄 同步服务</button>' +
+            '<button class="btn ghost" onclick="smmClear()">清空商品</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="luban-hint" style="margin-top:12px">点击「同步服务」拉取 chinayinliu 全部服务并自动加价上架。已上架 <b>' + items.length + '</b> 个</div>' +
+        '<div id="smm-balance-box"></div>' +
+      '</div>' +
+      '<div class="card panel" style="background:#f8fafc;border-color:#e2e8f0">' +
+        '<h3 style="margin:0 0 12px;font-size:14px">⚙️ 加价配置</h3>' +
+        '<div class="row" style="gap:12px;flex-wrap:wrap">' +
+          '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数</div><input id="smm-markup" type="number" step="0.05" min="1" value="' + cfg.smm_markup + '"></div>' +
+          '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">USD→CNY 汇率</div><input id="smm-usd-cny" type="number" step="0.01" value="' + cfg.smm_usd_cny + '"></div>' +
+          '<button class="btn primary" style="align-self:flex-end" onclick="smmSaveCfg()">保存并重算价格</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card panel"><h2>推广商品列表（' + items.length + '）</h2>' +
+        '<div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本</th><th>售价</th><th>起订~上限</th><th>特性</th><th>状态</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '</div>';
+  }
+
+  window.smmSaveCfg = function(){
+    var markup = parseFloat($('#smm-markup').value);
+    var usdCny = parseFloat($('#smm-usd-cny').value);
+    if (!markup || markup < 1){ toast('加价倍数至少为 1','error'); return; }
+    if (!usdCny || usdCny <= 0){ toast('汇率必须大于 0','error'); return; }
+    var db = loadDB();
+    db.config.smm_markup = markup;
+    db.config.smm_usd_cny = usdCny;
+    var count = 0;
+    db.products.forEach(function(p){
+      if (p.source === 'smm' && p.smm_rate_usd){
+        p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * usdCny * markup * 100));
+        count++;
+      }
+    });
+    saveDB(db);
+    toast('已保存，重算了 ' + count + ' 个商品','success');
+    renderSmmTab();
+  };
+
+  window.smmBalance = function(){
+    toast('正在查询…');
+    smmApi('balance').then(function(r){
+      var box = $('#smm-balance-box');
+      if (!box) return;
+      if (r.ok && r.data && r.data.balance !== undefined){
+        var bal = parseFloat(r.data.balance);
+        box.innerHTML = '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:16px 20px;margin-top:14px"><div class="spread"><div><div class="muted" style="font-size:12px">chinayinliu 账户余额</div><div style="font-size:28px;font-weight:800;color:#15803d">$' + bal.toFixed(4) + '</div></div><div class="muted" style="font-size:12px">约 ¥' + (bal*7.2).toFixed(2) + '</div></div></div>';
+        toast('余额：$' + bal, 'success');
+      } else {
+        var errMsg = (r.data && (r.data.error || r.data.msg)) || r.msg || '查询失败';
+        box.innerHTML = '<div class="card panel" style="background:#fee2e2;border-color:#fca5a5;padding:16px 20px;margin-top:14px">❌ ' + esc(errMsg) + '</div>';
+        toast('查询失败', 'error');
+      }
+    }).catch(function(e){ toast('网络错误：' + e.message, 'error'); });
+  };
+
+  window.smmSync = function(){
+    if (!confirm('将从 chinayinliu 拉取全部服务并加价上架，已存在的会更新价格。继续？')) return;
+    toast('正在拉取服务列表…');
+    smmApi('services').then(function(r){
+      if (!r.ok){ toast('拉取失败：' + (r.msg || ''), 'error'); return; }
+      var list = r.data;
+      if (!Array.isArray(list)){ toast('返回格式异常', 'error'); return; }
+      var db = loadDB();
+      var cfg = getConfig(db);
+      var markup = Number(cfg.smm_markup) || 1.5;
+      var usdCny = Number(cfg.smm_usd_cny) || 7.2;
+      var added = 0, updated = 0;
+      list.forEach(function(s){
+        var serviceId = String(s.service || '');
+        if (!serviceId) return;
+        var rateUsd = parseFloat(s.rate) || 0;
+        var priceFen = Math.max(1, Math.round(rateUsd * usdCny * markup * 100));
+        var exist = null;
+        for (var i = 0; i < db.products.length; i++){
+          if (db.products[i].source === 'smm' && String(db.products[i].smm_service_id) === serviceId){ exist = db.products[i]; break; }
+        }
+        var name = '[推广] ' + (s.name || '');
+        var desc = '类别：' + (s.category || '') + ' ｜ 类型：' + (s.type || '') + ' ｜ 起订 ' + (s.min || '') + ' ~ 上限 ' + (s.max || '');
+        var min = parseInt(s.min) || 1;
+        var max = parseInt(s.max) || 100000;
+        if (exist){
+          exist.name = name; exist.price = priceFen; exist.description = desc;
+          exist.smm_rate_usd = rateUsd.toFixed(4);
+          exist.smm_min = min; exist.smm_max = max;
+          exist.smm_type = s.type || ''; exist.smm_category = s.category || '';
+          exist.smm_refill = !!s.refill; exist.smm_cancel = !!s.cancel;
+          updated++;
+        } else {
+          db.seq.product++;
+          db.products.push({
+            id: db.seq.product, name: name, price: priceFen,
+            description: desc, note: '下单后自动提交上游，进度可在订单详情查看',
+            category_id: 0, active: true, created_at: now(), skus: [], source: 'smm',
+            smm_service_id: serviceId, smm_service_name: s.name || '',
+            smm_type: s.type || '', smm_category: s.category || '',
+            smm_rate_usd: rateUsd.toFixed(4), smm_min: min, smm_max: max,
+            smm_refill: !!s.refill, smm_cancel: !!s.cancel
+          });
+          added++;
+        }
+      });
+      saveDB(db);
+      toast('同步完成：新增 ' + added + '，更新 ' + updated, 'success');
+      renderSmmTab();
+    }).catch(function(e){ toast('网络错误：' + e.message, 'error'); });
+  };
+
+  window.smmToggle = function(id){
+    var db = loadDB();
+    var p = db.products.filter(function(x){ return x.id === id; })[0];
+    if (!p) return;
+    p.active = !p.active;
+    saveDB(db);
+    toast(p.active ? '已上架' : '已下架', 'success');
+    renderSmmTab();
+  };
+
+  window.smmClear = function(){
+    var db = loadDB();
+    var items = db.products.filter(function(p){ return p.source === 'smm'; });
+    if (!items.length){ toast('没有可清空的商品', 'error'); return; }
+    if (!confirm('确定清空全部 ' + items.length + ' 个推广商品？')) return;
+    db.products = db.products.filter(function(p){ return p.source !== 'smm'; });
+    saveDB(db);
+    toast('已清空', 'success');
+    renderSmmTab();
+  };
+
+  /* ========== 后台 tab 注入 ========== */
+  var _origSwitchTab = window.switchTab;
+  window.switchTab = function(tab){
+    if (tab === 'smm'){
+      document.querySelectorAll('.tabs button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === 'smm'); });
+      renderSmmTab();
+      return;
+    }
+    return _origSwitchTab.apply(this, arguments);
+  };
+  function injectTab(){
+    if (location.hash.indexOf('/admin') < 0) return;
+    var tabs = document.querySelector('.tabs');
+    if (!tabs || tabs.querySelector('[data-tab="smm"]')) return;
+    var btn = document.createElement('button');
+    btn.dataset.tab = 'smm';
+    btn.textContent = 'SMM推广';
+    btn.onclick = function(){ window.switchTab('smm'); };
+    tabs.appendChild(btn);
+  }
+  setInterval(injectTab, 800);
+
+  /* ========== 客户端 SMM 页 ========== */
+  function renderSmmClient(){
+    var db = loadDB();
+    var items = db.products.filter(function(p){ return p.source === 'smm' && p.active; });
+    var cards = items.length ? items.map(function(p){
+      return '<div class="card product">' +
+        '<div class="spread"><div class="p-name">' + esc(p.smm_service_name || p.name) + '</div><span class="badge cat">' + esc(p.smm_category || '') + '</span></div>' +
+        '<div class="p-desc">' + esc(p.description || '') + '</div>' +
+        '<div class="row" style="gap:6px;flex-wrap:wrap">' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">可补单</span>' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">可取消</span>' : '') + '</div>' +
+        '<div class="spread" style="margin-top:auto"><div class="p-price"><small>USDT </small>' + usdt(p.price) + '<span class="from">/1000</span></div><div class="muted" style="font-size:12px">起订 ' + esc(p.smm_min) + '</div></div>' +
+        '<button class="btn primary" onclick="smmBuy(' + p.id + ')">立即下单</button>' +
+      '</div>';
+    }).join('') : '<div class="empty" style="grid-column:1/-1">暂无推广服务</div>';
+
+    $('#app').innerHTML =
+      '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 社交媒体推广</h1><p>关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理</p></div>' +
+      '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;font-size:13px;color:#15803d;line-height:1.8;margin-bottom:16px">📌 <b>使用说明：</b><br>1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度</div>' +
+      '<div class="grid">' + cards + '</div>';
+  }
+
+  window.smmBuy = function(id){
+    var db = loadDB();
+    var p = db.products.filter(function(x){ return x.id === id; })[0];
+    if (!p){ toast('服务不存在', 'error'); return; }
+    var min = p.smm_min || 1;
+    var max = p.smm_max || 100000;
+    var cfg = getConfig(db);
+    var member = getCurrentMember(db);
+    var lastSecret = (member && member.secret) || localStorage.getItem(LS_SECRET) || '';
+    var defQty = Math.max(min, 1000); if (defQty > max) defQty = max;
+
+    openModal('<h3>下单 · ' + esc(p.smm_service_name) + '</h3>' +
+      '<div class="kv"><span class="k">服务</span><span class="v">' + esc(p.smm_service_name) + '</span></div>' +
+      '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48">' + usdt(p.price) + ' USDT / 1000条</span></div>' +
+      '<label class="field"><span>目标链接（帖子/账号/视频 URL）</span><input id="smm-link" placeholder="https://..." autocomplete="off"></label>' +
+      '<label class="field"><span>数量（' + min + ' ~ ' + max + '）</span><input id="smm-qty" type="number" min="' + min + '" max="' + max + '" value="' + defQty + '"></label>' +
+      '<label class="field"><span>暗号（用于查询订单）</span><input id="smm-secret" maxlength="60" value="' + esc(lastSecret) + '"></label>' +
+      '<div class="spread" style="margin:14px 0;padding-top:14px;border-top:1px dashed var(--line)"><span class="muted" style="font-size:13px">订单金额</span><span id="smm-amount" style="font-size:18px;font-weight:800;color:#e11d48">' + usdt(Math.round(p.price * defQty / 1000)) + ' USDT</span></div>' +
+      '<div id="smm-pay-wrap"></div>' +
+      '<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn primary" onclick="smmSubmit(' + p.id + ')">确认下单</button></div>');
+
+    var qtyEl = $('#smm-qty');
+    qtyEl.addEventListener('input', function(){
+      var q = parseInt(qtyEl.value) || 0;
+      if (q < min) q = min; if (q > max) q = max;
+      $('#smm-amount').textContent = usdt(Math.round(p.price * q / 1000)) + ' USDT';
+    });
+
+    var usdtEnabled = cfg.pay_usdt_enabled !== false;
+    var alipayEnabled = cfg.pay_alipay_enabled !== false;
+    if (!usdtEnabled && !alipayEnabled){ $('#smm-pay-wrap').innerHTML = '<div style="color:#b91c1c">商家未开启支付方式</div>'; return; }
+    $('#smm-pay-wrap').innerHTML = '<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">' +
+      (usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="smm-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : '') +
+      (alipayEnabled ? '<label class="pay-method' + (!usdtEnabled ? ' active' : '') + '" data-method="alipay"><input type="radio" name="smm-pay" value="alipay"' + (!usdtEnabled ? ' checked' : '') + '><span class="logo">💰</span> 支付宝</label>' : '') +
+      '</div></label>';
+    document.querySelectorAll('#smm-pay-methods .pay-method').forEach(function(el){
+      el.addEventListener('click', function(){
+        document.querySelectorAll('#smm-pay-methods .pay-method').forEach(function(x){ x.classList.remove('active'); });
+        el.classList.add('active');
+        var r = el.querySelector('input[type=radio]'); if (r) r.checked = true;
+      });
+    });
+  };
+
+  window.smmSubmit = function(id){
+    var db = loadDB();
+    var cfg = getConfig(db);
+    var p = db.products.filter(function(x){ return x.id === id; })[0];
+    if (!p) return;
+    var link = $('#smm-link').value.trim();
+    var secret = $('#smm-secret').value.trim();
+    var qty = parseInt($('#smm-qty').value) || 0;
+    if (!link){ toast('请填写目标链接','error'); return; }
+    if (!/^https?:\/\//i.test(link)){ toast('链接必须 http:// 或 https:// 开头','error'); return; }
+    var sErr = validateSecret(secret);
+    if (sErr){ toast(sErr,'error'); return; }
+    if (qty < (p.smm_min || 1) || qty > (p.smm_max || 100000)){ toast('数量超范围','error'); return; }
+    var amount = Math.round(p.price * qty / 1000);
+    if (amount < 1){ toast('金额太小，请增加数量','error'); return; }
+    var radio = document.querySelector('input[name="smm-pay"]:checked');
+    if (!radio){ toast('请选择支付方式','error'); return; }
+    var member = getCurrentMember(db);
+    var orderNo = genOrderNo();
+    var order = {
+      order_no: orderNo, product_id: id, product_name: p.name,
+      sku_id: 0, sku_name: '', category_id: 0, quantity: qty,
+      amount: amount, balance_used: 0, amount_due: amount,
+      secret: secret, username: member ? member.username : '',
+      status: 'pending', pay_method: radio.value, cards: [],
+      note: p.note || '', created_at: now(), delivered_at: '',
+      source: 'smm',
+      smm_service_id: p.smm_service_id,
+      smm_service_name: p.smm_service_name,
+      smm_link: link,
+      usdt_rate: usdtRate()
+    };
+    if (radio.value === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
+    db.orders.unshift(order);
+    saveDB(db);
+    saveMyOrder(orderNo, secret);
+    localStorage.setItem(LS_SECRET, secret);
+    closeModal();
+    showPayModal('order', orderNo);
+  };
+
+  /* ========== payOrder 拦截 ========== */
+  var _origPayOrder = window.payOrder;
+  window.payOrder = function(orderNo){
+    var db = loadDB();
+    var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+    if (!o || o.status !== 'pending') return;
+    if (o.source === 'smm'){
+      o.status = 'processing';
+      saveDB(db);
+      smmApi('add', { service: o.smm_service_id, link: o.smm_link, quantity: o.quantity })
+        .then(function(r){
+          var db2 = loadDB();
+          var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+          if (!o2) return;
+          if (r.ok && r.data && r.data.order){
+            o2.smm_order_id = String(r.data.order);
+            o2.smm_state = 'In progress';
+            saveDB(db2);
+            toast('已提交到上游，订单号：' + r.data.order, 'success');
+            startPoll(orderNo);
+          } else {
+            var errMsg = (r.data && (r.data.error || r.data.msg)) || r.msg || '提交失败';
+            o2.status = 'luban_error';
+            o2.luban_error = errMsg;
+            saveDB(db2);
+            toast('提交失败：' + errMsg, 'error');
+          }
+          if (location.hash === '#/order/' + orderNo) route();
+        }).catch(function(e){
+          var db2 = loadDB();
+          var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+          if (o2){ o2.status = 'luban_error'; o2.luban_error = '网络错误：' + e.message; saveDB(db2); }
+          toast('网络错误：' + e.message, 'error');
+        });
+      return;
+    }
+    return _origPayOrder.apply(this, arguments);
+  };
+
+  /* ========== 订单状态轮询 ========== */
+  var _timers = {};
+  function startPoll(orderNo){
+    if (_timers[orderNo]) clearInterval(_timers[orderNo]);
+    function check(){
+      var db = loadDB();
+      var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (!o || !o.smm_order_id){ clearInterval(_timers[orderNo]); delete _timers[orderNo]; return; }
+      if (o.status === 'delivered' || o.status === 'rejected'){ clearInterval(_timers[orderNo]); delete _timers[orderNo]; return; }
+      smmApi('status', { order: o.smm_order_id }).then(function(r){
+        if (!r.ok || !r.data) return;
+        var db2 = loadDB();
+        var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+        if (!o2) return;
+        var d = r.data;
+        o2.smm_state = d.status || '';
+        o2.smm_start_count = d.start_count || '';
+        o2.smm_remains = d.remains || '';
+        o2.smm_charge = d.charge || '';
+        o2.smm_last_check = now();
+        var st = String(o2.smm_state);
+        if (/Canceled|Cancelled|Refunded/i.test(st)) o2.status = 'rejected';
+        else if (/Completed/i.test(st) && !/Partial/i.test(st)){ o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); }
+        else o2.status = 'processing';
+        saveDB(db2);
+        if (location.hash === '#/order/' + orderNo) route();
+      }).catch(function(){});
+    }
+    check();
+    _timers[orderNo] = setInterval(check, 60000);
+  }
+
+  window.smmManualCheck = function(orderNo){
+    var db = loadDB();
+    var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+    if (!o || !o.smm_order_id){ toast('还没有上游订单号','error'); return; }
+    toast('正在查询…');
+    smmApi('status', { order: o.smm_order_id }).then(function(r){
+      if (!r.ok || !r.data){ toast('查询失败','error'); return; }
+      var db2 = loadDB();
+      var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+      if (!o2) return;
+      var d = r.data;
+      o2.smm_state = d.status || '';
+      o2.smm_start_count = d.start_count || '';
+      o2.smm_remains = d.remains || '';
+      o2.smm_charge = d.charge || '';
+      o2.smm_last_check = now();
+      var st = String(o2.smm_state);
+      if (/Canceled|Cancelled|Refunded/i.test(st)) o2.status = 'rejected';
+      else if (/Completed/i.test(st) && !/Partial/i.test(st)){ o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); }
+      else o2.status = 'processing';
+      saveDB(db2);
+      toast('状态：' + o2.smm_state, 'success');
+      if (location.hash === '#/order/' + orderNo) route();
+    }).catch(function(e){ toast('网络错误：' + e.message,'error'); });
+  };
+
+  window.smmRefill = function(orderNo){
+    var db = loadDB();
+    var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+    if (!o || !o.smm_order_id){ toast('没有上游订单号','error'); return; }
+    if (!confirm('确定补单？')) return;
+    smmApi('refill', { order: o.smm_order_id }).then(function(r){
+      if (r.ok && r.data && r.data.refill){
+        var db2 = loadDB();
+        var o2 = db2.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+        o2.smm_refill_id = String(r.data.refill);
+        saveDB(db2);
+        toast('补单已提交：' + r.data.refill,'success');
+      } else {
+        toast((r.data && r.data.error) || '补单失败','error');
+      }
+    });
+  };
+
+  window.smmCancel = function(orderNo){
+    var db = loadDB();
+    var o = db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+    if (!o || !o.smm_order_id){ toast('没有上游订单号','error'); return; }
+    if (!confirm('确定取消？上游可能已处理一部分，无法退款。')) return;
+    smmApi('cancel', { orders: o.smm_order_id }).then(function(r){
+      var arr = Array.isArray(r.data) ? r.data : [r.data];
+      var first = arr[0] || {};
+      if (first.cancel && typeof first.cancel === 'object' && first.cancel.error){
+        toast('取消失败：' + first.cancel.error, 'error');
+        return;
+      }
+      if (first.cancel){
+        toast('取消请求已提交','success');
+        setTimeout(function(){ window.smmManualCheck(orderNo); }, 3000);
+      } else toast('取消失败','error');
+    }).catch(function(e){ toast('网络错误：' + e.message,'error'); });
+  };
+
+  /* ========== 订单详情装饰 ========== */
+  var _origRenderOrderView = window.renderOrderView;
+  window.renderOrderView = function(orderNo, secret){
+    _origRenderOrderView.apply(this, arguments);
+    var db = loadDB();
+    var o = db.orders.filter(function(x){ return x.order_no === orderNo && x.secret === secret; })[0];
+    if (!o || o.source !== 'smm') return;
+    var app = document.getElementById('app');
+    var allDivs = app.querySelectorAll(':scope > div');
+    var bodyDiv = null;
+    for (var i = 0; i < allDivs.length; i++){
+      var d = allDivs[i];
+      if (d.style && d.style.maxWidth === '640px' && d.style.margin === '0px auto'){ bodyDiv = d; break; }
+    }
+    if (!bodyDiv){
+      bodyDiv = document.createElement('div');
+      bodyDiv.style.maxWidth = '640px';
+      bodyDiv.style.margin = '0 auto';
+      app.appendChild(bodyDiv);
+    }
+    var p = db.products.filter(function(x){ return x.id === o.product_id; })[0];
+    var canRefill = p ? p.smm_refill : false;
+    var canCancel = p ? p.smm_cancel : false;
+    var html = '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:20px;margin-bottom:16px">';
+    html += '<div class="spread" style="margin-bottom:10px"><h3 style="margin:0;font-size:15px">📈 推广进度</h3><span class="badge ' + (STATUS_CLASS[o.status] || 'gray') + '">' + (STATUS_TEXT[o.status] || o.status) + '</span></div>';
+    html += '<div class="kv"><span class="k">目标链接</span><span class="v mono" style="font-size:12px;word-break:break-all">' + esc(o.smm_link || '-') + '</span></div>';
+    html += '<div class="kv"><span class="k">上游订单号</span><span class="v mono">' + esc(o.smm_order_id || '待分配') + '</span></div>';
+    html += '<div class="kv"><span class="k">上游状态</span><span class="v">' + esc(o.smm_state || '等待上游处理') + '</span></div>';
+    if (o.smm_start_count) html += '<div class="kv"><span class="k">起始数量</span><span class="v">' + esc(o.smm_start_count) + '</span></div>';
+    if (o.smm_remains) html += '<div class="kv"><span class="k">剩余未完成</span><span class="v">' + esc(o.smm_remains) + '</span></div>';
+    if (o.smm_charge) html += '<div class="kv"><span class="k">上游费用</span><span class="v">$' + esc(o.smm_charge) + '</span></div>';
+    if (o.smm_refill_id) html += '<div class="kv"><span class="k">补单号</span><span class="v mono">' + esc(o.smm_refill_id) + '</span></div>';
+    html += '<div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap">';
+    if (canRefill && o.status === 'delivered' && !o.smm_refill_id) html += '<button class="btn ghost" onclick="smmRefill(\'' + esc(o.order_no) + '\')">🔄 补单</button>';
+    if (canCancel && o.status === 'processing') html += '<button class="btn ghost" onclick="smmCancel(\'' + esc(o.order_no) + '\')">❌ 取消</button>';
+    html += '<button class="btn primary" onclick="smmManualCheck(\'' + esc(o.order_no) + '\')">立即查询</button>';
+    html += '</div></div>';
+    bodyDiv.innerHTML = html + bodyDiv.innerHTML;
+    if (o.smm_order_id && o.status === 'processing') startPoll(o.order_no);
+  };
+
+  /* ========== 路由拦截（双重保险） ========== */
+  function isSmm(){ return location.hash.replace(/^#/, '').indexOf('/smm') === 0; }
+  var _origRoute = window.route;
+  window.route = function(){ if (isSmm()) return renderSmmClient(); return _origRoute.apply(this, arguments); };
+  var _origRenderHome = window.renderHome;
+  window.renderHome = function(){ if (isSmm()) return renderSmmClient(); return _origRenderHome.apply(this, arguments); };
+
+  /* ========== 首页入口卡片 ========== */
+  function injectHomeCard(){
+    if (location.hash.replace(/^#/, '') !== '/') return;
+    if (document.getElementById('yf-smm-home-card')) return;
+    var db = loadDB();
+    var count = db.products.filter(function(p){ return p.source === 'smm' && p.active; }).length;
+    if (!count) return;
+    var anchor = document.getElementById('yf-clean-sms-card');
+    if (!anchor){
+      var cards = document.querySelectorAll('#app .card.panel');
+      for (var i = 0; i < cards.length; i++){
+        var t = cards[i].textContent || '';
+        if (t.indexOf('注册会员') >= 0 || t.indexOf('当前会员') >= 0){ anchor = cards[i]; break; }
+      }
+    }
+    if (!anchor) return;
+    var card = document.createElement('div');
+    card.id = 'yf-smm-home-card';
+    card.className = 'card panel';
+    card.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;cursor:pointer;';
+    card.innerHTML = '<div><div style="font-weight:700">📈 社交媒体推广</div><div class="muted" style="font-size:12px;margin-top:2px">关注 / 点赞 / 播放 / 评论 · ' + count + ' 个服务</div></div><a class="btn primary sm" href="#/smm">去看看</a>';
+    card.addEventListener('click', function(e){ if (e.target.tagName !== 'A') location.hash = '#/smm'; });
+    anchor.parentNode.insertBefore(card, anchor.nextSibling);
+  }
+  setInterval(injectHomeCard, 800);
+  window.addEventListener('hashchange', function(){ setTimeout(injectHomeCard, 100); });
+
+  window.__smmLoaded = true;
+  console.log('[YunFaKa] SMM 模块已加载 (chinayinliu)');
+})();
+</script>
 </body>
 </html>

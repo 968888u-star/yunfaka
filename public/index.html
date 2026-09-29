@@ -3644,7 +3644,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     if (!db.config) db.config = {};
     var changed = false;
     if (db.config.smm_markup === undefined){ db.config.smm_markup = 1.5; changed = true; }
-    if (db.config.smm_usd_cny === undefined){ db.config.smm_usd_cny = 7.2; changed = true; }
+    /* smm_usd_cny 已废弃，统一使用后台 pay_usdt_rate（USDT汇率）联动换算 */
     if (changed) saveDB(db);
   })();
 
@@ -3667,7 +3667,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       return '<tr>' +
         '<td><b>' + esc(p.smm_service_name || p.name) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.smm_service_id) + '</div></td>' +
         '<td>' + esc(p.smm_category || '-') + '</td>' +
-        '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '</td>' +
+        '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '<div style="font-size:10px">≈ ' + (parseFloat(p.smm_rate_usd||0)*(cfg.smm_markup||1.5)).toFixed(4) + ' USDT</div></td>' +
         '<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT</td>' +
         '<td class="muted" style="font-size:12px">' + esc(p.smm_min) + '~' + esc(p.smm_max) + '</td>' +
         '<td>' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">补</span> ' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">退</span>' : '') + '</td>' +
@@ -3688,16 +3688,17 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
             '<button class="btn ghost" onclick="smmClear()">清空商品</button>' +
           '</div>' +
         '</div>' +
-        '<div class="luban-hint" style="margin-top:12px">点击「同步服务」拉取 chinayinliu 全部服务并自动加价上架。已上架 <b>' + items.length + '</b> 个</div>' +
+        '<div class="luban-hint" style="margin-top:12px">点击「同步服务」拉取 chinayinliu 全部服务，按 <b>USDT</b> 结算单位自动加价上架（人民币售价随后台汇率联动）。已上架 <b>' + items.length + '</b> 个</div>' +
         '<div id="smm-balance-box"></div>' +
       '</div>' +
       '<div class="card panel" style="background:#f8fafc;border-color:#e2e8f0">' +
         '<h3 style="margin:0 0 12px;font-size:14px">⚙️ 加价配置</h3>' +
-        '<div class="row" style="gap:12px;flex-wrap:wrap">' +
-          '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数</div><input id="smm-markup" type="number" step="0.05" min="1" value="' + cfg.smm_markup + '"></div>' +
-          '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">USD→CNY 汇率</div><input id="smm-usd-cny" type="number" step="0.01" value="' + cfg.smm_usd_cny + '"></div>' +
+        '<div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">' +
+          '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数（成本价 × 倍数 = USDT售价）</div><input id="smm-markup" type="number" step="0.05" min="1" value="' + cfg.smm_markup + '"></div>' +
+          '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">USDT→CNY 汇率（后台「设置」统一管理）</div><input id="smm-usdt-rate" type="number" step="0.01" value="' + usdtRate() + '" disabled style="background:#f1f5f9;color:#6b7280;cursor:not-allowed"></div>' +
           '<button class="btn primary" style="align-self:flex-end" onclick="smmSaveCfg()">保存并重算价格</button>' +
         '</div>' +
+        '<div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">💡 结算单位已升级为 <b>USDT</b>：上游成本(USD/1000条) × 加价倍数 = 售价(USDT/1000条)；支付宝人民币金额 = USDT金额 × 上方汇率，自动联动。修改汇率请到「设置」标签页。</div>' +
       '</div>' +
       '<div class="card panel"><h2>推广商品列表（' + items.length + '）</h2>' +
         '<div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本</th><th>售价</th><th>起订~上限</th><th>特性</th><th>状态</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
@@ -3706,21 +3707,20 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
 
   window.smmSaveCfg = function(){
     var markup = parseFloat($('#smm-markup').value);
-    var usdCny = parseFloat($('#smm-usd-cny').value);
     if (!markup || markup < 1){ toast('加价倍数至少为 1','error'); return; }
-    if (!usdCny || usdCny <= 0){ toast('汇率必须大于 0','error'); return; }
+    var rate = usdtRate();  /* 统一使用后台 USDT→CNY 汇率 */
     var db = loadDB();
     db.config.smm_markup = markup;
-    db.config.smm_usd_cny = usdCny;
     var count = 0;
     db.products.forEach(function(p){
       if (p.source === 'smm' && p.smm_rate_usd){
-        p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * usdCny * markup * 100));
+        /* USDT售价 = USD成本 × 加价倍数；人民币分 = USDT售价 × 汇率 × 100 */
+        p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * rate * 100));
         count++;
       }
     });
     saveDB(db);
-    toast('已保存，重算了 ' + count + ' 个商品','success');
+    toast('已保存，按汇率 ' + rate + ' 重算了 ' + count + ' 个商品','success');
     renderSmmTab();
   };
 
@@ -3731,7 +3731,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       if (!box) return;
       if (r.ok && r.data && r.data.balance !== undefined){
         var bal = parseFloat(r.data.balance);
-        box.innerHTML = '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:16px 20px;margin-top:14px"><div class="spread"><div><div class="muted" style="font-size:12px">chinayinliu 账户余额</div><div style="font-size:28px;font-weight:800;color:#15803d">$' + bal.toFixed(4) + '</div></div><div class="muted" style="font-size:12px">约 ¥' + (bal*7.2).toFixed(2) + '</div></div></div>';
+        box.innerHTML = '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:16px 20px;margin-top:14px"><div class="spread"><div><div class="muted" style="font-size:12px">chinayinliu 账户余额</div><div style="font-size:28px;font-weight:800;color:#15803d">$' + bal.toFixed(4) + '</div></div><div class="muted" style="font-size:12px">约 ¥' + (bal*usdtRate()).toFixed(2) + '（汇率' + usdtRate() + '）</div></div></div>';
         toast('余额：$' + bal, 'success');
       } else {
         var errMsg = (r.data && (r.data.error || r.data.msg)) || r.msg || '查询失败';
@@ -3751,13 +3751,13 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       var db = loadDB();
       var cfg = getConfig(db);
       var markup = Number(cfg.smm_markup) || 1.5;
-      var usdCny = Number(cfg.smm_usd_cny) || 7.2;
+      var rate = usdtRate();  /* 统一使用后台 USDT→CNY 汇率 */
       var added = 0, updated = 0;
       list.forEach(function(s){
         var serviceId = String(s.service || '');
         if (!serviceId) return;
         var rateUsd = parseFloat(s.rate) || 0;
-        var priceFen = Math.max(1, Math.round(rateUsd * usdCny * markup * 100));
+        var priceFen = Math.max(1, Math.round(rateUsd * markup * rate * 100));
         var exist = null;
         for (var i = 0; i < db.products.length; i++){
           if (db.products[i].source === 'smm' && String(db.products[i].smm_service_id) === serviceId){ exist = db.products[i]; break; }
@@ -3867,22 +3867,38 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var lastSecret = (member && member.secret) || localStorage.getItem(LS_SECRET) || '';
     var defQty = Math.max(min, 1000); if (defQty > max) defQty = max;
 
+    var initAmount = Math.round(p.price * defQty / 1000);
     openModal('<h3>下单 · ' + esc(p.smm_service_name) + '</h3>' +
       '<div class="kv"><span class="k">服务</span><span class="v">' + esc(p.smm_service_name) + '</span></div>' +
-      '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48">' + usdt(p.price) + ' USDT / 1000条</span></div>' +
+      '<div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="smm-unit">' + usdt(p.price) + ' USDT / 1000条</span></div>' +
       '<label class="field"><span>目标链接（帖子/账号/视频 URL）</span><input id="smm-link" placeholder="https://..." autocomplete="off"></label>' +
       '<label class="field"><span>数量（' + min + ' ~ ' + max + '）</span><input id="smm-qty" type="number" min="' + min + '" max="' + max + '" value="' + defQty + '"></label>' +
       '<label class="field"><span>暗号（用于查询订单）</span><input id="smm-secret" maxlength="60" value="' + esc(lastSecret) + '"></label>' +
-      '<div class="spread" style="margin:14px 0;padding-top:14px;border-top:1px dashed var(--line)"><span class="muted" style="font-size:13px">订单金额</span><span id="smm-amount" style="font-size:18px;font-weight:800;color:#e11d48">' + usdt(Math.round(p.price * defQty / 1000)) + ' USDT</span></div>' +
+      '<div class="spread" style="margin:14px 0;padding-top:14px;border-top:1px dashed var(--line)"><span class="muted" style="font-size:13px">订单金额</span><span id="smm-amount" style="font-size:18px;font-weight:800;color:#e11d48">' + usdt(initAmount) + ' USDT</span></div>' +
+      '<div id="smm-cny-hint" style="text-align:right;font-size:12px;color:#6b7280;margin-top:-8px;margin-bottom:10px">支付宝付款约 ¥' + yuan(initAmount) + '（按汇率 ' + usdtRate() + ' 换算）</div>' +
       '<div id="smm-pay-wrap"></div>' +
       '<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn primary" onclick="smmSubmit(' + p.id + ')">确认下单</button></div>');
 
     var qtyEl = $('#smm-qty');
-    qtyEl.addEventListener('input', function(){
+    function smmRefreshAmount(){
       var q = parseInt(qtyEl.value) || 0;
       if (q < min) q = min; if (q > max) q = max;
-      $('#smm-amount').textContent = usdt(Math.round(p.price * q / 1000)) + ' USDT';
-    });
+      qtyEl.value = q;
+      var amountFen = Math.round(p.price * q / 1000);
+      var paySel = document.querySelector('input[name="smm-pay"]:checked');
+      var isAlipay = paySel && paySel.value === 'alipay';
+      var rate = usdtRate();
+      if (isAlipay){
+        $('#smm-amount').textContent = '¥' + yuan(amountFen);
+        $('#smm-unit').textContent = '¥' + yuan(p.price) + ' / 1000条';
+        if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = 'USDT计价约 ' + usdt(amountFen) + ' USDT（按汇率 ' + rate + ' 换算）';
+      } else {
+        $('#smm-amount').textContent = usdt(amountFen) + ' USDT';
+        $('#smm-unit').textContent = usdt(p.price) + ' USDT / 1000条';
+        if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = '支付宝付款约 ¥' + yuan(amountFen) + '（按汇率 ' + rate + ' 换算）';
+      }
+    }
+    qtyEl.addEventListener('input', smmRefreshAmount);
 
     var usdtEnabled = cfg.pay_usdt_enabled !== false;
     var alipayEnabled = cfg.pay_alipay_enabled !== false;
@@ -3896,6 +3912,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         document.querySelectorAll('#smm-pay-methods .pay-method').forEach(function(x){ x.classList.remove('active'); });
         el.classList.add('active');
         var r = el.querySelector('input[type=radio]'); if (r) r.checked = true;
+        smmRefreshAmount();  /* 切换支付方式时联动换算金额显示 */
       });
     });
   };

@@ -3726,7 +3726,16 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
   var smmKeyword = '';
   function smmSetCat(c){ smmCatFilter = c; renderSmmClient(); window.scrollTo({top:0,behavior:'smooth'}); }
   window.smmSetCat = smmSetCat;  /* ⭐ 暴露到全局，onclick才能调用 */
-  window.smmDoSearch = function(v){ smmKeyword = (v||'').trim().toLowerCase(); renderSmmClient(); };
+  var smmSearchJustFired = false;
+  var smmSearchTimer = null;
+  window.smmDoSearch = function(v){
+    smmSearchJustFired = true;
+    if (smmSearchTimer) clearTimeout(smmSearchTimer);
+    smmSearchTimer = setTimeout(function(){
+      smmKeyword = (v||'').trim().toLowerCase();
+      renderSmmClient();
+    }, 200);
+  };
   window.smmClearSearch = function(){ smmKeyword=''; var el=document.getElementById('smm-search-input'); if(el) el.value=''; renderSmmClient(); };
 
   /* ========== 后台 SMM Tab ========== */
@@ -3739,7 +3748,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       return '<tr>' +
         '<td><b>' + esc(p.smm_service_name || p.name) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.smm_service_id) + '</div></td>' +
         '<td>' + esc(p.smm_category || '-') + '</td>' +
-        '<td><span class="badge cat" style="font-size:11px">' + esc(smmCatOf(p.smm_service_name || p.name, p)) + '</span></td>' +
+        '<td><select onchange="smmSetPlatform(\'' + p.id + '\', this.value)" style="font-size:11px;padding:3px 4px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;max-width:105px">' +['Telegram','Instagram','YouTube','TikTok','Facebook','Twitter/X','AI/ChatGPT','Netflix','Spotify','Discord','Google','Apple','腾讯/微信','抖音','B站','小红书','微博','快手','其他'].map(function(c){return '<option value="'+c+'" ' + (smmCatOf(p.smm_service_name||p.name,p)===c?'selected':'') + '>'+c+'</option>';}).join('') + '</select></td>' +
         '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '</td>' +'<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT' + (smmIsPackage(p)?' <span style="font-size:10px;color:#b45309">套餐</span>':' /1000') + '</td>' +'<td class="muted" style="font-size:12px">¥' + yuan(p.price) + '</td>' +
         
         '<td class="muted" style="font-size:12px">' + esc(p.smm_min) + '~' + esc(p.smm_max) + '</td>' +
@@ -3834,6 +3843,12 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     saveDB(db);
     toast('已强制重算 ' + count + ' 个商品（上游人民币×加价' + markup + 'x，USDT显示÷汇率' + rate + '）','success');
     renderSmmTab();
+  };
+
+  window.smmSetPlatform = function(pid, platform){
+    var db = loadDB();
+    var p = db.products.find(function(x){ return String(x.id) === String(pid); });
+    if (p){ p.smm_platform = platform; saveDB(db); toast('已移至「' + platform + '」分类','success'); renderSmmTab(); }
   };
 
   window.smmAutoClassify = function(){
@@ -3986,9 +4001,9 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       cats.map(function(c){ return '<button class="cat-tab ' + (smmCatFilter===c?'active':'') + '" onclick="smmSetCat(\'' + c + '\')">' + c + '<span class="n">' + catCount[c] + '</span></button>'; }).join('');
     var cards = filtered.length ? filtered.map(function(p){
       return '<div class="card product">' +
-        '<div class="spread"><div class="p-name">' + esc(p.smm_service_name || p.name) + '</div><span class="badge cat">' + esc(p.smm_category || '') + '</span></div>' +
+        '<div class="p-name" style="width:100%;font-size:14px;font-weight:700;line-height:1.45;word-break:break-word;margin-bottom:6px">' + esc(p.smm_service_name || p.name) + '</div>' +
         '<div class="p-desc">' + esc(p.description || '') + '</div>' +
-        '<div class="row" style="gap:6px;flex-wrap:wrap"><span class="badge cat" style="font-size:10px">' + smmCatOf(p.smm_service_name || p.name) + '</span>' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">可补单</span>' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">可取消</span>' : '') + '</div>' +
+        '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:4px"><span class="badge cat" style="font-size:10px">' + smmCatOf(p.smm_service_name || p.name, p) + '</span>' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">可补单</span>' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">可取消</span>' : '') + '</div>' +
         '<div class="spread" style="margin-top:auto"><div class="p-price"><small>USDT </small>' + usdt(p.price) + (smmIsPackage(p) ? '<span class="from">/份</span>' : '<span class="from">/1000</span>') + '</div><div class="muted" style="font-size:12px">' + (smmIsPackage(p) ? '套餐·1份' : '起订 ' + esc(p.smm_min)) + '</div></div>' +
         '<button class="btn primary" onclick="smmBuy(' + p.id + ')">立即下单</button>' +
       '</div>';
@@ -4000,8 +4015,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       '<div style="position:relative;margin-bottom:12px"><input id="smm-search-input" placeholder="🔍 搜索服务名称 / 关键词，如：Premium / 会员 / 点赞" oninput="smmDoSearch(this.value)" value="' + esc(smmKeyword) + '" style="padding-left:38px">' + (smmKeyword ? '<button onclick="smmClearSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:#eef0f6;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">清除</button>' : '') + '</div>' +
       '<div class="cats" style="margin-bottom:16px">' + catTabs + '</div>' +
       '<div class="grid">' + cards + '</div>';
-    /* ⭐ 搜索输入后重新聚焦搜索框，光标移到末尾，避免打一字就失焦 */
-    if (smmKeyword){
+    if (smmSearchJustFired){
+      smmSearchJustFired = false;
       setTimeout(function(){
         var el = document.getElementById('smm-search-input');
         if (el){ el.focus(); var len = el.value.length; if (el.setSelectionRange) el.setSelectionRange(len, len); }

@@ -3672,6 +3672,14 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     });
     if (recalc > 0){ changed = true; console.log('[SMM] 自动重算 ' + recalc + ' 个商品价格为USDT结算'); }
     if (changed) saveDB(db);
+    try { fetch('/api/smm-store').then(function(r){return r.json();}).then(function(d){
+      if(d&&d.ok&&d.products&&d.products.length){ var db2=loadDB(); var eid={};
+        d.products.forEach(function(p){eid[p.smm_service_id]=p;});
+        db2.products=db2.products.filter(function(p){return p.source!=='smm'||!eid[p.smm_service_id];});
+        d.products.forEach(function(p){db2.products.push(p);}); saveDB(db2);
+        if(location.hash.indexOf('/smm')>=0) setTimeout(renderSmmClient,300);
+        if(location.hash==='#/'||location.hash==='') setTimeout(renderHome,300);
+      }}).catch(function(e){}); } catch(e){}
   })();
 
   /* 后端调用 */
@@ -3882,6 +3890,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     renderSmmTab();
   };
 
+  window.smmPushToCloud = function(){ try { var db=loadDB(); var sp=db.products.filter(function(p){return p.source==='smm';});
+    if(!sp.length) return; fetch('/api/smm-store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'yunfaka-smm-sync-2026',products:sp})}).catch(function(e){}); } catch(e){}; };
   window.smmBalance = function(){
     toast('正在查询…');
     smmApi('balance').then(function(r){
@@ -4017,7 +4027,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       cats.map(function(c){ return '<button class="cat-tab ' + (smmCatFilter===c?'active':'') + '" onclick="smmSetCat(\'' + c + '\')">' + c + '<span class="n">' + catCount[c] + '</span></button>'; }).join('');
     if (!items.length){
       $('#app').innerHTML = '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 ' + esc(cfg.smm_hero_title || '社交媒体推广') + '</h1><p>' + esc(cfg.smm_hero_subtitle || '') + '</p></div>' +
-        '<div class="card panel" style="text-align:center;padding:40px 20px;margin-top:20px"><div style="font-size:40px;margin-bottom:12px">📦</div><div style="font-weight:700;margin-bottom:8px">暂无推广服务</div><div class="muted" style="font-size:13px;margin-bottom:18px">首次使用请先到管理后台同步上游服务（每台设备数据独立，需单独同步一次）</div><a class="btn primary" href="#/admin">前往后台同步 →</a></div>';
+        '<div class="card panel" style="text-align:center;padding:40px 20px;margin-top:20px"><div style="font-size:40px;margin-bottom:12px">📦</div><div style="font-weight:700;margin-bottom:8px">暂无推广服务</div><div class="muted" style="font-size:13px;margin-bottom:18px">数据正在从云端同步，请稍候刷新页面</div><div class="muted" style="font-size:12px">如长时间为空，请联系站长</div></div>';
       return;
     }
     var cards = filtered.length ? filtered.map(function(p){
@@ -4343,31 +4353,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
   window.renderHome = function(){ if (isSmm()) return renderSmmClient(); return _origRenderHome.apply(this, arguments); };
 
   /* ========== 首页入口卡片 ========== */
-  function injectHomeCard(){
-    if (location.hash.replace(/^#/, '') !== '/') return;
-    if (document.getElementById('yf-smm-home-card')) return;
-    var db = loadDB();
-    var count = db.products.filter(function(p){ return p.source === 'smm' && p.active; }).length;
-    if (!count) return;
-    var anchor = document.getElementById('yf-clean-sms-card');
-    if (!anchor){
-      var cards = document.querySelectorAll('#app .card.panel');
-      for (var i = 0; i < cards.length; i++){
-        var t = cards[i].textContent || '';
-        if (t.indexOf('注册会员') >= 0 || t.indexOf('当前会员') >= 0){ anchor = cards[i]; break; }
-      }
-    }
-    if (!anchor) return;
-    var card = document.createElement('div');
-    card.id = 'yf-smm-home-card';
-    card.className = 'card panel';
-    card.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;cursor:pointer;';
-    card.innerHTML = '<div><div style="font-weight:700">📈 社交媒体推广</div><div class="muted" style="font-size:12px;margin-top:2px">关注 / 点赞 / 播放 / 评论 · ' + count + ' 个服务，点击进入查看全部</div></div><a class="btn primary sm" style="min-width:108px;text-align:center" href="#/smm">进入查看 →</a>';
-    card.addEventListener('click', function(e){ if (e.target.tagName !== 'A') location.hash = '#/smm'; });
-    anchor.parentNode.insertBefore(card, anchor.nextSibling);
-  }
-  /* SMM入口已直接渲染，移除轮询 */
-  window.addEventListener('hashchange', function(){ setTimeout(injectHomeCard, 100); });
+  /* SMM入口已直接渲染，旧注入代码已移除 */
 
   window.__smmLoaded = true;
   console.log('[YunFaKa] SMM 模块已加载 (chinayinliu)');

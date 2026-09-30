@@ -3699,7 +3699,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     return Math.round(p.price * qty / 1000);           /* 按每1000单价 × 数量 */
   }
   /* 按商品名称自动归类平台 */
-  function smmCatOf(name){
+  function smmCatOf(name, p){
+    if (p && p.smm_platform) return p.smm_platform;  /* 优先用后台一键分类保存的结果 */
     var n = String(name||'').toLowerCase();
     if (/telegram|tg[\s\-]|纸飞机|电报/.test(n)) return 'Telegram';
     if (/instagram|\bins\b|\big\b/.test(n)) return 'Instagram';
@@ -3722,7 +3723,11 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     return '其他';
   }
   var smmCatFilter = 'all';
+  var smmKeyword = '';
   function smmSetCat(c){ smmCatFilter = c; renderSmmClient(); window.scrollTo({top:0,behavior:'smooth'}); }
+  window.smmSetCat = smmSetCat;  /* ⭐ 暴露到全局，onclick才能调用 */
+  window.smmDoSearch = function(v){ smmKeyword = (v||'').trim().toLowerCase(); renderSmmClient(); };
+  window.smmClearSearch = function(){ smmKeyword=''; var el=document.getElementById('smm-search-input'); if(el) el.value=''; renderSmmClient(); };
 
   /* ========== 后台 SMM Tab ========== */
   function renderSmmTab(){
@@ -3734,6 +3739,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       return '<tr>' +
         '<td><b>' + esc(p.smm_service_name || p.name) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.smm_service_id) + '</div></td>' +
         '<td>' + esc(p.smm_category || '-') + '</td>' +
+        '<td><span class="badge cat" style="font-size:11px">' + esc(smmCatOf(p.smm_service_name || p.name, p)) + '</span></td>' +
         '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '</td>' +'<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT' + (smmIsPackage(p)?' <span style="font-size:10px;color:#b45309">套餐</span>':' /1000') + '</td>' +'<td class="muted" style="font-size:12px">¥' + yuan(p.price) + '</td>' +
         
         '<td class="muted" style="font-size:12px">' + esc(p.smm_min) + '~' + esc(p.smm_max) + '</td>' +
@@ -3764,6 +3770,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
           '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数（上游人民币价 × 倍数 = 售价）</div><input id="smm-markup" type="number" step="0.05" min="1" value="' + cfg.smm_markup + '"></div>' +
           '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">USDT→CNY 汇率（后台「设置」统一管理）</div><input id="smm-usdt-rate" type="number" step="0.01" value="' + usdtRate() + '" disabled style="background:#f1f5f9;color:#6b7280;cursor:not-allowed"></div>' +
           '<button class="btn primary" style="align-self:flex-end" onclick="smmSaveCfg()">保存并重算价格</button>' +'<button class="btn ghost" style="align-self:flex-end" onclick="smmForceRecalc()">🔄 强制重算</button>' +
+          '<button class="btn ghost" style="align-self:flex-end;background:#ecfdf5;color:#047857;border-color:#a7f3d0" onclick="smmAutoClassify()">🏷️ 一键自动分类</button>' +
         '</div>' +
         '<div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">💡 上游为<b>人民币</b>计价：上游价 × 加价倍数 = 人民币售价；商品列表/USDT支付按「人民币售价 ÷ 上方汇率」显示<b>USDT</b>；支付宝口令红包直接显示<b>人民币</b>。修改汇率请到「设置」标签页。</div>' +
       '</div>' +
@@ -3775,7 +3782,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<button class="btn primary sm" onclick="smmSaveText()">保存文案</button>' +
       '</div>' +
       '<div class="card panel"><h2>推广商品列表（' + items.length + '）</h2>' +
-        '<div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本(USD)</th><th>USDT售价</th><th>≈¥参考</th><th>起订~上限</th><th>特性</th><th>状态</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>平台分类</th><th>成本(USD)</th><th>USDT售价</th><th>≈¥参考</th><th>起订~上限</th><th>特性</th><th>状态</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '</div>';
   }
 
@@ -3826,6 +3833,21 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     });
     saveDB(db);
     toast('已强制重算 ' + count + ' 个商品（上游人民币×加价' + markup + 'x，USDT显示÷汇率' + rate + '）','success');
+    renderSmmTab();
+  };
+
+  window.smmAutoClassify = function(){
+    if (!confirm('将按服务名称自动识别平台分类并写入每个商品（可在商品列表手动调整）。继续？')) return;
+    var db = loadDB();
+    var count = 0;
+    db.products.forEach(function(p){
+      if (p.source === 'smm'){
+        p.smm_platform = smmCatOf(p.smm_service_name || p.name, null);  /* null强制重新识别 */
+        count++;
+      }
+    });
+    saveDB(db);
+    toast('已自动分类 ' + count + ' 个商品，分类结果已保存','success');
     renderSmmTab();
   };
 
@@ -3948,10 +3970,16 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var items = db.products.filter(function(p){ return p.source === 'smm' && p.active; });
     /* 按平台分类统计 */
     var catCount = {};
-    items.forEach(function(p){ var c = smmCatOf(p.smm_service_name || p.name); catCount[c] = (catCount[c]||0)+1; });
+    items.forEach(function(p){ var c = smmCatOf(p.smm_service_name || p.name, p); catCount[c] = (catCount[c]||0)+1; });
     var catOrder = ['Telegram','Instagram','YouTube','TikTok','Facebook','Twitter/X','AI/ChatGPT','Netflix','Spotify','Discord','Google','Apple','腾讯/微信','抖音','B站','小红书','微博','快手','其他'];
     var cats = catOrder.filter(function(c){ return catCount[c]; });
-    var filtered = smmCatFilter === 'all' ? items : items.filter(function(p){ return smmCatOf(p.smm_service_name || p.name) === smmCatFilter; });
+    var filtered = smmCatFilter === 'all' ? items.slice() : items.filter(function(p){ return smmCatOf(p.smm_service_name || p.name, p) === smmCatFilter; });
+    if (smmKeyword){
+      filtered = filtered.filter(function(p){
+        var hay = ((p.smm_service_name||'') + ' ' + (p.name||'') + ' ' + (p.smm_category||'') + ' ' + (p.smm_service_id||'')).toLowerCase();
+        return hay.indexOf(smmKeyword) >= 0;
+      });
+    }
     var catTabs = '<button class="cat-tab ' + (smmCatFilter==='all'?'active':'') + '" onclick="smmSetCat(\'all\')">全部<span class="n">' + items.length + '</span></button>' +
       cats.map(function(c){ return '<button class="cat-tab ' + (smmCatFilter===c?'active':'') + '" onclick="smmSetCat(\'' + c + '\')">' + c + '<span class="n">' + catCount[c] + '</span></button>'; }).join('');
     var cards = filtered.length ? filtered.map(function(p){
@@ -3962,11 +3990,12 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<div class="spread" style="margin-top:auto"><div class="p-price"><small>USDT </small>' + usdt(p.price) + (smmIsPackage(p) ? '<span class="from">/份</span>' : '<span class="from">/1000</span>') + '</div><div class="muted" style="font-size:12px">' + (smmIsPackage(p) ? '套餐·1份' : '起订 ' + esc(p.smm_min)) + '</div></div>' +
         '<button class="btn primary" onclick="smmBuy(' + p.id + ')">立即下单</button>' +
       '</div>';
-    }).join('') : '<div class="empty" style="grid-column:1/-1">该分类下暂无服务</div>';
+    }).join('') : '<div class="empty" style="grid-column:1/-1">' + (smmKeyword ? '没有匹配「' + esc(smmKeyword) + '」的服务，换个关键词试试' : '该分类下暂无服务') + '</div>';
 
     $('#app').innerHTML =
       '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 ' + esc(cfg.smm_hero_title || '社交媒体推广') + '</h1><p>' + esc(cfg.smm_hero_subtitle || '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理') + '</p></div>' +
       '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;font-size:13px;color:#15803d;line-height:1.8;margin-bottom:16px">📌 <b>使用说明：</b><br>' + (cfg.smm_usage_text || '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度') + '</div>' +
+      '<div style="position:relative;margin-bottom:12px"><input id="smm-search-input" placeholder="🔍 搜索服务名称 / 关键词，如：Premium / 会员 / 点赞" oninput="smmDoSearch(this.value)" value="' + esc(smmKeyword) + '" style="padding-left:38px">' + (smmKeyword ? '<button onclick="smmClearSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:#eef0f6;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">清除</button>' : '') + '</div>' +
       '<div class="cats" style="margin-bottom:16px">' + catTabs + '</div>' +
       '<div class="grid">' + cards + '</div>';
   }

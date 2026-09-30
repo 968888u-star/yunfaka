@@ -3796,7 +3796,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
           '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数（上游人民币价 × 倍数 = 售价）</div><input id="smm-markup" type="number" step="0.05" min="1" value="' + cfg.smm_markup + '"></div>' +
           '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">USDT→CNY 汇率（后台「设置」统一管理）</div><input id="smm-usdt-rate" type="number" step="0.01" value="' + usdtRate() + '" disabled style="background:#f1f5f9;color:#6b7280;cursor:not-allowed"></div>' +
           '<button class="btn primary" style="align-self:flex-end" onclick="smmSaveCfg()">保存并重算价格</button>' +'<button class="btn ghost" style="align-self:flex-end" onclick="smmForceRecalc()">🔄 强制重算</button>' +
-          '<button class="btn ghost" style="align-self:flex-end;background:#ecfdf5;color:#047857;border-color:#a7f3d0" onclick="smmAutoClassify()">🏷️ 一键自动分类</button>' +
+          '<button class="btn ghost" style="align-self:flex-end;background:#ecfdf5;color:#047857;border-color:#a7f3d0" onclick="smmAutoClassify()">🏷️ 一键自动分类</button>' +'<button class="btn ghost" style="align-self:flex-end;background:#eff6ff;color:#1d4ed8;border-color:#93c5fd" onclick="smmPushToCloud(true)">☁️ 同步到云端</button>' +'<button class="btn ghost" style="align-self:flex-end" onclick="smmExportJson()">📋 导出JSON</button>' +
         '</div>' +
         '<div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">💡 上游为<b>人民币</b>计价：上游价 × 加价倍数 = 人民币售价；商品列表/USDT支付按「人民币售价 ÷ 上方汇率」显示<b>USDT</b>；支付宝口令红包直接显示<b>人民币</b>。修改汇率请到「设置」标签页。</div>' +
       '</div>' +
@@ -3890,8 +3890,28 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     renderSmmTab();
   };
 
-  window.smmPushToCloud = function(){ try { var db=loadDB(); var sp=db.products.filter(function(p){return p.source==='smm';});
-    if(!sp.length) return; fetch('/api/smm-store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'yunfaka-smm-sync-2026',products:sp})}).catch(function(e){}); } catch(e){}; };
+  window.smmPushToCloud = function(showMsg){
+    try {
+      var db=loadDB(); var sp=db.products.filter(function(p){return p.source==='smm';});
+      if(!sp.length){ if(showMsg) toast('没有SMM商品可同步','warn'); return; }
+      fetch('/api/smm-store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'yunfaka-smm-sync-2026',products:sp})})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d && d.ok){ if(showMsg) toast('☁️ 已同步到云端 '+sp.length+' 个商品，所有设备可查看','success'); }
+          else { if(showMsg) toast('☁️ 云端同步失败：'+(d&&d.msg||'未知错误（可能未配置GH_TOKEN环境变量）'),'error'); }
+        })
+        .catch(function(e){ if(showMsg) toast('☁️ 云端同步失败：'+e.message,'error'); });
+    } catch(e){ if(showMsg) toast('☁️ 同步异常：'+e.message,'error'); }
+  };
+  /* 导出SMM商品JSON到剪贴板（兜底方案：发给站长手动写入GitHub） */
+  window.smmExportJson = function(){
+    var db=loadDB(); var sp=db.products.filter(function(p){return p.source==='smm';});
+    var json = JSON.stringify({products:sp, updated:Date.now()}, null, 2);
+    var ta = document.createElement('textarea'); ta.value=json; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast('已复制 '+sp.length+' 个商品JSON到剪贴板，发给站长写入云端','success'); }
+    catch(e){ prompt('复制以下JSON发给站长：', json); }
+    document.body.removeChild(ta);
+  };
   window.smmBalance = function(){
     toast('正在查询…');
     smmApi('balance').then(function(r){

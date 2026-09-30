@@ -3976,10 +3976,12 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var filtered = smmCatFilter === 'all' ? items.slice() : items.filter(function(p){ return smmCatOf(p.smm_service_name || p.name, p) === smmCatFilter; });
     if (smmKeyword){
       filtered = filtered.filter(function(p){
-        var hay = ((p.smm_service_name||'') + ' ' + (p.name||'') + ' ' + (p.smm_category||'') + ' ' + (p.smm_service_id||'')).toLowerCase();
+        var hay = ((p.smm_service_name||'') + ' ' + (p.name||'') + ' ' + (p.description||'') + ' ' + (p.smm_category||'') + ' ' + (p.smm_service_id||'')).toLowerCase();
         return hay.indexOf(smmKeyword) >= 0;
       });
     }
+    /* ⭐ 统一按价格从低到高排序（人民币分升序，USDT显示同步） */
+    filtered.sort(function(a, b){ return (a.price||0) - (b.price||0); });
     var catTabs = '<button class="cat-tab ' + (smmCatFilter==='all'?'active':'') + '" onclick="smmSetCat(\'all\')">全部<span class="n">' + items.length + '</span></button>' +
       cats.map(function(c){ return '<button class="cat-tab ' + (smmCatFilter===c?'active':'') + '" onclick="smmSetCat(\'' + c + '\')">' + c + '<span class="n">' + catCount[c] + '</span></button>'; }).join('');
     var cards = filtered.length ? filtered.map(function(p){
@@ -4035,11 +4037,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     function smmRefreshAmount(){
       var rawVal = isPkg ? '1' : (qtyEl ? qtyEl.value : '');
       var q = isPkg ? 1 : (parseInt(rawVal) || 0);
-      /* 允许输入框为空（用户删除中），仅当有数字且超范围时才修正，不强制回填 */
-      if (!isPkg && rawVal.trim() !== '' && !isNaN(parseInt(rawVal))){
-        if (q < min) q = min; if (q > max) q = max;
-        if (String(q) !== rawVal.trim() && qtyEl) qtyEl.value = q;
-      }
+      /* ⭐ 输入过程中不做范围修正、不回填，让用户自由输入（包括删除后重输600）；
+         仅在失焦(blur)或提交时才校验范围。金额按当前输入实时计算。 */
       var amountFen = smmCalcAmount(p, q);  /* 人民币分 = 上游人民币价 × 加价 × 数量比例 */
       var paySel = document.querySelector('input[name="smm-pay"]:checked');
       var isAlipay = paySel && paySel.value === 'alipay';
@@ -4056,7 +4055,14 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = '支付宝付款约 ¥' + yuan(amountFen) + '（按汇率 ' + rate + ' 换算）';
       }
     }
-    if (qtyEl) qtyEl.addEventListener('input', smmRefreshAmount);
+    if (qtyEl){
+      qtyEl.addEventListener('input', smmRefreshAmount);
+      qtyEl.addEventListener('blur', function(){
+        var v = parseInt(qtyEl.value) || 0;
+        if (v < min) v = min; if (v > max) v = max;
+        qtyEl.value = v; smmRefreshAmount();
+      });
+    }
 
     var usdtEnabled = cfg.pay_usdt_enabled !== false;
     var alipayEnabled = cfg.pay_alipay_enabled !== false;

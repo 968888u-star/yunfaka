@@ -3848,7 +3848,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var t = ($('#smm-cats-text') ? $('#smm-cats-text').value : '');
     var db = loadDB();
     db.config.smm_categories = t.split('\n').map(function(s){return s.trim();}).filter(Boolean).join('\n');
-    saveDB(db); toast('分类已保存','success'); renderSmmTab();
+    saveDB(db); toast('分类已保存','success'); renderSmmTab(); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
   };
 
   window.smmForceRecalc = function(){
@@ -3956,7 +3956,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         }
       });
       saveDB(db);
-      toast('同步完成：新增 ' + added + '，更新 ' + updated, 'success');
+      toast('同步完成：新增 ' + added + '，更新 ' + updated, 'success'); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
       renderSmmTab();
     }).catch(function(e){ toast('网络错误：' + e.message, 'error'); });
   };

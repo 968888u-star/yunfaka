@@ -544,7 +544,7 @@ function renderHome(){
   const db = loadDB();
   const cfg = getConfig(db);
   const cats = db.categories;
-  const allActive = db.products.filter(p => p.active);
+  const allActive = db.products.filter(p => p.active && p.source !== 'smm');  /* SMM推广服务统一从入口卡片进入，不在商城列表展示 */
   if (homeCategory !== 'all' && !cats.some(c => String(c.id) === String(homeCategory))) homeCategory = 'all';
   const filtered = homeCategory === 'all' ? allActive : allActive.filter(p => String(p.category_id) === String(homeCategory));
   const countOf = cid => allActive.filter(p => String(p.category_id) === String(cid)).length;
@@ -3998,6 +3998,13 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       '<div style="position:relative;margin-bottom:12px"><input id="smm-search-input" placeholder="🔍 搜索服务名称 / 关键词，如：Premium / 会员 / 点赞" oninput="smmDoSearch(this.value)" value="' + esc(smmKeyword) + '" style="padding-left:38px">' + (smmKeyword ? '<button onclick="smmClearSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:#eef0f6;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">清除</button>' : '') + '</div>' +
       '<div class="cats" style="margin-bottom:16px">' + catTabs + '</div>' +
       '<div class="grid">' + cards + '</div>';
+    /* ⭐ 搜索输入后重新聚焦搜索框，光标移到末尾，避免打一字就失焦 */
+    if (smmKeyword){
+      setTimeout(function(){
+        var el = document.getElementById('smm-search-input');
+        if (el){ el.focus(); var len = el.value.length; if (el.setSelectionRange) el.setSelectionRange(len, len); }
+      }, 10);
+    }
   }
 
   window.smmBuy = function(id){
@@ -4026,8 +4033,13 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
 
     var qtyEl = isPkg ? null : $('#smm-qty');
     function smmRefreshAmount(){
-      var q = isPkg ? 1 : (parseInt(qtyEl ? qtyEl.value : defQty) || defQty);
-      if (!isPkg){ if (q < min) q = min; if (q > max) q = max; if (qtyEl) qtyEl.value = q; }
+      var rawVal = isPkg ? '1' : (qtyEl ? qtyEl.value : '');
+      var q = isPkg ? 1 : (parseInt(rawVal) || 0);
+      /* 允许输入框为空（用户删除中），仅当有数字且超范围时才修正，不强制回填 */
+      if (!isPkg && rawVal.trim() !== '' && !isNaN(parseInt(rawVal))){
+        if (q < min) q = min; if (q > max) q = max;
+        if (String(q) !== rawVal.trim() && qtyEl) qtyEl.value = q;
+      }
       var amountFen = smmCalcAmount(p, q);  /* 人民币分 = 上游人民币价 × 加价 × 数量比例 */
       var paySel = document.querySelector('input[name="smm-pay"]:checked');
       var isAlipay = paySel && paySel.value === 'alipay';
@@ -4308,7 +4320,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     card.id = 'yf-smm-home-card';
     card.className = 'card panel';
     card.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;cursor:pointer;';
-    card.innerHTML = '<div><div style="font-weight:700">📈 社交媒体推广</div><div class="muted" style="font-size:12px;margin-top:2px">关注 / 点赞 / 播放 / 评论 · ' + count + ' 个服务</div></div><a class="btn primary sm" style="min-width:108px;text-align:center" href="#/smm">去看看</a>';
+    card.innerHTML = '<div><div style="font-weight:700">📈 社交媒体推广</div><div class="muted" style="font-size:12px;margin-top:2px">关注 / 点赞 / 播放 / 评论 · ' + count + ' 个服务，点击进入查看全部</div></div><a class="btn primary sm" style="min-width:108px;text-align:center" href="#/smm">进入查看 →</a>';
     card.addEventListener('click', function(e){ if (e.target.tagName !== 'A') location.hash = '#/smm'; });
     anchor.parentNode.insertBefore(card, anchor.nextSibling);
   }

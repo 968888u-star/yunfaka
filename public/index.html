@@ -3483,17 +3483,21 @@ Object.assign(window, {
   }
   function flushPush(){
     if (!pendingPush){ pushing = false; return; }
-    var payload = {db: pendingPush, baseRev: rev};
+    var localDb = pendingPush;
+    var payload = {db: localDb, baseRev: rev};
     pendingPush = null;
     fetch(API, {method: 'POST', headers: headers(), body: JSON.stringify(payload)})
       .then(function(r){
         if (r.status === 409){
           return r.json().then(function(d){
             rev = d.rev;
-            window.__DB = d.db;
+            var merged = d.db;
+            if (merged && localDb && localDb.config) merged.config = Object.assign({}, merged.config, localDb.config);
+            window.__DB = merged;
+            pendingPush = merged;
             if (window.applySiteConfig) window.applySiteConfig();
             window.route();
-            toast('检测到其他设备的修改，已同步最新数据','error');
+            toast('检测到其他设备修改，已合并你的更改并重新同步','info');
           });
         }
         return r.json().then(function(d){ if (d.ok) rev = d.rev; });
@@ -3504,7 +3508,7 @@ Object.assign(window, {
         if (pendingPush){ pushing = true; setTimeout(flushPush, 250); }
       });
   }
-  function pullState(first){
+function pullState(first){
     fetch(API + '?t=' + Date.now(), {headers: headers()})
       .then(function(r){ return r.json(); })
       .then(function(d){

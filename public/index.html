@@ -3135,7 +3135,10 @@ function renderLubanPayBox(priceFen){
   const alipayEnabled = cfg.pay_alipay_enabled !== false;
   const usdtEnabled = cfg.pay_usdt_enabled !== false;
   const balanceEnabled = cfg.balance_enabled !== false;
-  const useBalance = member && balanceEnabled && balance > 0;
+  /* ⭐ 记住用户是否勾选使用余额（取消勾选后刷新不再强制勾选） */
+  const _cbPrev = $('#luban-use-balance');
+  const balanceChecked = _cbPrev ? _cbPrev.checked : true;
+  const useBalance = !!(member && balanceEnabled && balance > 0 && balanceChecked);
   const deduct = useBalance ? Math.min(balance, priceFen) : 0;
   const due = priceFen - deduct;
   const _radio = document.querySelector('input[name="luban-pay"]:checked');
@@ -3143,13 +3146,21 @@ function renderLubanPayBox(priceFen){
   const fmt = fen => _pay === 'alipay' ? '¥' + (fen/100).toFixed(2) : (fen / 100 / rate).toFixed(2) + ' USDT';
 
   let html = '';
-  if (useBalance){
-    html += `<div class="balance-row">
-      <div class="lbl">💎 会员余额 ${fmt(balance)}</div>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">
-        <input type="checkbox" id="luban-use-balance" checked> 使用余额抵扣（-${fmt(deduct)}）
-      </label>
-    </div>`;
+  if (balanceEnabled){
+    if (member){
+      if (balance > 0){
+        html += `<div class="balance-row">
+          <div class="lbl">💎 会员「${esc(member.username)}」余额 ${usdt(balance)} USDT</div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">
+            <input type="checkbox" id="luban-use-balance" ${useBalance?'checked':''}> 使用余额抵扣（-${fmt(deduct)}）
+          </label>
+        </div>`;
+      } else {
+        html += '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 会员余额为 0，充值后可用余额支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去充值 →</a></div>';
+      }
+    } else {
+      html += '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 登录会员可用余额抵扣，享便捷支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去登录 / 注册 →</a></div>';
+    }
   }
   html += `<div class="spread" style="margin:12px 0"><span class="muted" style="font-size:13px">还需支付</span>
     <span style="font-size:20px;font-weight:800;color:#e11d48">${fmt(due)}</span></div>`;
@@ -3177,7 +3188,7 @@ function renderLubanPayBox(priceFen){
       document.querySelectorAll('#luban-pay-methods .pay-method').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
       const r = el.querySelector('input[type=radio]'); if (r) r.checked = true;
-      try { renderLubanPayBox(priceFen); } catch(e){ try { renderLubanCommonPayBox(priceFen); } catch(e2){} }
+      renderLubanPayBox(priceFen);
     });
   });
   const cb = $('#luban-use-balance');
@@ -3197,7 +3208,14 @@ function lubanSubmitClientBuy(serviceId){
   const balanceEnabled = cfg.balance_enabled !== false;
   const cb = $('#luban-use-balance');
   const useBalance = cb && cb.checked && balanceEnabled && member;
-  const deduct = useBalance ? Math.min(member.balance || 0, priceFen) : 0;
+  let deduct = useBalance ? Math.min(member ? (member.balance || 0) : 0, priceFen) : 0;
+  /* ⭐ 纯余额支付 radio 选中：全额扣余额（覆盖部分抵扣） */
+  var _payRadio = document.querySelector('input[name="luban-pay"]:checked');
+  if (_payRadio && _payRadio.value === 'balance'){
+    if (!member){ toast('请先登录会员','error'); return; }
+    if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); return; }
+    deduct = priceFen;
+  }
   const due = priceFen - deduct;
   let payMethod = 'balance';
   if (due > 0){
@@ -3206,12 +3224,7 @@ function lubanSubmitClientBuy(serviceId){
     payMethod = radio.value;
   }
   if (deduct > 0){
-    var _payRadio = document.querySelector('input[name="luban-pay"]:checked');
-    if (_payRadio && _payRadio.value === 'balance'){
-      if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); return; }
-      if (!deductBalance(db, member.username, priceFen)){ toast('余额扣除失败','error'); return; }
-      deduct = priceFen;
-    } else if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); return; }
+    if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); return; }
   }
   const orderNo = genOrderNo();
   const order = {
@@ -3286,7 +3299,10 @@ function renderLubanCommonPayBox(priceFen){
   const alipayEnabled = cfg.pay_alipay_enabled !== false;
   const usdtEnabled = cfg.pay_usdt_enabled !== false;
   const balanceEnabled = cfg.balance_enabled !== false;
-  const useBalance = member && balanceEnabled && balance > 0;
+  /* ⭐ 记住用户是否勾选使用余额 */
+  const _cbPrev = $('#luban-common-use-balance');
+  const balanceChecked = _cbPrev ? _cbPrev.checked : true;
+  const useBalance = !!(member && balanceEnabled && balance > 0 && balanceChecked);
   const deduct = useBalance ? Math.min(balance, priceFen) : 0;
   const due = priceFen - deduct;
   const _radio = document.querySelector('input[name="luban-common-pay"]:checked');
@@ -3294,13 +3310,21 @@ function renderLubanCommonPayBox(priceFen){
   const fmt = fen => _pay === 'alipay' ? '¥' + (fen/100).toFixed(2) : (fen / 100 / rate).toFixed(2) + ' USDT';
 
   let html = '';
-  if (useBalance){
-    html += `<div class="balance-row">
-      <div class="lbl">💎 会员余额 ${fmt(balance)}</div>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">
-        <input type="checkbox" id="luban-common-use-balance" checked> 使用余额抵扣（-${fmt(deduct)}）
-      </label>
-    </div>`;
+  if (balanceEnabled){
+    if (member){
+      if (balance > 0){
+        html += `<div class="balance-row">
+          <div class="lbl">💎 会员「${esc(member.username)}」余额 ${usdt(balance)} USDT</div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px">
+            <input type="checkbox" id="luban-common-use-balance" ${useBalance?'checked':''}> 使用余额抵扣（-${fmt(deduct)}）
+          </label>
+        </div>`;
+      } else {
+        html += '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 会员余额为 0，充值后可用余额支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去充值 →</a></div>';
+      }
+    } else {
+      html += '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 登录会员可用余额抵扣，享便捷支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去登录 / 注册 →</a></div>';
+    }
   }
   html += `<div class="spread" style="margin:12px 0"><span class="muted" style="font-size:13px">还需支付</span>
     <span style="font-size:20px;font-weight:800;color:#e11d48">${fmt(due)}</span></div>`;
@@ -3314,6 +3338,7 @@ function renderLubanCommonPayBox(priceFen){
       <div class="pay-methods" id="luban-common-pay-methods">
         ${usdtEnabled ? '<label class="' + usdtClass + '" data-method="usdt"><input type="radio" name="luban-common-pay" value="usdt"' + usdtChecked + '><span class="logo">🪙</span> USDT</label>' : ''}
         ${alipayEnabled ? `<label class="${alipayClass}" data-method="alipay"><input type="radio" name="luban-common-pay" value="alipay"${alipayChecked}><span class="logo">💰</span> 支付宝</label>` : ''}
+        ${(member && (member.balance||0) > 0) ? '<label class="pay-method" data-method="balance"><input type="radio" name="luban-common-pay" value="balance"><span class="logo">💎</span> 余额支付(' + usdt(member.balance) + ')</label>' : ''}
       </div>
     </label>`;
   } else {
@@ -3327,7 +3352,7 @@ function renderLubanCommonPayBox(priceFen){
       document.querySelectorAll('#luban-common-pay-methods .pay-method').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
       const r = el.querySelector('input[type=radio]'); if (r) r.checked = true;
-      try { renderLubanPayBox(priceFen); } catch(e){ try { renderLubanCommonPayBox(priceFen); } catch(e2){} }
+      renderLubanCommonPayBox(priceFen);
     });
   });
   const cb = $('#luban-common-use-balance');
@@ -3351,7 +3376,14 @@ function lubanCommonSubmit2(){
   const balanceEnabled = cfg.balance_enabled !== false;
   const cb = $('#luban-common-use-balance');
   const useBalance = cb && cb.checked && balanceEnabled && member;
-  const deduct = useBalance ? Math.min(member.balance || 0, priceFen) : 0;
+  let deduct = useBalance ? Math.min(member ? (member.balance || 0) : 0, priceFen) : 0;
+  /* ⭐ 纯余额支付 radio 选中：全额扣余额（覆盖部分抵扣） */
+  var _payRadio = document.querySelector('input[name="luban-common-pay"]:checked');
+  if (_payRadio && _payRadio.value === 'balance'){
+    if (!member){ toast('请先登录会员','error'); return; }
+    if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); return; }
+    deduct = priceFen;
+  }
   const due = priceFen - deduct;
   let payMethod = 'balance';
   if (due > 0){
@@ -3360,12 +3392,7 @@ function lubanCommonSubmit2(){
     payMethod = radio.value;
   }
   if (deduct > 0){
-    var _payRadio = document.querySelector('input[name="luban-pay"]:checked');
-    if (_payRadio && _payRadio.value === 'balance'){
-      if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); return; }
-      if (!deductBalance(db, member.username, priceFen)){ toast('余额扣除失败','error'); return; }
-      deduct = priceFen;
-    } else if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); return; }
+    if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); return; }
   }
   const orderNo = genOrderNo();
   const order = {
@@ -4185,7 +4212,9 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       '<label class="field"><span>目标链接（帖子/账号/视频 URL）</span><input id="smm-link" placeholder="https://..." autocomplete="off"></label>' +
       (isPkg ? '' : '<label class="field"><span>数量（' + min + ' ~ ' + max + '）</span><input id="smm-qty" type="number" min="' + min + '" max="' + max + '" value="' + defQty + '"></label>') +
       '<label class="field"><span>暗号（用于查询订单）</span><input id="smm-secret" maxlength="60" value="' + esc(lastSecret) + '"></label>' +
-      '<div class="spread" style="margin:14px 0;padding-top:14px;border-top:1px dashed var(--line)"><span class="muted" style="font-size:13px">订单金额</span><span id="smm-amount" style="font-size:18px;font-weight:800;color:#e11d48">' + usdt(initAmount) + ' USDT</span></div>' +
+      '<div class="spread" style="margin:14px 0 6px;padding-top:14px;border-top:1px dashed var(--line)"><span class="muted" style="font-size:13px">订单金额</span><span id="smm-amount" style="font-size:18px;font-weight:800;color:#e11d48">' + usdt(initAmount) + ' USDT</span></div>' +
+      '<div class="spread" style="margin:6px 0"><span class="muted" style="font-size:13px">余额抵扣</span><span id="smm-deduct" style="font-weight:700;color:#b45309">—</span></div>' +
+      '<div class="spread" style="margin:6px 0 14px"><span class="muted" style="font-size:13px">还需支付</span><span id="smm-due" style="font-size:20px;font-weight:800;color:#e11d48">' + usdt(initAmount) + ' USDT</span></div>' +
       '<div id="smm-cny-hint" style="text-align:right;font-size:12px;color:#6b7280;margin-top:-8px;margin-bottom:10px">支付宝付款约 ¥' + yuan(initAmount) + '（按汇率 ' + usdtRate() + ' 换算）</div>' +
       '<div id="smm-pay-wrap"></div>' +
       '<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn primary" onclick="smmSubmit(' + p.id + ')">确认下单</button></div>');
@@ -4199,6 +4228,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       var amountFen = smmCalcAmount(p, q);  /* 人民币分 = 上游人民币价 × 加价 × 数量比例 */
       var paySel = document.querySelector('input[name="smm-pay"]:checked');
       var isAlipay = paySel && paySel.value === 'alipay';
+      var isBalancePay = paySel && paySel.value === 'balance';
       var rate = usdtRate();
       if (isAlipay){
         /* 支付宝口令红包：直接显示人民币（上游本就是人民币计价） */
@@ -4211,6 +4241,18 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         $('#smm-unit').textContent = usdt(p.price) + ' USDT' + (isPkg ? ' /份' : ' / 1000条');
         if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = '支付宝付款约 ¥' + yuan(amountFen) + '';
       }
+      /* ⭐ 实时计算余额抵扣与还需支付（与选中支付方式单位联动） */
+      var mNow = getCurrentMember(loadDB());
+      var balNow = mNow ? (mNow.balance || 0) : 0;
+      var balCb = $('#smm-use-balance');
+      var useBalNow = isBalancePay || (balNow > 0 && (!balCb || balCb.checked));
+      var deductNow = isBalancePay ? amountFen : (useBalNow ? Math.min(balNow, amountFen) : 0);
+      var dueNow = amountFen - deductNow;
+      var fmtF = function(fen){ return isAlipay ? '¥' + yuan(fen) : usdt(fen) + ' USDT'; };
+      if ($('#smm-deduct')) $('#smm-deduct').textContent = deductNow > 0 ? '-' + fmtF(deductNow) : '—';
+      if ($('#smm-due')) $('#smm-due').textContent = dueNow > 0 ? fmtF(dueNow) : '✅ 余额全额支付';
+      var pmBox = document.getElementById('smm-pay-methods');
+      if (pmBox){ pmBox.style.opacity = dueNow > 0 ? '1' : '0.4'; pmBox.style.pointerEvents = dueNow > 0 ? 'auto' : 'none'; }
     }
     if (qtyEl){
       qtyEl.addEventListener('input', smmRefreshAmount);
@@ -4225,7 +4267,19 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var alipayEnabled = cfg.pay_alipay_enabled !== false;
     if (!usdtEnabled && !alipayEnabled){ $('#smm-pay-wrap').innerHTML = '<div style="color:#b91c1c">商家未开启支付方式</div>'; return; }
     var _member = getCurrentMember(db);
-    var _balHtml = (_member && (_member.balance||0) > 0) ? '<div class="balance-row" style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13px;color:#92400e"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="smm-use-balance" checked> 💎 使用余额抵扣（余额 '+usdt(_member.balance)+' USDT，自动抵扣最多可抵金额）</label></div>' : '';
+    var _balanceEnabled = cfg.balance_enabled !== false;
+    var _balHtml = '';
+    if (_balanceEnabled){
+      if (_member){
+        if ((_member.balance||0) > 0){
+          _balHtml = '<div class="balance-row"><div class="lbl">💎 会员「'+esc(_member.username)+'」余额 '+usdt(_member.balance)+' USDT</div><label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px"><input type="checkbox" id="smm-use-balance" checked> 使用余额抵扣</label></div>';
+        } else {
+          _balHtml = '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 会员余额为 0，充值后可用余额支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去充值 →</a></div>';
+        }
+      } else {
+        _balHtml = '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 登录会员可用余额抵扣，享便捷支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去登录 / 注册 →</a></div>';
+      }
+    }
     $('#smm-pay-wrap').innerHTML = _balHtml + '<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">' +
       (usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="smm-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : '') +
       (alipayEnabled ? '<label class="pay-method' + (!usdtEnabled ? ' active' : '') + '" data-method="alipay"><input type="radio" name="smm-pay" value="alipay"' + (!usdtEnabled ? ' checked' : '') + '><span class="logo">🧧</span> 支付宝口令红包</label>' : '') +
@@ -4239,6 +4293,9 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         smmRefreshAmount();  /* 切换支付方式时联动换算金额显示 */
       });
     });
+    /* ⭐ 勾选/取消余额抵扣时实时刷新 */
+    var _smmCb = document.getElementById('smm-use-balance');
+    if (_smmCb) _smmCb.addEventListener('change', smmRefreshAmount);
     /* 初始刷新一次，确保金额单位与默认选中的支付方式一致 */
     setTimeout(smmRefreshAmount, 50);
   };
@@ -4280,7 +4337,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       sku_id: 0, sku_name: '', category_id: 0, quantity: qty,
       amount: amount, balance_used: _deduct, amount_due: _due,
       secret: secret, username: member ? member.username : '',
-      status: (_due <= 0 ? 'processing' : 'pending'), pay_method: (_due <= 0 ? 'balance' : radio.value), cards: [],
+      /* ⭐ 全额余额支付也保持 pending，由 payOrder 拦截触发上游提交 */
+      status: 'pending', pay_method: (_due <= 0 ? 'balance' : radio.value), cards: [],
       note: p.note || '', created_at: now(), delivered_at: '',
       source: 'smm',
       smm_service_id: p.smm_service_id,
@@ -4288,13 +4346,21 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       smm_link: link,
       usdt_rate: usdtRate()
     };
-    if (radio.value === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
+    if (radio.value === 'alipay' && _due > 0) order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
     db.orders.unshift(order);
     saveDB(db);
     saveMyOrder(orderNo, secret);
     localStorage.setItem(LS_SECRET, secret);
     closeModal();
-    showPayModal('order', orderNo);
+    if (_due <= 0){
+      /* ⭐ 余额全额支付：直接触发 payOrder 提交上游，并跳转订单页 */
+      payOrder(orderNo);
+      toast('余额支付成功，已提交上游处理 🎉','success');
+      if (location.hash === '#/order/' + orderNo) route();
+      else location.hash = '#/order/' + orderNo;
+    } else {
+      showPayModal('order', orderNo);
+    }
   };
 
   /* ========== payOrder 拦截 ========== */

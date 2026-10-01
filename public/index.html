@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <title>云发卡 · 自动发货</title>
 <style>
 :root{--bg:#f6f7fb;--card:#fff;--text:#1f2430;--muted:#6b7280;--line:#e8eaf0;--primary:#6366f1;--primary2:#8b5cf6;--danger:#ef4444;--ok:#10b981;--radius:14px;--shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px -8px rgba(16,24,40,.12);--tg-btn-color:#0088cc;--tg-btn-shadow:rgba(0,136,204,.6)}
@@ -31,7 +31,7 @@ main{max-width:1080px;margin:0 auto;padding:24px 20px 90px}
 .btn.danger{background:#fee2e2;color:#b91c1c}.btn.ghost{background:transparent;border:1px solid var(--line)}
 .btn.sm{padding:6px 12px;font-size:13px;border-radius:8px}.btn.block{display:block;width:100%}
 .btn:disabled{opacity:.4;cursor:not-allowed}
-input,textarea,select{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;background:#fff;outline:none;transition:.15s;color:var(--text)}
+input,textarea,select{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit;background:#fff;outline:none;transition:.15s;color:var(--text)}
 input:focus,textarea:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.12)}
 input[type=checkbox]{width:auto;accent-color:var(--primary)}
 label.field{display:block;margin-bottom:14px}
@@ -3543,6 +3543,7 @@ Object.assign(window, {
 
   pullState(true);
   setInterval(function(){ pullState(false); }, POLL_MS);
+  setInterval(function(){ if (window.applySiteConfig) window.applySiteConfig(); }, POLL_MS);  /* ⭐ 定时强制刷新网站标题/品牌名/TG按钮，确保多设备实时同步 */
   document.addEventListener('visibilitychange', function(){ if (!document.hidden) pullState(false); });
   window.addEventListener('online', function(){ pullState(false); });
 })();

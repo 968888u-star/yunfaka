@@ -206,7 +206,7 @@ const yuan = fen => (Number(fen||0)/100).toFixed(2);
 function usdtRate(){
   try {
     const cfg = (window.__DB && window.__DB.config) || {};
-    return Number(cfg.pay_usdt_rate) || 7.2;
+    return Number(cfg.pay_usdt_rate_recharge_bonus) || 7.2;
   } catch(e){ return 7.2; }
 }
 /* 当前汇率换算（用于渲染非订单场景，如商品列表） */
@@ -329,6 +329,7 @@ const DEFAULT_CONFIG = {
   home_entry_member_title: '注册会员，享余额支付', home_entry_member_sub: '支持余额抵扣、充值优惠，购物更便捷',
   home_entry_luban_title: '全球接码', home_entry_luban_sub: '实时搜索 · 自动分配号码',
   home_entry_smm_title: '社交媒体推广', home_entry_smm_sub: '关注/点赞/播放/评论',
+  recharge_bonus_pct: 0,
   luban_usage_text: '1. 点击「立即接码」选择项目<br>2. 获取手机号后填入目标平台<br>3. 收到验证码自动回填<br>4. 支持全球200+国家号码'
 };
 
@@ -588,10 +589,26 @@ function renderHome(){
         <div><div class="muted" style="font-size:12px">当前会员</div><div style="font-weight:700">👤 ${esc(member.username)}</div></div>
         <div style="text-align:right;flex:1"><div class="muted" style="font-size:12px">账户余额</div><div style="font-weight:800;color:#e11d48;font-size:18px">${usdt(member.balance)} USDT</div></div>
         <a class="btn primary sm" href="#/member">会员中心</a>
-      </div>`
+      </div>` +
+    /* ⭐ 接码入口+SMM入口移到外面，登录与否都显示 */
+    `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
+        <div><div style="font-weight:700">🌐 ${esc(cfg.home_entry_luban_title || '全球接码')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_luban_sub || '实时搜索 · 自动分配号码')}</div></div>
+        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/luban">立即接码</a>
+      </div>` +
+    (function(){
+      var smmCount = (db.products.filter(function(p){ return p.source==='smm' && p.active; })).length;
+      return `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
+        <div><div style="font-weight:700">📈 ${esc(cfg.home_entry_smm_title || '社交媒体推广')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_smm_sub || '关注/点赞/播放/评论')} · ${smmCount>0 ? smmCount+' 个服务，点击进入查看' : '点击进入 → 右上角同步服务'}</div></div>
+        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
+      </div>`;
+    })()
     : `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px">
         <div><div style="font-weight:700">💎 ${esc(cfg.home_entry_member_title || '注册会员，享余额支付')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_member_sub || '支持余额抵扣、充值优惠，购物更便捷')}</div></div>
         <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/member">注册 / 登录</a>
+      </div>` +
+    `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
+        <div><div style="font-weight:700">🌐 ${esc(cfg.home_entry_luban_title || '全球接码')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_luban_sub || '实时搜索 · 自动分配号码')}</div></div>
+        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/luban">立即接码</a>
       </div>` +
     (function(){
       var smmCount = (db.products.filter(function(p){ return p.source==='smm' && p.active; })).length;
@@ -3847,7 +3864,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<label class="field"><span>接码入口副标题</span><input id="he-ls" value="' + esc(cfg.home_entry_luban_sub||'') + '"></label>' +
         '<label class="field"><span>SMM入口标题</span><input id="he-st" value="' + esc(cfg.home_entry_smm_title||'') + '"></label>' +'<label class="field"><span>SMM入口副标题</span><input id="he-ss" value="' + esc(cfg.home_entry_smm_sub||'') + '"></label>' +
         '<label class="field"><span>接码使用说明（支持&lt;br&gt;换行，留空不显示）</span><textarea id="luban-usage" rows="3" style="resize:vertical">' + esc(cfg.luban_usage_text||'') + '</textarea></label>' +
-        '<button class="btn primary sm" onclick="smmSaveHomeText()">保存首页文案</button>' +
+        '<label class="field"><span>会员充值赠送比例（%，如填10=充100送10）</span><input id="recharge-bonus" type="number" min="0" max="100" value="' + (cfg.recharge_bonus_pct||0) + '"></label>' +'<button class="btn primary sm" onclick="smmSaveHomeText()">保存首页文案</button>' +
       '</div>' +
       '<div class="card panel"><h2>推广商品列表（' + items.length + '）</h2>' +
       '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0">' +
@@ -3900,7 +3917,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var db = loadDB(); var g = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
     db.config.home_entry_member_title = g('he-mt'); db.config.home_entry_member_sub = g('he-ms');
     db.config.home_entry_luban_title = g('he-lt'); db.config.home_entry_luban_sub = g('he-ls');
-    db.config.home_entry_smm_title = g('he-st'); db.config.home_entry_smm_sub = g('he-ss'); db.config.luban_usage_text = g('luban-usage');
+    db.config.home_entry_smm_title = g('he-st'); db.config.home_entry_smm_sub = g('he-ss'); db.config.luban_usage_text = g('luban-usage'); var rb=parseFloat(g('recharge-bonus'))||0; db.config.recharge_bonus_pct=rb;
     saveDB(db); toast('首页文案已保存，刷新前台生效','success'); renderSmmTab();
   };
   window.smmSaveCats = function(){

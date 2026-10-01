@@ -599,7 +599,6 @@ function renderHome(){
         <div><div style="font-weight:700">📈 ${esc(cfg.home_entry_smm_title || '社交媒体推广')}</div><div class="muted" style="font-size:12px;margin-top:2px">关注/点赞/播放/评论 · ${smmCount>0 ? smmCount+' 个服务，点击进入查看' : '点击进入 → 右上角同步服务'}</div></div>
         <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
       </div>` +
-    (cfg.luban_usage_text ? `<div class="card panel" style="padding:14px 20px;margin-top:10px"><div style="font-weight:700;margin-bottom:6px">📖 接码使用说明</div><div class="muted" style="font-size:13px;line-height:1.8">${cfg.luban_usage_text}</div></div>` : '');
     })();
   const tgUrl = tgUrlOf(cfg);
   const tgBox = tgUrl ? `<div class="card panel" style="margin-top:24px;text-align:center">
@@ -2941,7 +2940,7 @@ function renderLubanClient(){
     return;
   }
 
-  $('#app').innerHTML = hero + tabBar + `<div class="card panel">
+  $('#app').innerHTML = hero + tabBar + (cfg.luban_usage_text ? `<div class="card panel" style="padding:14px 20px;margin-top:16px;background:#f0f9ff;border-color:#bae6fd"><div style="font-weight:700;margin-bottom:6px;color:#0369a1">📖 接码使用说明</div><div class="muted" style="font-size:13px;line-height:1.8">${cfg.luban_usage_text}</div></div>` : '') + `<div class="card panel">
       <h2>🔍 搜索服务</h2>
       <div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:14px">
         <div style="flex:1;min-width:160px">
@@ -3115,7 +3114,9 @@ function renderLubanPayBox(priceFen){
   const useBalance = member && balanceEnabled && balance > 0;
   const deduct = useBalance ? Math.min(balance, priceFen) : 0;
   const due = priceFen - deduct;
-  const fmt = fen => (fen / 100 / rate).toFixed(2) + ' USDT';
+  const _radio = document.querySelector('input[name="luban-pay"]:checked');
+  const _pay = _radio ? _radio.value : 'usdt';
+  const fmt = fen => _pay === 'alipay' ? '¥' + (fen/100).toFixed(2) : (fen / 100 / rate).toFixed(2) + ' USDT';
 
   let html = '';
   if (useBalance){
@@ -3255,7 +3256,9 @@ function renderLubanCommonPayBox(priceFen){
   const useBalance = member && balanceEnabled && balance > 0;
   const deduct = useBalance ? Math.min(balance, priceFen) : 0;
   const due = priceFen - deduct;
-  const fmt = fen => (fen / 100 / rate).toFixed(2) + ' USDT';
+  const _radio = document.querySelector('input[name="luban-common-pay"]:checked');
+  const _pay = _radio ? _radio.value : 'usdt';
+  const fmt = fen => _pay === 'alipay' ? '¥' + (fen/100).toFixed(2) : (fen / 100 / rate).toFixed(2) + ' USDT';
 
   let html = '';
   if (useBalance){
@@ -3857,7 +3860,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     db.config.smm_hero_subtitle = s;
     db.config.smm_usage_text = u;
     saveDB(db);
-    toast('文案已保存','success');
+    toast('文案已保存，前台刷新生效','success');
   };
 
   window.smmSaveHomeText = function(){
@@ -3871,7 +3874,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var t = ($('#smm-cats-text') ? $('#smm-cats-text').value : '');
     var db = loadDB();
     db.config.smm_categories = t.split('\n').map(function(s){return s.trim();}).filter(Boolean).join('\n');
-    saveDB(db); toast('分类已保存','success'); renderSmmTab(); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
+    saveDB(db); toast('分类已保存，前台刷新生效','success'); renderSmmTab(); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
   };
 
   window.smmForceRecalc = function(){

@@ -988,6 +988,12 @@ function confirmPay(type, id){
     if (!r) return;
     if (r.status === 'success'){ toast('该充值已到账','success'); return; }
     if (!addBalance(db, r.username, r.amount)){ toast('账号不存在','error'); return; }
+    /* ⭐ 充值赠送：按后台设置比例赠送余额 */
+    var _bonusPct = parseFloat((db.config && db.config.recharge_bonus_pct) || 0);
+    if (_bonusPct > 0){
+      var _bonus = Math.round(r.amount * _bonusPct / 100);
+      if (_bonus > 0){ addBalance(db, r.username, _bonus); r.bonus_amount = _bonus; }
+    }
     r.status = 'success';
     r.completed_at = now();
     saveDB(db);
@@ -4255,13 +4261,20 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var radio = document.querySelector('input[name="smm-pay"]:checked');
     if (!radio){ toast('请选择支付方式','error'); return; }
     var member = getCurrentMember(db);
+    /* ⭐ SMM下单自动余额抵扣（会员登录且有余额时自动抵扣，剩余用选中支付方式） */
+    var _deduct = 0;
+    if (member && (member.balance || 0) > 0){
+      _deduct = Math.min(member.balance || 0, amount);
+      if (_deduct > 0 && !deductBalance(db, member.username, _deduct)){ _deduct = 0; }
+    }
+    var _due = amount - _deduct;
     var orderNo = genOrderNo();
     var order = {
       order_no: orderNo, product_id: id, product_name: p.name,
       sku_id: 0, sku_name: '', category_id: 0, quantity: qty,
-      amount: amount, balance_used: 0, amount_due: amount,
+      amount: amount, balance_used: _deduct, amount_due: _due,
       secret: secret, username: member ? member.username : '',
-      status: 'pending', pay_method: radio.value, cards: [],
+      status: (_due <= 0 ? 'processing' : 'pending'), pay_method: (_due <= 0 ? 'balance' : radio.value), cards: [],
       note: p.note || '', created_at: now(), delivered_at: '',
       source: 'smm',
       smm_service_id: p.smm_service_id,

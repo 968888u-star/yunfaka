@@ -591,30 +591,30 @@ function renderHome(){
         <a class="btn primary sm" href="#/member">会员中心</a>
       </div>` +
     /* ⭐ 接码入口+SMM入口移到外面，登录与否都显示 */
-    `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
+    `<div class="card panel" style="display:flex;align-items:center;justify-content:space-between;height:80px;padding:14px 20px;gap:12px;margin-top:10px">
         <div><div style="font-weight:700">🌐 ${esc(cfg.home_entry_luban_title || '全球接码')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_luban_sub || '实时搜索 · 自动分配号码')}</div></div>
-        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/luban">立即接码</a>
+        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto;flex-shrink:0;align-self:center" href="#/luban">立即接码</a>
       </div>` +
     (function(){
       var smmCount = (db.products.filter(function(p){ return p.source==='smm' && p.active; })).length;
-      return `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
+      return `<div class="card panel" style="display:flex;align-items:center;justify-content:space-between;height:80px;padding:14px 20px;gap:12px;margin-top:10px">
         <div><div style="font-weight:700">📈 ${esc(cfg.home_entry_smm_title || '社交媒体推广')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_smm_sub || '关注/点赞/播放/评论')} · ${smmCount>0 ? smmCount+' 个服务，点击进入查看' : '点击进入 → 右上角同步服务'}</div></div>
-        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
+        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto;flex-shrink:0;align-self:center" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
       </div>`;
     })()
-    : `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px">
+    : `<div class="card panel" style="display:flex;align-items:center;justify-content:space-between;height:80px;padding:14px 20px;gap:12px">
         <div><div style="font-weight:700">💎 ${esc(cfg.home_entry_member_title || '注册会员，享余额支付')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_member_sub || '支持余额抵扣、充值优惠，购物更便捷')}</div></div>
-        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/member">注册 / 登录</a>
+        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto;flex-shrink:0;align-self:center" href="#/member">注册 / 登录</a>
       </div>` +
-    `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
+    `<div class="card panel" style="display:flex;align-items:center;justify-content:space-between;height:80px;padding:14px 20px;gap:12px;margin-top:10px">
         <div><div style="font-weight:700">🌐 ${esc(cfg.home_entry_luban_title || '全球接码')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_luban_sub || '实时搜索 · 自动分配号码')}</div></div>
-        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/luban">立即接码</a>
+        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto;flex-shrink:0;align-self:center" href="#/luban">立即接码</a>
       </div>` +
     (function(){
       var smmCount = (db.products.filter(function(p){ return p.source==='smm' && p.active; })).length;
-      return `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
+      return `<div class="card panel" style="display:flex;align-items:center;justify-content:space-between;height:80px;padding:14px 20px;gap:12px;margin-top:10px">
         <div><div style="font-weight:700">📈 ${esc(cfg.home_entry_smm_title || '社交媒体推广')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_smm_sub || '关注/点赞/播放/评论')} · ${smmCount>0 ? smmCount+' 个服务，点击进入查看' : '点击进入 → 右上角同步服务'}</div></div>
-        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
+        <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto;flex-shrink:0;align-self:center" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
       </div>`;
     })();
   const tgUrl = tgUrlOf(cfg);
@@ -3491,6 +3491,7 @@ Object.assign(window, {
           return r.json().then(function(d){
             rev = d.rev;
             window.__DB = d.db;
+            if (window.applySiteConfig) window.applySiteConfig();
             window.route();
             toast('检测到其他设备的修改，已同步最新数据','error');
           });
@@ -3521,9 +3522,11 @@ Object.assign(window, {
           rev = d.rev;
           window.__DB = d.db;
           if (first) window.__ready = true;
+          if (window.applySiteConfig) window.applySiteConfig();
           window.route();
         } else if (first){
           window.__ready = true;
+          if (window.applySiteConfig) window.applySiteConfig();
           window.route();
         }
       })

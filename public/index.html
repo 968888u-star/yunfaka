@@ -325,7 +325,11 @@ const DEFAULT_CONFIG = {
   smm_hero_title: '社交媒体推广',
   smm_hero_subtitle: '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理',
   smm_usage_text: '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度',
-  smm_categories: 'Telegram\nInstagram\nYouTube\nTikTok\nFacebook\nTwitter/X\nAI/ChatGPT\nNetflix\nSpotify\nDiscord\nGoogle\nApple\n腾讯/微信\n抖音\nB站\n小红书\n微博\n快手\n其他'
+  smm_categories: 'Telegram\nInstagram\nYouTube\nTikTok\nFacebook\nTwitter/X\nAI/ChatGPT\nNetflix\nSpotify\nDiscord\nGoogle\nApple\n腾讯/微信\n抖音\nB站\n小红书\n微博\n快手\n其他',
+  home_entry_member_title: '注册会员，享余额支付', home_entry_member_sub: '支持余额抵扣、充值优惠，购物更便捷',
+  home_entry_luban_title: '全球接码', home_entry_luban_sub: '实时搜索 · 自动分配号码',
+  home_entry_smm_title: '社交媒体推广',
+  luban_usage_text: '1. 点击「立即接码」选择项目<br>2. 获取手机号后填入目标平台<br>3. 收到验证码自动回填<br>4. 支持全球200+国家号码'
 };
 
 function seedDB(){
@@ -586,15 +590,16 @@ function renderHome(){
         <a class="btn primary sm" href="#/member">会员中心</a>
       </div>`
     : `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px">
-        <div><div style="font-weight:700">💎 注册会员，享余额支付</div><div class="muted" style="font-size:12px;margin-top:2px">支持余额抵扣、充值优惠，购物更便捷</div></div>
+        <div><div style="font-weight:700">💎 ${esc(cfg.home_entry_member_title || '注册会员，享余额支付')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_member_sub || '支持余额抵扣、充值优惠，购物更便捷')}</div></div>
         <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/member">注册 / 登录</a>
       </div>` +
     (function(){
       var smmCount = (db.products.filter(function(p){ return p.source==='smm' && p.active; })).length;
       return `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
-        <div><div style="font-weight:700">📈 社交媒体推广</div><div class="muted" style="font-size:12px;margin-top:2px">关注/点赞/播放/评论 · ${smmCount>0 ? smmCount+' 个服务，点击进入查看' : '点击进入 → 右上角同步服务'}</div></div>
+        <div><div style="font-weight:700">📈 ${esc(cfg.home_entry_smm_title || '社交媒体推广')}</div><div class="muted" style="font-size:12px;margin-top:2px">关注/点赞/播放/评论 · ${smmCount>0 ? smmCount+' 个服务，点击进入查看' : '点击进入 → 右上角同步服务'}</div></div>
         <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
-      </div>`;
+      </div>` +
+    (cfg.luban_usage_text ? `<div class="card panel" style="padding:14px 20px;margin-top:10px"><div style="font-weight:700;margin-bottom:6px">📖 接码使用说明</div><div class="muted" style="font-size:13px;line-height:1.8">${cfg.luban_usage_text}</div></div>` : '');
     })();
   const tgUrl = tgUrlOf(cfg);
   const tgBox = tgUrl ? `<div class="card panel" style="margin-top:24px;text-align:center">
@@ -1298,6 +1303,7 @@ function renderMemberDashboard(member){
       document.querySelectorAll('#rc-methods .pay-method').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
       const r = el.querySelector('input[type=radio]'); if (r) r.checked = true;
+      try { renderLubanPayBox(priceFen); } catch(e){ try { renderLubanCommonPayBox(priceFen); } catch(e2){} }
     });
   });
 }
@@ -3142,6 +3148,7 @@ function renderLubanPayBox(priceFen){
       document.querySelectorAll('#luban-pay-methods .pay-method').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
       const r = el.querySelector('input[type=radio]'); if (r) r.checked = true;
+      try { renderLubanPayBox(priceFen); } catch(e){ try { renderLubanCommonPayBox(priceFen); } catch(e2){} }
     });
   });
   const cb = $('#luban-use-balance');
@@ -3281,6 +3288,7 @@ function renderLubanCommonPayBox(priceFen){
       document.querySelectorAll('#luban-common-pay-methods .pay-method').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
       const r = el.querySelector('input[type=radio]'); if (r) r.checked = true;
+      try { renderLubanPayBox(priceFen); } catch(e){ try { renderLubanCommonPayBox(priceFen); } catch(e2){} }
     });
   });
   const cb = $('#luban-common-use-balance');
@@ -3806,6 +3814,14 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<label class="field"><span>顶部副标题</span><input id="smm-hero-sub" value="' + esc(cfg.smm_hero_subtitle || '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理') + '" maxlength="60"></label>' +
         '<label class="field"><span>使用说明（支持&lt;br&gt;换行）</span><textarea id="smm-usage-text" rows="3" style="resize:vertical">' + esc(cfg.smm_usage_text || '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度') + '</textarea></label>' +
         '<button class="btn primary sm" onclick="smmSaveText()">保存文案</button>' +        '<label class="field" style="margin-top:12px"><span>自定义分类（每行一个，顺序即显示顺序）</span><textarea id="smm-cats-text" rows="4" style="resize:vertical">' + esc((cfg.smm_categories||'').replace(/\\n/g,'\n')) + '</textarea></label>' +        '<button class="btn ghost sm" onclick="smmSaveCats()">保存分类</button>' +
+        '<div style="margin-top:14px;padding-top:14px;border-top:1px dashed #e2e8f0;font-weight:700;font-size:13px">🏠 首页入口文案自定义</div>' +
+        '<label class="field"><span>会员入口标题</span><input id="he-mt" value="' + esc(cfg.home_entry_member_title||'') + '"></label>' +
+        '<label class="field"><span>会员入口副标题</span><input id="he-ms" value="' + esc(cfg.home_entry_member_sub||'') + '"></label>' +
+        '<label class="field"><span>接码入口标题</span><input id="he-lt" value="' + esc(cfg.home_entry_luban_title||'') + '"></label>' +
+        '<label class="field"><span>接码入口副标题</span><input id="he-ls" value="' + esc(cfg.home_entry_luban_sub||'') + '"></label>' +
+        '<label class="field"><span>SMM入口标题</span><input id="he-st" value="' + esc(cfg.home_entry_smm_title||'') + '"></label>' +
+        '<label class="field"><span>接码使用说明（支持&lt;br&gt;换行，留空不显示）</span><textarea id="luban-usage" rows="3" style="resize:vertical">' + esc(cfg.luban_usage_text||'') + '</textarea></label>' +
+        '<button class="btn primary sm" onclick="smmSaveHomeText()">保存首页文案</button>' +
       '</div>' +
       '<div class="card panel"><h2>推广商品列表（' + items.length + '）</h2>' +      (function(){ var totalP = Math.ceil(items.length/50); var cur = window._smmPage||1; if(cur>totalP)cur=1; window._smmPage=cur; var btns=''; for(var pi=1;pi<=Math.min(totalP,12);pi++){ btns+='<button class="btn '+(pi===cur?'primary':'ghost')+' sm" style="margin:2px;padding:4px 10px;font-size:12px" onclick="window._smmPage='+pi+';renderSmmTab()">'+pi+'</button>'; } return totalP>1 ? '<div style="margin:8px 0;font-size:12px;color:#6b7280">每页50条 · 第'+cur+'/'+totalP+'页 '+btns+'</div>' : ''; })() +
         '<div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>平台分类</th><th>成本(USD)</th><th>USDT售价</th><th>≈¥参考</th><th>起订~上限</th><th>特性</th><th>状态</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
@@ -3844,6 +3860,13 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     toast('文案已保存','success');
   };
 
+  window.smmSaveHomeText = function(){
+    var db = loadDB(); var g = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
+    db.config.home_entry_member_title = g('he-mt'); db.config.home_entry_member_sub = g('he-ms');
+    db.config.home_entry_luban_title = g('he-lt'); db.config.home_entry_luban_sub = g('he-ls');
+    db.config.home_entry_smm_title = g('he-st'); db.config.luban_usage_text = g('luban-usage');
+    saveDB(db); toast('首页文案已保存，刷新前台生效','success'); renderSmmTab();
+  };
   window.smmSaveCats = function(){
     var t = ($('#smm-cats-text') ? $('#smm-cats-text').value : '');
     var db = loadDB();

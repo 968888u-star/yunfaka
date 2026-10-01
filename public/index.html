@@ -3879,13 +3879,20 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
   window.smmSaveCats = function(){
     var t = ($('#smm-cats-text') ? $('#smm-cats-text').value : '');
     var db = loadDB();
-    var oldCats = (db.config.smm_categories||'').split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    var defaultCats = 'Telegram\nInstagram\nYouTube\nTikTok\nFacebook\nTwitter/X\nAI/ChatGPT\nNetflix\nSpotify\nDiscord\nGoogle\nApple\n腾讯/微信\n抖音\nB站\n小红书\n微博\n快手\n其他'.split('\n');
+    var oldCats = ((db.config.smm_categories||'').split('\n').map(function(s){return s.trim();}).filter(Boolean));
+    if (!oldCats.length) oldCats = defaultCats;  /* 首次保存用默认分类作为基准 */
     var newCats = t.split('\n').map(function(s){return s.trim();}).filter(Boolean);
     db.config.smm_categories = newCats.join('\n');
-    var renameMap = {}; var renamed = 0;
-    for (var i=0;i<Math.min(oldCats.length,newCats.length);i++){ if(oldCats[i]!==newCats[i]) renameMap[oldCats[i]]=newCats[i]; }
-    db.products.forEach(function(p){ if(p.source==='smm' && p.smm_platform && renameMap[p.smm_platform]){ p.smm_platform = renameMap[p.smm_platform]; renamed++; } });
-    saveDB(db); toast('分类已保存，同步更新 '+renamed+' 个商品，前台刷新生效','success'); renderSmmTab(); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
+    /* ⭐ 强制重新识别所有SMM商品分类（按新分类列表关键词匹配，不依赖旧smm_platform） */
+    var reidentified = 0;
+    db.products.forEach(function(p){
+      if (p.source !== 'smm') return;
+      var newCat = smmCatOf(p.smm_service_name || p.name, null);  /* null强制按名称重新识别 */
+      if (newCats.indexOf(newCat) < 0) newCat = newCats[newCats.length-1] || '其他';  /* 不在列表里归最后一个 */
+      if (p.smm_platform !== newCat){ p.smm_platform = newCat; reidentified++; }
+    });
+    saveDB(db); toast('分类已保存，重新识别 '+reidentified+' 个商品分类，前台刷新生效','success'); renderSmmTab(); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
   };
 
   window.smmForceRecalc = function(){

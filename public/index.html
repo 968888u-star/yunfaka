@@ -1297,7 +1297,7 @@ function renderMemberDashboard(member){
         <div class="pay-methods" id="rc-methods">${alipayMethodHtml}${usdtMethodHtml}</div>
       </label>
       <button class="btn primary block" onclick="submitRecharge()">立即充值</button>
-      <p class="muted" style="font-size:12px;margin:12px 0 0">充值成功后余额可用于下单抵扣，余额一经充值不可提现。</p>
+      <p class="muted" style="font-size:12px;margin:12px 0 0">充值成功后余额可用于下单抵扣，余额一经充值不可提现。${(parseFloat(cfg.recharge_bonus_pct||0)>0) ? '<div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #f59e0b;border-radius:10px;padding:12px 16px;margin:12px 0;text-align:center;font-weight:700;color:#92400e">🎁 充值活动：充多少送 '+cfg.recharge_bonus_pct+'%，即充即送！</div>' : ''}</p>
     </div>
     <div class="card panel">
       <h2>充值记录</h2>
@@ -4207,12 +4207,12 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         /* 支付宝口令红包：直接显示人民币（上游本就是人民币计价） */
         $('#smm-amount').textContent = '¥' + yuan(amountFen) + '（口令红包）';
         $('#smm-unit').textContent = '¥' + yuan(p.price) + (isPkg ? ' /份' : ' / 1000条');
-        if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = 'USDT计价约 ' + usdt(amountFen) + ' USDT（按汇率 ' + rate + ' 换算）';
+        if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = 'USDT计价约 ' + usdt(amountFen) + ' USDT';
       } else {
         /* USDT：人民币售价 ÷ 后台汇率 */
         $('#smm-amount').textContent = usdt(amountFen) + ' USDT';
         $('#smm-unit').textContent = usdt(p.price) + ' USDT' + (isPkg ? ' /份' : ' / 1000条');
-        if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = '支付宝付款约 ¥' + yuan(amountFen) + '（按汇率 ' + rate + ' 换算）';
+        if ($('#smm-cny-hint')) $('#smm-cny-hint').textContent = '支付宝付款约 ¥' + yuan(amountFen) + '';
       }
     }
     if (qtyEl){
@@ -4227,7 +4227,9 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var usdtEnabled = cfg.pay_usdt_enabled !== false;
     var alipayEnabled = cfg.pay_alipay_enabled !== false;
     if (!usdtEnabled && !alipayEnabled){ $('#smm-pay-wrap').innerHTML = '<div style="color:#b91c1c">商家未开启支付方式</div>'; return; }
-    $('#smm-pay-wrap').innerHTML = '<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">' +
+    var _member = getCurrentMember(db);
+    var _balHtml = (_member && (_member.balance||0) > 0) ? '<div class="balance-row" style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13px;color:#92400e"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="smm-use-balance" checked> 💎 使用余额抵扣（余额 '+usdt(_member.balance)+' USDT，自动抵扣最多可抵金额）</label></div>' : '';
+    $('#smm-pay-wrap').innerHTML = _balHtml + '<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">' +
       (usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="smm-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : '') +
       (alipayEnabled ? '<label class="pay-method' + (!usdtEnabled ? ' active' : '') + '" data-method="alipay"><input type="radio" name="smm-pay" value="alipay"' + (!usdtEnabled ? ' checked' : '') + '><span class="logo">🧧</span> 支付宝口令红包</label>' : '') +
       '</div></label>';
@@ -4262,8 +4264,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     if (!radio){ toast('请选择支付方式','error'); return; }
     var member = getCurrentMember(db);
     /* ⭐ SMM下单自动余额抵扣（会员登录且有余额时自动抵扣，剩余用选中支付方式） */
-    var _deduct = 0;
-    if (member && (member.balance || 0) > 0){
+    var _useBal = $('#smm-use-balance'); var _deduct = 0;
+    if (member && (member.balance || 0) > 0 && (!_useBal || _useBal.checked)){
       _deduct = Math.min(member.balance || 0, amount);
       if (_deduct > 0 && !deductBalance(db, member.username, _deduct)){ _deduct = 0; }
     }

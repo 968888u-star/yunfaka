@@ -328,7 +328,7 @@ const DEFAULT_CONFIG = {
   smm_categories: 'Telegram\nInstagram\nYouTube\nTikTok\nFacebook\nTwitter/X\nAI/ChatGPT\nNetflix\nSpotify\nDiscord\nGoogle\nApple\n腾讯/微信\n抖音\nB站\n小红书\n微博\n快手\n其他',
   home_entry_member_title: '注册会员，享余额支付', home_entry_member_sub: '支持余额抵扣、充值优惠，购物更便捷',
   home_entry_luban_title: '全球接码', home_entry_luban_sub: '实时搜索 · 自动分配号码',
-  home_entry_smm_title: '社交媒体推广',
+  home_entry_smm_title: '社交媒体推广', home_entry_smm_sub: '关注/点赞/播放/评论',
   luban_usage_text: '1. 点击「立即接码」选择项目<br>2. 获取手机号后填入目标平台<br>3. 收到验证码自动回填<br>4. 支持全球200+国家号码'
 };
 
@@ -596,7 +596,7 @@ function renderHome(){
     (function(){
       var smmCount = (db.products.filter(function(p){ return p.source==='smm' && p.active; })).length;
       return `<div class="card panel" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;margin-top:10px">
-        <div><div style="font-weight:700">📈 ${esc(cfg.home_entry_smm_title || '社交媒体推广')}</div><div class="muted" style="font-size:12px;margin-top:2px">关注/点赞/播放/评论 · ${smmCount>0 ? smmCount+' 个服务，点击进入查看' : '点击进入 → 右上角同步服务'}</div></div>
+        <div><div style="font-weight:700">📈 ${esc(cfg.home_entry_smm_title || '社交媒体推广')}</div><div class="muted" style="font-size:12px;margin-top:2px">${esc(cfg.home_entry_smm_sub || '关注/点赞/播放/评论')} · ${smmCount>0 ? smmCount+' 个服务，点击进入查看' : '点击进入 → 右上角同步服务'}</div></div>
         <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
       </div>`;
     })();
@@ -3130,11 +3130,14 @@ function renderLubanPayBox(priceFen){
   html += `<div class="spread" style="margin:12px 0"><span class="muted" style="font-size:13px">还需支付</span>
     <span style="font-size:20px;font-weight:800;color:#e11d48">${fmt(due)}</span></div>`;
   if (due > 0){
-    const alipayClass = 'pay-method' + (!usdtEnabled ? ' active' : '');
-    const alipayChecked = !usdtEnabled ? ' checked' : '';
+    const _isAlipay = _pay === 'alipay';
+    const usdtClass = 'pay-method' + (!_isAlipay ? ' active' : '');
+    const usdtChecked = !_isAlipay ? ' checked' : '';
+    const alipayClass = 'pay-method' + (_isAlipay ? ' active' : '');
+    const alipayChecked = _isAlipay ? ' checked' : '';
     html += `<label class="field"><span>支付方式</span>
       <div class="pay-methods" id="luban-pay-methods">
-        ${usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="luban-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : ''}
+        ${usdtEnabled ? '<label class="' + usdtClass + '" data-method="usdt"><input type="radio" name="luban-pay" value="usdt"' + usdtChecked + '><span class="logo">🪙</span> USDT</label>' : ''}
         ${alipayEnabled ? `<label class="${alipayClass}" data-method="alipay"><input type="radio" name="luban-pay" value="alipay"${alipayChecked}><span class="logo">💰</span> 支付宝</label>` : ''}
       </div>
     </label>`;
@@ -3272,11 +3275,14 @@ function renderLubanCommonPayBox(priceFen){
   html += `<div class="spread" style="margin:12px 0"><span class="muted" style="font-size:13px">还需支付</span>
     <span style="font-size:20px;font-weight:800;color:#e11d48">${fmt(due)}</span></div>`;
   if (due > 0){
-    const alipayClass = 'pay-method' + (!usdtEnabled ? ' active' : '');
-    const alipayChecked = !usdtEnabled ? ' checked' : '';
+    const _isAlipay = _pay === 'alipay';
+    const usdtClass = 'pay-method' + (!_isAlipay ? ' active' : '');
+    const usdtChecked = !_isAlipay ? ' checked' : '';
+    const alipayClass = 'pay-method' + (_isAlipay ? ' active' : '');
+    const alipayChecked = _isAlipay ? ' checked' : '';
     html += `<label class="field"><span>支付方式</span>
       <div class="pay-methods" id="luban-common-pay-methods">
-        ${usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="luban-common-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : ''}
+        ${usdtEnabled ? '<label class="' + usdtClass + '" data-method="usdt"><input type="radio" name="luban-common-pay" value="usdt"' + usdtChecked + '><span class="logo">🪙</span> USDT</label>' : ''}
         ${alipayEnabled ? `<label class="${alipayClass}" data-method="alipay"><input type="radio" name="luban-common-pay" value="alipay"${alipayChecked}><span class="logo">💰</span> 支付宝</label>` : ''}
       </div>
     </label>`;
@@ -3822,7 +3828,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<label class="field"><span>会员入口副标题</span><input id="he-ms" value="' + esc(cfg.home_entry_member_sub||'') + '"></label>' +
         '<label class="field"><span>接码入口标题</span><input id="he-lt" value="' + esc(cfg.home_entry_luban_title||'') + '"></label>' +
         '<label class="field"><span>接码入口副标题</span><input id="he-ls" value="' + esc(cfg.home_entry_luban_sub||'') + '"></label>' +
-        '<label class="field"><span>SMM入口标题</span><input id="he-st" value="' + esc(cfg.home_entry_smm_title||'') + '"></label>' +
+        '<label class="field"><span>SMM入口标题</span><input id="he-st" value="' + esc(cfg.home_entry_smm_title||'') + '"></label>' +'<label class="field"><span>SMM入口副标题</span><input id="he-ss" value="' + esc(cfg.home_entry_smm_sub||'') + '"></label>' +
         '<label class="field"><span>接码使用说明（支持&lt;br&gt;换行，留空不显示）</span><textarea id="luban-usage" rows="3" style="resize:vertical">' + esc(cfg.luban_usage_text||'') + '</textarea></label>' +
         '<button class="btn primary sm" onclick="smmSaveHomeText()">保存首页文案</button>' +
       '</div>' +
@@ -3867,14 +3873,19 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var db = loadDB(); var g = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
     db.config.home_entry_member_title = g('he-mt'); db.config.home_entry_member_sub = g('he-ms');
     db.config.home_entry_luban_title = g('he-lt'); db.config.home_entry_luban_sub = g('he-ls');
-    db.config.home_entry_smm_title = g('he-st'); db.config.luban_usage_text = g('luban-usage');
+    db.config.home_entry_smm_title = g('he-st'); db.config.home_entry_smm_sub = g('he-ss'); db.config.luban_usage_text = g('luban-usage');
     saveDB(db); toast('首页文案已保存，刷新前台生效','success'); renderSmmTab();
   };
   window.smmSaveCats = function(){
     var t = ($('#smm-cats-text') ? $('#smm-cats-text').value : '');
     var db = loadDB();
-    db.config.smm_categories = t.split('\n').map(function(s){return s.trim();}).filter(Boolean).join('\n');
-    saveDB(db); toast('分类已保存，前台刷新生效','success'); renderSmmTab(); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
+    var oldCats = (db.config.smm_categories||'').split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    var newCats = t.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    db.config.smm_categories = newCats.join('\n');
+    var renameMap = {}; var renamed = 0;
+    for (var i=0;i<Math.min(oldCats.length,newCats.length);i++){ if(oldCats[i]!==newCats[i]) renameMap[oldCats[i]]=newCats[i]; }
+    db.products.forEach(function(p){ if(p.source==='smm' && p.smm_platform && renameMap[p.smm_platform]){ p.smm_platform = renameMap[p.smm_platform]; renamed++; } });
+    saveDB(db); toast('分类已保存，同步更新 '+renamed+' 个商品，前台刷新生效','success'); renderSmmTab(); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
   };
 
   window.smmForceRecalc = function(){

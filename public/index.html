@@ -3478,8 +3478,9 @@ Object.assign(window, {
   };
 
   function headers(){
-    /* ⭐ 统一不带token，确保所有设备读写同一份公共数据，彻底同步 */
-    return {'Content-Type':'application/json'};
+    var h = {'Content-Type':'application/json'};
+    if (TOKEN) h['X-Access-Token'] = TOKEN;
+    return h;
   }
   function flushPush(){
     if (!pendingPush){ pushing = false; return; }
@@ -3500,7 +3501,7 @@ Object.assign(window, {
             toast('检测到其他设备修改，已合并你的更改并重新同步','info');
           });
         }
-        return r.json().then(function(d){ if (d.ok) rev = d.rev; });
+        return r.json().then(function(d){ if (d.ok) rev = d.rev; else if (d.msg && window.toast) toast('保存失败：'+d.msg,'error'); });
       })
       .catch(function(e){ console.warn('同步失败', e); })
       .then(function(){
@@ -3525,7 +3526,6 @@ function pullState(first){
         if (d.rev !== rev){
           rev = d.rev;
           window.__DB = d.db;
-          try { _saveDB(d.db); } catch(e){}  /* ⭐ 强制覆盖本地localStorage旧缓存，所有设备以服务器为准 */
           if (first) window.__ready = true;
           if (window.applySiteConfig) window.applySiteConfig();
           window.route();

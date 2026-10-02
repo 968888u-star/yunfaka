@@ -3478,9 +3478,8 @@ Object.assign(window, {
   };
 
   function headers(){
-    var h = {'Content-Type':'application/json'};
-    if (TOKEN) h['X-Access-Token'] = TOKEN;
-    return h;
+    /* ⭐ 统一不带token：已验证可正常读写，所有设备共享同一份数据，彻底同步 */
+    return {'Content-Type':'application/json'};
   }
   function flushPush(){
     if (!pendingPush){ pushing = false; return; }

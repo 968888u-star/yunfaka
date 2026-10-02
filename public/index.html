@@ -405,8 +405,8 @@ function rawLoadDB(){
 function rawSaveDB(db){ localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
 
 /* 这两个会被多设备同步模块包装 */
-let loadDB = rawLoadDB;
-let saveDB = rawSaveDB;
+var loadDB = rawLoadDB;
+var saveDB = rawSaveDB;
 
 const getConfig = db => db.config || DEFAULT_CONFIG;
 const getSkus = p => (p && Array.isArray(p.skus)) ? p.skus : [];
@@ -3454,102 +3454,38 @@ Object.assign(window, {
 <script>
 (function(){
   var API = '/api/state';
-  var TOKEN = localStorage.getItem('ACCESS_TOKEN') || '';
-  var POLL_MS = 4000;
-  var rev = 0, pushing = false, pendingPush = null, lastLocalWrite = 0;
-
-  window.__DB = null;
-  window.__ready = false;
-
-  var _loadDB = window.loadDB;
+  var rev = 0;
   var _saveDB = window.saveDB;
-  var _route = window.route;
 
-  window.loadDB = function(){
-    var db = window.__DB || _loadDB();
-    if (db && db.config && db.config.luban_common_price === undefined) db.config.luban_common_price = 200;
-    return db;
-  };
+  /* 保存设置/订单时：先存本地，再推送到服务器 */
   window.saveDB = function(db){
-    window.__DB = db;
-    lastLocalWrite = Date.now();
-    pendingPush = db;
-    if (!pushing){ pushing = true; setTimeout(flushPush, 250); }
+    _saveDB(db);
+    fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({db:db, baseRev:rev})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d && d.ok) rev = d.rev; })
+      .catch(function(e){ console.warn('push fail', e); });
   };
 
-  function headers(){
-    /* ⭐ 统一不带token：已验证可正常读写，所有设备共享同一份数据，彻底同步 */
-    return {'Content-Type':'application/json'};
-  }
-  function flushPush(){
-    if (!pendingPush){ pushing = false; return; }
-    var localDb = pendingPush;
-    var payload = {db: localDb, baseRev: rev};
-    pendingPush = null;
-    fetch(API, {method: 'POST', headers: headers(), body: JSON.stringify(payload)})
-      .then(function(r){
-        if (r.status === 409){
-          return r.json().then(function(d){
-            rev = d.rev;
-            var merged = d.db;
-            if (merged && localDb && localDb.config) merged.config = Object.assign({}, merged.config, localDb.config);
-            window.__DB = merged;
-            pendingPush = merged;
-            if (window.applySiteConfig) window.applySiteConfig();
-            window.route();
-            toast('检测到其他设备修改，已合并你的更改并重新同步','info');
-          });
-        }
-        return r.json().then(function(d){ if (d.ok) rev = d.rev; else if (d.msg && window.toast) toast('保存失败：'+d.msg,'error'); });
-      })
-      .catch(function(e){ console.warn('同步失败', e); })
-      .then(function(){
-        pushing = false;
-        if (pendingPush){ pushing = true; setTimeout(flushPush, 250); }
-      });
-  }
-function pullState(first){
-    fetch(API + '?t=' + Date.now(), {headers: headers()})
+  /* 拉取服务器最新数据，有变化则更新本地+标题+页面 */
+  function pull(){
+    fetch(API + '?t=' + Date.now(), {headers:{'Content-Type':'application/json'}})
       .then(function(r){ return r.json(); })
       .then(function(d){
-        if (!d.ok) throw new Error(d.msg || 'failed');
-        if (d.db === null){
-          var local = _loadDB();
-          window.__DB = local;
-          window.saveDB(local);
-          window.__ready = true;
-          window.route();
-          return;
-        }
-        if (!first && Date.now() - lastLocalWrite < 1500) return;
+        if (!d || !d.ok || !d.db) return;
         if (d.rev !== rev){
           rev = d.rev;
-          window.__DB = d.db;
-          if (first) window.__ready = true;
+          try { _saveDB(d.db); } catch(e){}
           if (window.applySiteConfig) window.applySiteConfig();
-          window.route();
-        } else if (first){
-          window.__ready = true;
-          if (window.applySiteConfig) window.applySiteConfig();
-          window.route();
+          if (window.route) window.route();
         }
       })
-      .catch(function(){
-        if (first){
-          var local = _loadDB();
-          window.__DB = local;
-          window.__ready = true;
-          window.route();
-          toast('无法连接服务器，正在使用本地数据','error');
-        }
-      });
+      .catch(function(e){ console.warn('pull fail', e); });
   }
 
-  pullState(true);
-  setInterval(function(){ pullState(false); }, POLL_MS);
-  setInterval(function(){ if (window.applySiteConfig) window.applySiteConfig(); }, POLL_MS);  /* ⭐ 定时强制刷新网站标题/品牌名/TG按钮，确保多设备实时同步 */
-  document.addEventListener('visibilitychange', function(){ if (!document.hidden) pullState(false); });
-  window.addEventListener('online', function(){ pullState(false); });
+  pull();
+  setInterval(pull, 4000);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) pull(); });
+  window.addEventListener('online', pull);
 })();
 </script>
 
@@ -3649,44 +3585,6 @@ function pullState(first){
   setInterval(function(){ applyCfg(); injectPanel(); }, 800);
   loadCloud(function(){ applyCfg(); injectPanel(); });
   setInterval(function(){ loadCloud(); }, 30000);
-})();
-
-/* UI 精简：隐藏顶部"全球接码"入口 + 首页"注册会员"下方插入融合卡片 */
-(function(){
-  var CARD_ID = 'yf-clean-sms-card';
-  function hideTopNav(){
-    var nav = document.querySelector('.nav nav');
-    if (!nav) return;
-    var links = nav.querySelectorAll('a');
-    for (var i = 0; i < links.length; i++){
-      if (links[i].textContent.trim() === '全球接码') links[i].style.display = 'none';
-    }
-  }
-  function findRegCard(){
-    var all = document.querySelectorAll('div, span, p, h1, h2, h3');
-    for (var i = 0; i < all.length; i++){
-      var txt = all[i].textContent || '';
-      if (txt.indexOf('注册会员') >= 0 && txt.indexOf('享余额支付') >= 0 && txt.length < 120){
-        var p = all[i];
-        while (p && p !== document.body){
-          if (p.classList && p.classList.contains('card') && p.classList.contains('panel')) return p;
-          var st = window.getComputedStyle(p);
-          if (st.borderRadius !== '0px' && st.boxShadow !== 'none' && p.style && p.style.display && p.style.display.indexOf('flex') >= 0) return p;
-          p = p.parentNode;
-        }
-      }
-    }
-    return null;
-  }
-  function injectCard(){ /* 已移除，接码入口已直接渲染 */ }
-  function tick(){ hideTopNav(); injectCard(); }
-  var observer = new MutationObserver(tick);
-  if (document.body) observer.observe(document.body, {childList: true, subtree: true});
-  else document.addEventListener('DOMContentLoaded', () => observer.observe(document.body, {childList: true, subtree: true}));
-  tick();
-  setTimeout(tick, 300);
-  setTimeout(tick, 1000);
-  window.addEventListener('hashchange', () => setTimeout(tick, 100));
 })();
 
 /* 口令红包一键跳转 v4：单次跳转·原生 scheme·防重复点击 */

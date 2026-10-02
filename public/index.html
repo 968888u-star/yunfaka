@@ -3,6 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<script>
+/* ⭐ 页面渲染前同步拉取最新网站标题/品牌名，避免先显示本地旧标题导致多设备不一致 */
+try{
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/api/state?t=' + Date.now(), false);
+  xhr.send();
+  if (xhr.status === 200){
+    var _d = JSON.parse(xhr.responseText);
+    if (_d.ok && _d.db && _d.db.config && _d.db.config.site_name){
+      window.__SYNC_SITE_NAME = _d.db.config.site_name;
+      document.title = _d.db.config.site_name + ' · 自动发货';
+    }
+  }
+}catch(e){}
+</script>
 <title>云发卡 · 自动发货</title>
 <style>
 :root{--bg:#f6f7fb;--card:#fff;--text:#1f2430;--muted:#6b7280;--line:#e8eaf0;--primary:#6366f1;--primary2:#8b5cf6;--danger:#ef4444;--ok:#10b981;--radius:14px;--shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px -8px rgba(16,24,40,.12);--tg-btn-color:#0088cc;--tg-btn-shadow:rgba(0,136,204,.6)}
@@ -490,9 +505,9 @@ function tgUrlOf(cfg){
 function applySiteConfig(){
   const db = loadDB();
   const cfg = getConfig(db);
-  document.title = cfg.site_name + ' · 自动发货';
+  document.title = (window.__SYNC_SITE_NAME || cfg.site_name) + ' · 自动发货';
   const bn = document.getElementById('brand-name');
-  if (bn) bn.textContent = cfg.site_name;
+  if (bn) bn.textContent = (window.__SYNC_SITE_NAME || cfg.site_name);
   const url = tgUrlOf(cfg);
   ['nav-tg','float-tg'].forEach(id => {
     const el = document.getElementById(id);
@@ -3477,9 +3492,8 @@ Object.assign(window, {
   };
 
   function headers(){
-    var h = {'Content-Type':'application/json'};
-    if (TOKEN) h['X-Access-Token'] = TOKEN;
-    return h;
+    /* ⭐ 统一不带token，确保所有设备读写同一份公共数据，彻底同步 */
+    return {'Content-Type':'application/json'};
   }
   function flushPush(){
     if (!pendingPush){ pushing = false; return; }
@@ -3525,6 +3539,7 @@ function pullState(first){
         if (d.rev !== rev){
           rev = d.rev;
           window.__DB = d.db;
+          try { _saveDB(d.db); } catch(e){}  /* ⭐ 强制覆盖本地localStorage旧缓存，所有设备以服务器为准 */
           if (first) window.__ready = true;
           if (window.applySiteConfig) window.applySiteConfig();
           window.route();

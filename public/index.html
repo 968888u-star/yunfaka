@@ -45,9 +45,9 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .hero{background:linear-gradient(135deg,#6366f1,#8b5cf6 60%,#a855f7);border-radius:20px;padding:34px 30px;color:#fff;margin-bottom:22px;position:relative;overflow:hidden}
 .hero h1{margin:0 0 8px;font-size:26px;letter-spacing:.5px}.hero p{margin:0;opacity:.92;font-size:14px}
 .hero .blob{position:absolute;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,.14);right:-70px;top:-90px}
-.cats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;max-width:100%;overflow:hidden}
+.cats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;max-width:100%}
 .cat-tab{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:4px;text-align:center}
-.cat-tab{padding:9px 18px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted);transition:.15s;font-family:inherit}
+.cat-tab{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);transition:.15s;font-family:inherit;white-space:nowrap;line-height:1.4}
 .cat-tab:hover{border-color:#c7cbe0;color:var(--text)}
 .cat-tab.active{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;border-color:transparent;box-shadow:0 4px 12px -4px rgba(99,102,241,.55)}
 .cat-tab .n{opacity:.65;font-weight:500;margin-left:5px;font-size:12px}
@@ -67,7 +67,7 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .badge.src{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
 .badge.src-luban{background:#fef3c7;color:#b45309;border:1px solid #fcd34d}
 .pay-methods{display:flex;gap:10px;flex-wrap:wrap}
-.pay-method{flex:1;min-width:100px;display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid var(--line);border-radius:12px;cursor:pointer;transition:.15s;background:#fff;font-weight:600;font-size:14px;user-select:none;-webkit-user-select:none}
+.pay-method{flex:1;min-width:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:10px 8px;border:2px solid var(--line);border-radius:12px;cursor:pointer;transition:.15s;background:#fff;font-weight:600;font-size:12px;user-select:none;-webkit-user-select:none;text-align:center;line-height:1.3}
 .pay-method:hover{border-color:#c7cbe0}.pay-method input{width:auto;margin:0}
 .pay-method.active{border-color:var(--primary);background:#f5f3ff;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
 .pay-method .logo{font-size:18px}
@@ -4003,8 +4003,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     saveDB(db); window._smmSelected={}; toast('已将 '+n+' 个商品移入「'+cat+'」','success'); renderSmmTab();
     try{smmPushToCloud();}catch(e){}
   };
-  window.smmClearSearch = function(){ smmKeyword=''; var el=document.getElementById('smm-search-input'); if(el) el.value=''; renderSmmClient(); setTimeout(function(){ var e=document.getElementById('smm-search-input'); if(e) e.focus(); }, 80); };
-  window.smmSearchBtn = function(){ var el=document.getElementById('smm-search-input'); if(el){ smmDoSearch(el.value); setTimeout(function(){ var e=document.getElementById('smm-search-input'); if(e){ e.focus(); var l=e.value.length; if(e.setSelectionRange) e.setSelectionRange(l,l); } }, 50); } };
+  window.smmClearSearch = function(){ smmKeyword=''; var el=document.getElementById('smm-search-input'); if(el) el.value=''; renderSmmClient(); };
+  window.smmSearchBtn = function(){ var el=document.getElementById('smm-search-input'); if(el){ smmDoSearch(el.value); setTimeout(function(){ var e=document.getElementById('smm-search-input'); if(e) e.blur(); }, 50); } };
   window.smmSetCustomPrice = function(id, val){ var db=loadDB(); var p=db.products.find(function(x){return String(x.id)===String(id);}); if(!p) return; var v=parseFloat(val); var mk=(getConfig(db).smm_markup||1.2); if(v && v>0){ p.smm_custom_price=Math.round(v*usdtRate()*100); p.price=p.smm_custom_price; toast('已设置自定义价 '+v+' USDT','success'); } else { delete p.smm_custom_price; p.price=Math.max(1,Math.round(parseFloat(p.smm_rate_usd||0)*mk*100)); toast('已恢复默认加价','success'); } p.smm_price_ver=2; saveDB(db); renderSmmTab(); };
 
   /* ========== 后台 SMM Tab ========== */
@@ -4335,7 +4335,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     if (app && !app.querySelector('.smm-loaded')){
       app.innerHTML = '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 社交媒体推广</h1><p>正在加载服务列表…</p></div><div class="loading" style="padding:60px 0;text-align:center;color:#6b7280">⏳ 正在加载推广服务，请稍候…</div>';
     }
-    setTimeout(function(){ renderSmmClientReal(); }, 30);
+    setTimeout(function(){ renderSmmClientReal(); }, 0);
   }
   function renderSmmClientReal(){
     var db = loadDB();
@@ -4378,13 +4378,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       '<div style="margin-bottom:12px;display:flex;gap:8px"><input id="smm-search-input" placeholder="🔍 输入关键词后点右侧搜索" value="' + esc(smmKeyword) + '" style="padding-left:14px;flex:1" onkeydown="if(event.key===\"Enter\")smmSearchBtn()">' + '<button onclick="smmSearchBtn()" style="flex-shrink:0;padding:0 18px;background:#6366f1;color:#fff;border:0;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">搜索</button>' + (smmKeyword ? '<button onclick="smmClearSearch()" style="flex-shrink:0;padding:0 14px;background:#eef0f6;border:0;border-radius:10px;font-size:13px;cursor:pointer">清除</button>' : '') + '</div>' +
       '<div class="cats" style="margin-bottom:16px">' + catTabs + '</div>' +
       '<div class="grid smm-loaded">' + cards + '</div>';
-    if (smmSearchJustFired || smmKeyword){
-      smmSearchJustFired = false;
-      setTimeout(function(){
-        var el = document.getElementById('smm-search-input');
-        if (el){ el.focus(); var len = el.value.length; if (el.setSelectionRange) el.setSelectionRange(len, len); }
-      }, 10);
-    }
+    smmSearchJustFired = false;
   }
 
   window.smmBuy = function(id){
@@ -5106,7 +5100,9 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
      在线客服模块（TG机器人双向对话）
      ============================================================ -->
 <style>
-.cs-float{position:fixed;right:22px;bottom:96px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -6px rgba(16,185,129,.5);z-index:140;cursor:pointer;transition:.2s;border:0;font-size:24px}
+.cs-float{position:fixed;right:22px;bottom:92px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 28px -6px rgba(16,185,129,.6);z-index:140;cursor:pointer;transition:.2s;border:0;font-size:26px}
+.cs-float:hover{transform:scale(1.08) translateY(-2px)}
+.cs-float::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid #10b981;opacity:.35;animation:pulse 2.2s infinite}
 .cs-float:hover{transform:scale(1.08)}
 .cs-float .cs-dot{position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#ef4444;border:2px solid #fff;display:none}
 .cs-float.has-msg .cs-dot{display:block;animation:csPulse 1.5s infinite}
@@ -5204,8 +5200,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
 })();
 </script>
 
-</body> 之前
-     ============================================================ -->
+</body>
+<!-- ============================================================ -->
 <script>
 (function(){
 'use strict';

@@ -3749,11 +3749,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
   var smmSearchTimer = null;
   window.smmDoSearch = function(v){
     smmSearchJustFired = true;
-    if (smmSearchTimer) clearTimeout(smmSearchTimer);
-    smmSearchTimer = setTimeout(function(){
-      smmKeyword = (v||'').trim().toLowerCase();
-      renderSmmClient();
-    }, 600);  /* ⭐ 防抖600ms，连续打字不打断 */
+    smmKeyword = (v||'').trim().toLowerCase();
+    renderSmmClient();  /* ⭐ 点击搜索按钮后立即匹配，不再实时打断 */
   };
   window._smmSelected = window._smmSelected || {};
   window.smmAdminSearch = function(v){ window._smmAdminKw=(v||'').trim().toLowerCase(); window._smmPage=1; renderSmmTab(); setTimeout(function(){var el=document.getElementById('smm-admin-search'); if(el){el.focus(); var l=el.value.length; el.setSelectionRange(l,l);}},10); };
@@ -3770,6 +3767,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     try{smmPushToCloud();}catch(e){}
   };
   window.smmClearSearch = function(){ smmKeyword=''; var el=document.getElementById('smm-search-input'); if(el) el.value=''; renderSmmClient(); };
+  window.smmSearchBtn = function(){ var el=document.getElementById('smm-search-input'); if(el) smmDoSearch(el.value); };
 
   /* ========== 后台 SMM Tab ========== */
   function renderSmmTab(){
@@ -4120,7 +4118,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     $('#app').innerHTML =
       '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 ' + esc(cfg.smm_hero_title || '社交媒体推广') + '</h1><p>' + esc(cfg.smm_hero_subtitle || '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理') + '</p></div>' +
       '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;font-size:13px;color:#15803d;line-height:1.8;margin-bottom:16px">📌 <b>使用说明：</b><br>' + (cfg.smm_usage_text || '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度') + '</div>' +
-      '<div style="position:relative;margin-bottom:12px"><input id="smm-search-input" placeholder="🔍 搜索服务名称 / 关键词，如：Premium / 会员 / 点赞" oninput="smmDoSearch(this.value)" value="' + esc(smmKeyword) + '" style="padding-left:38px">' + (smmKeyword ? '<button onclick="smmClearSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:#eef0f6;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">清除</button>' : '') + '</div>' +
+      '<div style="margin-bottom:12px;display:flex;gap:8px"><input id="smm-search-input" placeholder="🔍 输入关键词后点右侧搜索" value="' + esc(smmKeyword) + '" style="padding-left:14px;flex:1" onkeydown="if(event.key===\"Enter\")smmSearchBtn()">' + '<button onclick="smmSearchBtn()" style="flex-shrink:0;padding:0 18px;background:#6366f1;color:#fff;border:0;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">搜索</button>' + (smmKeyword ? '<button onclick="smmClearSearch()" style="flex-shrink:0;padding:0 14px;background:#eef0f6;border:0;border-radius:10px;font-size:13px;cursor:pointer">清除</button>' : '') + '</div>' +
       '<div class="cats" style="margin-bottom:16px">' + catTabs + '</div>' +
       '<div class="grid">' + cards + '</div>';
     if (smmSearchJustFired || smmKeyword){

@@ -230,11 +230,12 @@ function toast(msg, type){
 function openModal(html, wide){
   $('#modal-box').innerHTML = html;
   $('#modal-box').classList.toggle('wide', !!wide);
-  $('#modal').classList.remove('hidden');
+  $('#modal').classList.remove('hidden'); document.body.style.overflow='hidden';
 }
 function closeModal(){
   $('#modal').classList.add('hidden');
   $('#modal-box').innerHTML = '';
+  document.body.style.overflow='';
 }
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
@@ -777,6 +778,14 @@ function openBuy(id){
   }
   if (qty){
     qty.addEventListener('input', () => {
+      if (qty.value === ''){ refreshTotals(); return; }  /* ⭐ 允许临时删空，方便输入新数字 */
+      let v = parseInt(qty.value) || 1;
+      const maxQ = Math.min(50, productStock(loadDB(), p, __buySkuId));
+      v = Math.max(1, Math.min(maxQ, v));
+      qty.value = v;
+      refreshTotals();
+    });
+    qty.addEventListener('blur', () => {
       let v = parseInt(qty.value) || 1;
       const maxQ = Math.min(50, productStock(loadDB(), p, __buySkuId));
       v = Math.max(1, Math.min(maxQ, v));

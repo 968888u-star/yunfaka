@@ -3753,7 +3753,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     smmSearchTimer = setTimeout(function(){
       smmKeyword = (v||'').trim().toLowerCase();
       renderSmmClient();
-    }, 200);
+    }, 600);  /* ⭐ 防抖600ms，连续打字不打断 */
   };
   window._smmSelected = window._smmSelected || {};
   window.smmAdminSearch = function(v){ window._smmAdminKw=(v||'').trim().toLowerCase(); window._smmPage=1; renderSmmTab(); setTimeout(function(){var el=document.getElementById('smm-admin-search'); if(el){el.focus(); var l=el.value.length; el.setSelectionRange(l,l);}},10); };

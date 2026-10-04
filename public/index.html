@@ -3507,6 +3507,8 @@ Object.assign(window, {
           if (srvEmpty && localHas){ window.saveDB(local); return; }
           try { _saveDB(srv); } catch(e){}
           if (window.applySiteConfig) window.applySiteConfig();
+          var ae = document.activeElement;
+          if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;  /* ⭐ 用户正在输入时不重渲染，避免打断 */
           if (window.route) window.route();
         }
       })
@@ -4121,7 +4123,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       '<div style="position:relative;margin-bottom:12px"><input id="smm-search-input" placeholder="🔍 搜索服务名称 / 关键词，如：Premium / 会员 / 点赞" oninput="smmDoSearch(this.value)" value="' + esc(smmKeyword) + '" style="padding-left:38px">' + (smmKeyword ? '<button onclick="smmClearSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:#eef0f6;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">清除</button>' : '') + '</div>' +
       '<div class="cats" style="margin-bottom:16px">' + catTabs + '</div>' +
       '<div class="grid">' + cards + '</div>';
-    if (smmSearchJustFired){
+    if (smmSearchJustFired || smmKeyword){
       smmSearchJustFired = false;
       setTimeout(function(){
         var el = document.getElementById('smm-search-input');

@@ -3456,8 +3456,13 @@ Object.assign(window, {
   var API = '/api/state';
   var rev = 0;
   var _saveDB = window.saveDB;
+  var _loadDB = window.loadDB;
 
-  /* 保存设置/订单时：先存本地，再推送到服务器 */
+  /* ⭐ 立即就绪，先用本地数据渲染，不卡"正在同步数据" */
+  window.__ready = true;
+  if (window.route) window.route();
+
+  /* 保存时推送到服务器 */
   window.saveDB = function(db){
     _saveDB(db);
     fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({db:db, baseRev:rev})})
@@ -3466,7 +3471,7 @@ Object.assign(window, {
       .catch(function(e){ console.warn('push fail', e); });
   };
 
-  /* 拉取服务器最新数据，有变化则更新本地+标题+页面 */
+  /* 拉取服务器最新数据 */
   function pull(){
     fetch(API + '?t=' + Date.now(), {headers:{'Content-Type':'application/json'}})
       .then(function(r){ return r.json(); })
@@ -3474,7 +3479,13 @@ Object.assign(window, {
         if (!d || !d.ok || !d.db) return;
         if (d.rev !== rev){
           rev = d.rev;
-          try { _saveDB(d.db); } catch(e){}
+          var local = _loadDB() || {};
+          var srv = d.db;
+          /* ⭐ 防数据丢失：服务器订单/会员/卡密/分类全空但本地有，用本地恢复服务器，不覆盖本地 */
+          var srvEmpty = (!srv.orders||srv.orders.length===0) && (!srv.members||srv.members.length===0) && (!srv.cards||srv.cards.length===0) && (!srv.categories||srv.categories.length===0);
+          var localHas = (local.orders&&local.orders.length>0) || (local.members&&local.members.length>0) || (local.cards&&local.cards.length>0) || (local.categories&&local.categories.length>0);
+          if (srvEmpty && localHas){ window.saveDB(local); return; }
+          try { _saveDB(srv); } catch(e){}
           if (window.applySiteConfig) window.applySiteConfig();
           if (window.route) window.route();
         }

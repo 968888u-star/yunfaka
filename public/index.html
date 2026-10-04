@@ -3665,7 +3665,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var recalc = 0;
     db.products.forEach(function(p){
       if (p.source === 'smm' && p.smm_rate_usd){
-        var expect = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * 100));
+        var expect = (p.smm_custom_price > 0) ? p.smm_custom_price : Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * 100));
         if (p.smm_price_ver !== 2 || p.price !== expect){
           p.price = expect;
           p.smm_price_ver = 2;
@@ -3768,6 +3768,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
   };
   window.smmClearSearch = function(){ smmKeyword=''; var el=document.getElementById('smm-search-input'); if(el) el.value=''; renderSmmClient(); };
   window.smmSearchBtn = function(){ var el=document.getElementById('smm-search-input'); if(el) smmDoSearch(el.value); };
+  window.smmSetCustomPrice = function(id, val){ var db=loadDB(); var p=db.products.find(function(x){return String(x.id)===String(id);}); if(!p) return; var v=parseFloat(val); var mk=(getConfig(db).smm_markup||1.2); if(v && v>0){ p.smm_custom_price=Math.round(v*usdtRate()*100); p.price=p.smm_custom_price; toast('已设置自定义价 '+v+' USDT','success'); } else { delete p.smm_custom_price; p.price=Math.max(1,Math.round(parseFloat(p.smm_rate_usd||0)*mk*100)); toast('已恢复默认加价','success'); } p.smm_price_ver=2; saveDB(db); renderSmmTab(); };
 
   /* ========== 后台 SMM Tab ========== */
   function renderSmmTab(){
@@ -3784,7 +3785,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<td><b>' + esc(p.smm_service_name || p.name) + '</b><div class="muted" style="font-size:11px">ID: ' + esc(p.smm_service_id) + '</div></td>' +
         '<td>' + esc(p.smm_category || '-') + '</td>' +
         '<td><select onchange="smmSetPlatform(\'' + p.id + '\', this.value)" style="font-size:11px;padding:3px 4px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;max-width:105px">' +(cfg.smm_categories || 'Telegram\nInstagram\nYouTube\nTikTok\nFacebook\nTwitter/X\nAI/ChatGPT\nNetflix\nSpotify\nDiscord\nGoogle\nApple\n腾讯/微信\n抖音\nB站\n小红书\n微博\n快手\n其他').split('\n').map(function(s){return s.trim();}).filter(Boolean).map(function(c){return '<option value="'+c+'" ' + (smmCatOf(p.smm_service_name||p.name,p)===c?'selected':'') + '>'+c+'</option>';}).join('') + '</select></td>' +
-        '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '</td>' +'<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT' + (smmIsPackage(p)?' <span style="font-size:10px;color:#b45309">套餐</span>':' /1000') + '</td>' +'<td class="muted" style="font-size:12px">¥' + yuan(p.price) + '</td>' +
+        '<td class="muted">$' + esc(p.smm_rate_usd || '0') + '</td>' +'<td style="font-weight:700;color:#e11d48">' + usdt(p.price) + ' USDT' + (smmIsPackage(p)?' <span style="font-size:10px;color:#b45309">套餐</span>':' /1000') + (p.smm_custom_price?' <span style="font-size:10px;color:#059669;font-weight:700">✓自定义</span>':'') + '<br><input type="number" step="0.01" min="0" placeholder="自定义USDT价" value="' + (p.smm_custom_price? (p.smm_custom_price/100/usdtRate()).toFixed(4) : '') + '" onchange="smmSetCustomPrice(\'' + p.id + '\', this.value)" style="width:105px;margin-top:4px;padding:3px 6px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px"></td>' +'<td class="muted" style="font-size:12px">¥' + yuan(p.price) + '</td>' +
         
         '<td class="muted" style="font-size:12px">' + esc(p.smm_min) + '~' + esc(p.smm_max) + '</td>' +
         '<td>' + (p.smm_refill ? '<span class="badge ok" style="font-size:10px">补</span> ' : '') + (p.smm_cancel ? '<span class="badge cat" style="font-size:10px">退</span>' : '') + '</td>' +
@@ -3857,8 +3858,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var count = 0;
     db.products.forEach(function(p){
       if (p.source === 'smm' && p.smm_rate_usd){
-        /* USDT售价 = USD成本 × 加价倍数；人民币分 = USDT售价 × 汇率 × 100 */
-        p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * 100));
+        /* USDT售价 = USD成本 × 加价倍数；人民币分 = USDT售价 × 汇率 × 100；自定义价优先 */
+        p.price = (p.smm_custom_price > 0) ? p.smm_custom_price : Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * 100));
         p.smm_price_ver = 2;
         count++;
       }
@@ -3914,7 +3915,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var count = 0;
     db.products.forEach(function(p){
       if (p.source === 'smm' && p.smm_rate_usd){
-        p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * 100));
+        p.price = (p.smm_custom_price > 0) ? p.smm_custom_price : Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * 100));
         p.smm_price_ver = 2;
         count++;
       }

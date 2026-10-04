@@ -809,6 +809,8 @@ function openBuy(id){
 }
 
 function submitBuy(id){
+  if (_submitting){ toast('正在处理，请勿重复提交','warn'); return; }
+  _submitting = true; setTimeout(function(){_submitting=false;}, 3000);
   const db = loadDB();
   const cfg = getConfig(db);
   const p = db.products.filter(x => x.id === id)[0];
@@ -1388,6 +1390,8 @@ function renderMemberDashboard(member){
   });
 }
 function submitRecharge(){
+  if (_submitting){ toast('正在处理，请勿重复提交','warn'); return; }
+  _submitting = true; setTimeout(function(){_submitting=false;}, 3000);
   const db = loadDB();
   const cfg = getConfig(db);
   const member = getCurrentMember(db);
@@ -4149,7 +4153,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     /* ⭐ 统一按价格从低到高排序（人民币分升序，USDT显示同步） */
     filtered.sort(function(a, b){ return (a.price||0) - (b.price||0); });
     var catTabs = '<button class="cat-tab ' + (smmCatFilter==='all'?'active':'') + '" onclick="smmSetCat(\'all\')">全部<span class="n">' + items.length + '</span></button>' +
-      cats.map(function(c){ return '<button class="cat-tab ' + (smmCatFilter===c?'active':'') + '" onclick="smmSetCat(\'' + c + '\')">' + c + '<span class="n">' + catCount[c] + '</span></button>'; }).join('');
+      cats.map(function(c){ return '<button class="cat-tab ' + (smmCatFilter===c?'active':'') + '" onclick="smmSetCat(\'' + c + '\')">' + c + '<span class="n">' + (catCount[c] || 0) + '</span></button>'; }).join('');
     if (!items.length){
       $('#app').innerHTML = '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 ' + esc(cfg.smm_hero_title || '社交媒体推广') + '</h1><p>' + esc(cfg.smm_hero_subtitle || '') + '</p></div>' +
         '<div class="card panel" style="text-align:center;padding:40px 20px;margin-top:20px"><div style="font-size:40px;margin-bottom:12px">📦</div><div style="font-weight:700;margin-bottom:8px">暂无推广服务</div><div class="muted" style="font-size:13px;margin-bottom:18px">数据正在从云端同步，请稍候刷新页面</div><div class="muted" style="font-size:12px">如长时间为空，请联系站长</div></div>';

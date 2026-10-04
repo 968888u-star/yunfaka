@@ -4555,5 +4555,356 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
   console.log('[YunFaKa] SMM 模块已加载 (chinayinliu)');
 })();
 </script>
+<!-- ============================================================
+     加固补丁 v1 · 末尾追加
+     覆盖：支付 / 会员 / SMM / 接码
+     原理：所有被覆盖的函数在原脚本中均为「函数声明」或 window 属性，
+           覆盖后内部调用会自动走新版本（运行时查找）。
+     ============================================================ -->
+<script>
+(function(){
+  'use strict';
+
+  if (!window.loadDB || !window.saveDB){
+    console.warn('[Patch] 核心 API 未就绪，补丁未加载'); return;
+  }
+
+  var _toast = function(m, t){ try { if (window.toast) window.toast(m, t||''); } catch(e){} };
+  var _now = function(){
+    var d = new Date(), p = function(n){ return String(n).padStart(2,'0'); };
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+
+           p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+  };
+  var _yuan = function(fen){ return (Number(fen||0)/100).toFixed(2); };
+
+  /* ============================================================
+     [1] 支付 · 修复汇率读取
+     原 usdtRate() 读 window.__DB.config.pay_usdt_rate_recharge_bonus
+     —— 键名错误 + window.__DB 几乎不赋值 → 恒返回 7.2
+     修复：直接读 loadDB().config.pay_usdt_rate
+     ============================================================ */
+  window.usdtRate = function(){
+    try {
+      var db = window.loadDB();
+      var cfg = (db && db.config) || {};
+      var r = Number(cfg.pay_usdt_rate);
+      return (r > 0) ? r : 7.2;
+    } catch(e){ return 7.2; }
+  };
+  // 兜底：给老代码里仍读 window.__DB 的位置写入正确值
+  (function(){
+    function sync(){
+      try {
+        var db = window.loadDB();
+        window.__DB = window.__DB || {};
+        window.__DB.config = window.__DB.config || {};
+        window.__DB.config.pay_usdt_rate_recharge_bonus =
+          (db.config && db.config.pay_usdt_rate) || 7.2;
+      } catch(e){}
+    }
+    sync(); setInterval(sync, 3000);
+  })();
+
+  /* ============================================================
+     [2] 通用 · 订单余额退款（幂等，有 refunded_at 保护）
+     ============================================================ */
+  window.refundOrderBalance = function(orderNo, reason){
+    try {
+      var db = window.loadDB();
+      var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+      if (!o) return false;
+      if (o.refunded_at) return false;                       // 已退过
+      if (!o.balance_used || o.balance_used <= 0) return false;
+      if (!o.username) return false;                         // 匿名订单退不了
+      var m = db.members.find(function(x){ return x.username === o.username; });
+      if (!m) return false;
+      var refund = o.balance_used;
+      m.balance = (m.balance || 0) + refund;
+      if (!Array.isArray(m.balance_log)) m.balance_log = [];
+      m.balance_log.unshift({ delta: refund, type: 'refund', ref: orderNo, reason: reason||'', at: _now() });
+      if (m.balance_log.length > 200) m.balance_log.length = 200;
+      o.refunded_amount = (o.refunded_amount || 0) + refund;
+      o.refunded_at = _now();
+      o.refund_reason = reason || '订单取消';
+      o.balance_used = 0;                                    // 清零防重复
+      window.saveDB(db);
+      return true;
+    } catch(e){ console.warn('[Patch] refund fail', e); return false; }
+  };
+
+  /* ============================================================
+     [3] 会员 · 修复 memberLogout 清错 key
+     原：localStorage.removeItem('LS_SECRET') 传的是字符串
+     实际 key 是 'yunfaka_last_secret'
+     ============================================================ */
+  window.memberLogout = function(){
+    try { localStorage.removeItem('yunfaka_member_user'); } catch(e){}
+    try { localStorage.removeItem('yunfaka_last_secret'); } catch(e){}
+    _toast('已退出登录');
+    if (window.route) window.route();
+  };
+
+  /* ============================================================
+     [4] 支付 · confirmPay 加幂等锁（同一订单 3 秒内只能点一次）
+     ============================================================ */
+  var _origConfirmPay = window.confirmPay;
+  var _confirmLock = {};
+  window.confirmPay = function(type, id){
+    var key = type + ':' + id, t = Date.now();
+    if (_confirmLock[key] && t - _confirmLock[key] < 3000){
+      _toast('正在处理，请勿重复提交', 'warn'); return;
+    }
+    _confirmLock[key] = t;
+    return _origConfirmPay.apply(this, arguments);
+  };
+
+  /* ============================================================
+     [5] 支付 · submitBuy 加幂等锁
+     ============================================================ */
+  var _origSubmitBuy = window.submitBuy;
+  var _submitLock = {};
+  window.submitBuy = function(id){
+    var key = 'buy:' + id, t = Date.now();
+    if (_submitLock[key] && t - _submitLock[key] < 3000){
+      _toast('正在提交，请勿重复点击', 'warn'); return;
+    }
+    _submitLock[key] = t;
+    return _origSubmitBuy.apply(this, arguments);
+  };
+
+  /* ============================================================
+     [6] 支付 · USDT 轮询加 30 分钟超时 + 页面隐藏暂停
+     ============================================================ */
+  var _usdtTimer = null, _usdtStart = 0;
+  window.startUsdtPolling = function(orderNo){
+    if (_usdtTimer) { clearInterval(_usdtTimer); _usdtTimer = null; }
+    _usdtStart = Date.now();
+    var MAX_MS = 30 * 60 * 1000;
+    function check(){
+      if (Date.now() - _usdtStart > MAX_MS){
+        if (_usdtTimer){ clearInterval(_usdtTimer); _usdtTimer = null; }
+        return;
+      }
+      if (document.hidden) return;   // 隐藏时跳过请求
+      fetch('/api/usdt-check?order=' + encodeURIComponent(orderNo))
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (d.ok && d.status && d.status !== 'pending'){
+            if (_usdtTimer){ clearInterval(_usdtTimer); _usdtTimer = null; }
+            _toast('USDT 已到账，系统正在处理 🎉', 'success');
+            var _db = window.loadDB();
+            var _r = _db.recharges.filter(function(x){ return x.id === orderNo; })[0];
+            if (_r && _r.status !== 'success'){
+              if (window.processRecharge) window.processRecharge(orderNo);
+            } else {
+              var _o = _db.orders.filter(function(x){ return x.order_no === orderNo; })[0];
+              if (_o && _o.status === 'pending'){
+                try { window.payOrder(orderNo); } catch(e){}
+              }
+            }
+            setTimeout(function(){ if (window.route) window.route(); }, 800);
+          }
+        }).catch(function(){});
+    }
+    check();
+    _usdtTimer = setInterval(check, 30000);
+  };
+
+  /* ============================================================
+     [7] 支付 · approveOrder 剩余应收二次确认
+     ============================================================ */
+  var _origApproveOrder = window.approveOrder;
+  window.approveOrder = function(orderNo){
+    var db = window.loadDB();
+    var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+    if (!o) return;
+    if (o.status !== 'pending_review'){ _toast('订单状态不对','error'); return; }
+    // 剩余应收警告
+    if (o.amount_due > 0 && o.pay_method !== 'balance'){
+      var rate = Number(o.usdt_rate) || window.usdtRate();
+      var usdtAmt = (o.amount_due / 100 / rate).toFixed(2);
+      if (!confirm('该订单剩余应收：' + usdtAmt + ' USDT / ¥' + _yuan(o.amount_due) +
+                   '\n\n确认已收到这笔款项？')) return;
+    }
+    return _origApproveOrder.apply(this, arguments);
+  };
+
+  /* ============================================================
+     [8] 支付 · rejectOrder 驳回自动退款
+     ============================================================ */
+  var _origRejectOrder = window.rejectOrder;
+  window.rejectOrder = function(orderNo){
+    var before = window.loadDB().orders.find(function(x){ return x.order_no === orderNo; });
+    var wasReview = before && before.status === 'pending_review';
+    var r = _origRejectOrder.apply(this, arguments);
+    var after = window.loadDB().orders.find(function(x){ return x.order_no === orderNo; });
+    if (wasReview && after && after.status === 'rejected'){
+      try { window.refundOrderBalance(orderNo, '管理员驳回'); } catch(e){}
+    }
+    return r;
+  };
+
+  /* ============================================================
+     [9] 接码 · 超时 / 释放 / 请求失败 → 退款
+     ============================================================ */
+  var _origLubanAutoRelease = window.lubanAutoRelease;
+  window.lubanAutoRelease = function(orderNo, reason){
+    var db = window.loadDB();
+    var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+    if (!o || o.status === 'delivered') return;
+    var r = _origLubanAutoRelease.apply(this, arguments);
+    try { window.refundOrderBalance(orderNo, reason || '接码超时'); } catch(e){}
+    return r;
+  };
+
+  // lubanRelease 完全重写：幂等 + 余额退回
+  window.lubanRelease = function(orderNo){
+    var db = window.loadDB();
+    var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+    if (!o) return;
+    if (o.status !== 'waiting_sms' && o.status !== 'processing'){
+      _toast('当前状态不可释放','info'); return;
+    }
+    if (!confirm('确定释放号码？释放后无法再接收短信，余额将退回。')) return;
+    var url = o.luban_type === 'common'
+      ? '/api/luban?action=common_release&phone=' + encodeURIComponent(o.luban_number || '')
+      : '/api/luban?action=change_status&request_id=' + encodeURIComponent(o.luban_request_id || '') + '&status=reject';
+    fetch(url).then(function(r){ return r.json(); }).then(function(){
+      var db2 = window.loadDB();
+      var o2 = db2.orders.find(function(x){ return x.order_no === orderNo; });
+      if (!o2) return;
+      if (o2.status === 'delivered'){ _toast('订单已完成，无需释放','info'); return; }
+      o2.status = 'rejected';
+      o2.luban_released_at = _now();
+      o2.luban_error = '客户主动释放';
+      window.saveDB(db2);
+      try { window.refundOrderBalance(orderNo, '客户主动释放号码'); } catch(e){}
+      _toast('号码已释放，余额已退回','success');
+      if (location.hash.indexOf('/order/' + orderNo) >= 0 && window.route) window.route();
+    }).catch(function(e){ _toast('网络错误：' + e.message,'error'); });
+  };
+
+  // 接码请求失败兜底：监听 luban_error 状态自动退款
+  function _watchLubanFailure(orderNo, maxTries){
+    var tries = 0;
+    var t = setInterval(function(){
+      tries++;
+      if (tries > (maxTries||15)){ clearInterval(t); return; }
+      var db = window.loadDB();
+      var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+      if (!o){ clearInterval(t); return; }
+      if (o.status === 'luban_error'){
+        clearInterval(t);
+        try { window.refundOrderBalance(orderNo, o.luban_error || '接码失败'); } catch(e){}
+      } else if (o.status === 'delivered' || o.status === 'rejected'){
+        clearInterval(t);
+      }
+    }, 3000);
+  }
+  var _origLubanStartSession = window.lubanStartSession;
+  window.lubanStartSession = function(orderNo){
+    var r = _origLubanStartSession.apply(this, arguments);
+    _watchLubanFailure(orderNo, 15);
+    return r;
+  };
+  var _origLubanStartCommon = window.lubanStartCommon;
+  window.lubanStartCommon = function(orderNo, params){
+    var r = _origLubanStartCommon.apply(this, arguments);
+    _watchLubanFailure(orderNo, 15);
+    return r;
+  };
+
+  /* ============================================================
+     [10] SMM · 提交失败 / 上游取消 → 退款
+     包装最外层 payOrder，链式叠加在 SMM 模块的 payOrder 之上
+     ============================================================ */
+  var _origPayOrder = window.payOrder;
+  window.payOrder = function(orderNo){
+    var db = window.loadDB();
+    var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+    var r = _origPayOrder.apply(this, arguments);
+    if (o && (o.source === 'smm' || o.source === 'luban')){
+      _watchLubanFailure(orderNo, 40);   // 最长监控 2 分钟
+    }
+    return r;
+  };
+
+  // smmCancel 后 30 秒检测取消结果，成功则退款
+  if (typeof window.smmCancel === 'function'){
+    var _origSmmCancel = window.smmCancel;
+    window.smmCancel = function(orderNo){
+      var r = _origSmmCancel.apply(this, arguments);
+      setTimeout(function(){
+        var db = window.loadDB();
+        var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+        if (o && (o.status === 'rejected' || o.status === 'luban_error')){
+          try { window.refundOrderBalance(orderNo, '客户取消 SMM 订单'); } catch(e){}
+        }
+      }, 30000);
+      return r;
+    };
+  }
+
+  /* ============================================================
+     [11] SMM · 人工分类写独立字段 smm_platform_manual
+     避免「一键自动分类 / 保存分类」把人工调整覆盖掉
+     ============================================================ */
+  if (typeof window.smmSetPlatform === 'function'){
+    var _origSmmSetPlatform = window.smmSetPlatform;
+    window.smmSetPlatform = function(pid, platform){
+      var db = window.loadDB();
+      var p = db.products.find(function(x){ return String(x.id) === String(pid); });
+      if (p){
+        p.smm_platform = platform;
+        p.smm_platform_manual = platform;   // 人工标记
+        window.saveDB(db);
+      }
+      _toast('已移至「' + platform + '」分类','success');
+      try { window.switchTab('smm'); } catch(e){}
+    };
+  }
+  if (typeof window.smmBatchMove === 'function'){
+    var _origSmmBatchMove = window.smmBatchMove;
+    window.smmBatchMove = function(target){
+      var r = _origSmmBatchMove.apply(this, arguments);
+      try {
+        var db = window.loadDB();
+        var ids = Object.keys(window._smmSelected || {});
+        var el = document.getElementById('smm-batch-cat');
+        var cat = target || (el ? el.value : '其他');
+        ids.forEach(function(id){
+          var p = db.products.find(function(x){ return String(x.id) === String(id); });
+          if (p){ p.smm_platform_manual = cat; p.smm_platform = cat; }
+        });
+        window.saveDB(db);
+      } catch(e){}
+      return r;
+    };
+  }
+
+  /* ============================================================
+     [12] SMM · 切到 SMM tab 时重置分页
+     ============================================================ */
+  var _origSwitchTab = window.switchTab;
+  window.switchTab = function(tab){
+    if (tab === 'smm'){ window._smmPage = 1; }
+    return _origSwitchTab.apply(this, arguments);
+  };
+
+  /* ============================================================
+     [13] 页面恢复可见时刷新订单 / 会员页
+     ============================================================ */
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) return;
+    var h = location.hash || '#/';
+    if (h.indexOf('/order/') === 0 || h.indexOf('/member') === 0){
+      setTimeout(function(){ if (window.route) window.route(); }, 150);
+    }
+  });
+
+  console.log('%c[YunFaKa Patch v1] 支付 / 会员 / SMM / 接码 加固完成',
+              'color:#10b981;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

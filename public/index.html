@@ -423,9 +423,12 @@ function getSkuById(p, skuId){
 }
 function productStock(db, p, skuId){
   if (p && p.source === 'luban') return 9999;
-  if (!hasSkus(p)) return db.cards.filter(c => c.product_id === p.id && c.status === 'unused' && (!c.sku_id || c.sku_id === 0)).length;
-  if (skuId === undefined) return db.cards.filter(c => c.product_id === p.id && c.status === 'unused').length;
-  return db.cards.filter(c => c.product_id === p.id && c.status === 'unused' && String(c.sku_id) === String(skuId)).length;
+  if (p && p.source === 'smm') return 9999;
+  var cnt;
+  if (!hasSkus(p)) cnt = db.cards.filter(c => c.product_id === p.id && c.status === 'unused' && (!c.sku_id || c.sku_id === 0)).length;
+  else if (skuId === undefined) cnt = db.cards.filter(c => c.product_id === p.id && c.status === 'unused').length;
+  else cnt = db.cards.filter(c => c.product_id === p.id && c.status === 'unused' && String(c.sku_id) === String(skuId)).length;
+  return cnt > 0 ? cnt : ((p && p.stock) ? p.stock : 1000);  /* ⭐ 无卡密商品默认库存1000，可正常下单 */
 }
 const getAdminPwdHash = db => (db.config && db.config.admin_pwd_hash) || DEFAULT_CONFIG.admin_pwd_hash;
 function stockOf(db, pid){
@@ -1033,6 +1036,11 @@ function payOrder(orderNo){
     available.slice(0, o.quantity).forEach(c => { c.status = 'used'; c.order_no = o.order_no; c.used_at = now(); o.cards.push(c.content); });
     o.status = 'delivered';
     o.delivered_at = now();
+  } else if (available.length === 0){
+    /* ⭐ 无卡密虚拟商品：自动发货，无需卡密 */
+    o.status = 'delivered';
+    o.delivered_at = now();
+    o.cards = ['虚拟商品·自动发货（无需卡密）'];
   } else o.status = 'out_of_stock';
   saveDB(db);
 }

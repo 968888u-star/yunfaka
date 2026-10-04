@@ -527,8 +527,8 @@ function notifyTg(orderNo){
 
 const STATUS_TEXT = {pending:'待支付', pending_review:'待审核', processing:'处理中', waiting_sms:'等待接码', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回', luban_error:'接码失败'};
 const STATUS_CLASS = {pending:'gray', pending_review:'warn', processing:'warn', waiting_sms:'warn', delivered:'ok', out_of_stock:'no', rejected:'no', luban_error:'no'};
-const RECHARGE_TEXT = {pending:'待支付', success:'已到账'};
-const RECHARGE_CLASS = {pending:'gray', success:'ok'};
+const RECHARGE_TEXT = {pending:'待支付', pending_review:'待审核', success:'已到账'};
+const RECHARGE_CLASS = {pending:'gray', pending_review:'warn', success:'ok'};
 
 function usdtQrUrl(address, amount){
   if (!address) return '';
@@ -1004,21 +1004,50 @@ function confirmPay(type, id){
     const r = db.recharges.filter(x => x.id === id)[0];
     if (!r) return;
     if (r.status === 'success'){ toast('该充值已到账','success'); return; }
-    if (!addBalance(db, r.username, r.amount)){ toast('账号不存在','error'); return; }
-    /* ⭐ 充值赠送：按后台设置比例赠送余额 */
-    var _bonusPct = parseFloat((db.config && db.config.recharge_bonus_pct) || 0);
-    if (_bonusPct > 0){
-      var _bonus = Math.round(r.amount * _bonusPct / 100);
-      if (_bonus > 0){ addBalance(db, r.username, _bonus); r.bonus_amount = _bonus; }
+    if (r.method === 'usdt'){
+      /* ⭐ USDT充值：不立即加余额，开始自动检测到账 */
+      if (!r.usdt_notified_at){ r.usdt_notified_at = now(); saveDB(db); try{notifyTg(r.id);}catch(e){} }
+      toast('已提交，系统正在自动检测USDT到账…','success');
+      closeModal();
+      startUsdtPolling(r.id);
+      location.hash = '#/member';
+      if (location.hash === '#/member') route();
+      return;
     }
-    r.status = 'success';
-    r.completed_at = now();
+    /* ⭐ 支付宝充值：提交待审核，通知管理员核实收款 */
+    r.status = 'pending_review';
+    r.submitted_at = now();
     saveDB(db);
     closeModal();
-    toast('充值成功，余额已到账 💰','success');
+    toast('已提交，管理员核实收款后到账','success');
+    try{notifyTg(r.id);}catch(e){}
     location.hash = '#/member';
     if (location.hash === '#/member') route();
   }
+}
+
+/* ⭐ 充值到账处理（USDT自动到账/后台审核通过时调用） */
+function processRecharge(id){
+  const db = loadDB();
+  const r = db.recharges.filter(x => x.id === id)[0];
+  if (!r || r.status === 'success') return false;
+  if (!addBalance(db, r.username, r.amount)) return false;
+  var _bonusPct = parseFloat((db.config && db.config.recharge_bonus_pct) || 0);
+  if (_bonusPct > 0){
+    var _bonus = Math.round(r.amount * _bonusPct / 100);
+    if (_bonus > 0){ addBalance(db, r.username, _bonus); r.bonus_amount = _bonus; }
+  }
+  r.status = 'success';
+  r.completed_at = now();
+  saveDB(db);
+  try{notifyTg(r.id + '_recharge_success');}catch(e){}
+  return true;
+}
+/* ⭐ 后台审核充值通过 */
+function approveRecharge(id){
+  if (!confirm('确认该充值已收款？确认后余额将到账。')) return;
+  if (processRecharge(id)){ toast('充值已到账 ✅','success'); renderMembers(); }
+  else toast('处理失败','error');
 }
 
 function payOrder(orderNo){
@@ -1066,7 +1095,12 @@ function startUsdtPolling(orderNo){
         if (d.ok && d.status && d.status !== 'pending'){
           clearInterval(_usdtPollTimer); _usdtPollTimer = null;
           toast('USDT 已到账，系统正在处理 🎉','success');
-          fetch('/api/state?t=' + Date.now()).then(r => r.json()).then(d2 => { if (d2.ok && d2.db) window.__DB = d2.db; route(); });
+          /* ⭐ 自动判断是订单还是充值，分别处理 */
+          var _db = loadDB();
+          var _r = _db.recharges.filter(function(x){return x.id === orderNo;})[0];
+          if (_r && _r.status !== 'success'){ processRecharge(orderNo); }  /* 充值→自动加余额 */
+          else { var _o = _db.orders.filter(function(x){return x.order_no === orderNo;})[0]; if (_o && _o.status === 'pending'){ try{payOrder(orderNo);}catch(e){} } }  /* 订单→自动发货 */
+          setTimeout(function(){ route(); }, 800);
         }
       }).catch(()=>{});
   };
@@ -2167,7 +2201,9 @@ function renderMembers(){
       <button class="btn sm danger" onclick="deleteMember('${esc(m.username)}')">删除</button>
     </td>
   </tr>`).join('') : '<tr><td colspan="5" class="empty">暂无会员</td></tr>';
-  $('#tab-body').innerHTML = `<div class="card panel">
+  var _pendingRecharges = db.recharges.filter(function(r){return r.status === 'pending_review';});
+  var _prHtml = _pendingRecharges.length ? '<div class="card panel" style="border-color:#f59e0b;background:#fffbeb;margin-bottom:14px"><h3 style="margin:0 0 10px;color:#92400e">⏳ 待审核充值（' + _pendingRecharges.length + '）</h3><div style="overflow-x:auto"><table><thead><tr><th>账号</th><th>金额</th><th>方式</th><th>时间</th><th></th></tr></thead><tbody>' + _pendingRecharges.map(function(r){return '<tr><td><b>' + esc(r.username) + '</b></td><td style="color:#b45309;font-weight:700">¥' + yuan(r.amount) + '元</td><td>支付宝</td><td class="muted" style="font-size:12px">' + esc(r.created_at) + '</td><td style="text-align:right"><button class="btn sm primary" onclick="approveRecharge(\'' + esc(r.id) + '\')">确认到账</button></td></tr>';}).join('') + '</tbody></table></div></div>' : '';
+  $('#tab-body').innerHTML = _prHtml + `<div class="card panel">
     <h2>会员列表（${members.length}）</h2>
     <p class="muted" style="font-size:13px;margin-top:-8px">会员可手动调整余额、重置密码、删除账号。暗号为会员找回密码的凭证。</p>
     <div style="overflow-x:auto"><table><thead><tr><th>账号</th><th>暗号</th><th>余额</th><th>注册时间</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>

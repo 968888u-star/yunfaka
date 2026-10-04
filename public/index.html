@@ -808,6 +808,7 @@ function openBuy(id){
   if (qty){ qty.focus(); qty.select(); }
 }
 
+var _submitting = false;
 function submitBuy(id){
   if (_submitting){ toast('正在处理，请勿重复提交','warn'); return; }
   _submitting = true; setTimeout(function(){_submitting=false;}, 3000);

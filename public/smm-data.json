@@ -435,7 +435,7 @@
       "smm_refill": false,
       "smm_cancel": false,
       "smm_price_ver": 2,
-      "smm_platform": "YouTube"
+      "smm_platform": "Instagram"
     },
     {
       "id": 847,
@@ -19712,6 +19712,6 @@
       "smm_platform": "其他"
     }
   ],
-  "updated": 1791115896643,
+  "updated": 1791115906602,
   "markup": null
 }

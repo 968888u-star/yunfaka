@@ -1279,7 +1279,7 @@ function renderMemberDashboard(member){
 
   const rechargeRows = myRecharges.length ? myRecharges.map(r => `<tr>
     <td class="mono" style="font-size:12px">${esc(r.id)}</td>
-    <td>${orderUsdt(r.amount, r)} USDT</td>
+    <td>¥${yuan(r.amount)}元<br><span class='muted' style='font-size:11px'>≈${orderUsdt(r.amount, r)} USDT</span></td>
     <td>${r.method === 'alipay' ? '支付宝' : 'USDT'}</td>
     <td><span class="badge ${RECHARGE_CLASS[r.status] || 'gray'}">${RECHARGE_TEXT[r.status] || r.status}</span></td>
     <td class="muted" style="font-size:12px">${esc(r.created_at)}</td>
@@ -1299,8 +1299,9 @@ function renderMemberDashboard(member){
   const usdtMethodHtml = usdtEnabled ? `<label class="pay-method ${defaultMethod === 'usdt' ? 'active' : ''}" data-method="usdt"><input type="radio" name="rc-method" value="usdt" ${defaultMethod === 'usdt' ? 'checked' : ''}><span class="logo">🪙</span> USDT</label>` : '';
 
   $('#app').innerHTML = `<div class="member-card">
-      <div class="lbl">账户余额（元）</div>
-      <div class="amt"><small>USDT </small>${usdt(balance)}</div>
+      <div class="lbl">账户余额</div>
+      <div class="amt"><small>¥</small>${yuan(balance)}<small> 元</small></div>
+      <div style="font-size:12px;opacity:0.85;margin-top:2px">≈ ${usdt(balance)} USDT（按当前汇率）</div>
       <div class="id">账号：<b>${esc(member.username)}</b><br>暗号：<b>${esc(member.secret || '未设置')}</b></div>
     </div>
     ${(parseFloat(cfg.recharge_bonus_pct||0)>0) ? '<div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #f59e0b;border-radius:12px;padding:14px 20px;margin:12px 0;text-align:center;font-weight:700;color:#92400e;font-size:14px">' + (cfg.recharge_bonus_text||'🎁 充值活动：充多少送 {pct}%，即充即送！').replace('{pct}', cfg.recharge_bonus_pct) + '</div>' : ''}
@@ -1311,11 +1312,11 @@ function renderMemberDashboard(member){
       </div>
       <label class="field"><span>选择充值金额（元）</span>
         <div class="quick-amounts" id="quick-amounts">
-          <button data-amt="1000">1 USDT</button><button data-amt="3000">3 USDT</button><button data-amt="5000">5 USDT</button>
-          <button data-amt="10000" class="active">10 USDT</button><button data-amt="20000">20 USDT</button><button data-amt="50000">50 USDT</button>
+          <button data-amt="1000">10元</button><button data-amt="3000">30元</button><button data-amt="5000">50元</button>
+          <button data-amt="10000" class="active">100元</button><button data-amt="30000">300元</button><button data-amt="50000">500元</button>
         </div>
       </label>
-      <label class="field"><span>自定义金额（元）</span><input id="rc-amount" type="number" min="0.01" step="0.01" value="100.00"></label>
+      <label class="field"><span>自定义金额（人民币元）</span><input id="rc-amount" type="number" min="0.01" step="0.01" value="100.00"><div class="muted" style="font-size:11px;margin-top:4px">到账余额=人民币元，可抵扣全站商品（USDT计价按汇率自动换算）</div></label>
       <label class="field"><span>支付方式</span>
         <div class="pay-methods" id="rc-methods">${alipayMethodHtml}${usdtMethodHtml}</div>
       </label>
@@ -1359,7 +1360,7 @@ function submitRecharge(){
   if (!member){ toast('请先登录','error'); return; }
   const amount = Math.round(parseFloat($('#rc-amount').value || '0') * 100);
   const min = cfg.recharge_min || 1000;
-  if (!(amount >= min)){ toast('最低充值 ' + usdt(min) + ' USDT','error'); return; }
+  if (!(amount >= min)){ toast('最低充值 ' + yuan(min) + ' 元（≈' + usdt(min) + ' USDT）','error'); return; }
   const radio = document.querySelector('input[name="rc-method"]:checked');
   if (!radio){ toast('请选择支付方式','error'); return; }
   const id = genRechargeId();
@@ -2156,7 +2157,7 @@ function renderMembers(){
   const rows = members.length ? members.map(m => `<tr>
     <td><b>${esc(m.username)}</b></td>
     <td class="muted" style="font-size:12px">${esc(m.secret || '-')}</td>
-    <td style="font-weight:700;color:#b45309">${usdt(m.balance)} USDT</td>
+    <td style="font-weight:700;color:#b45309">¥${yuan(m.balance)}<br><span class="muted" style="font-size:11px;font-weight:400">≈${usdt(m.balance)} USDT</span></td>
     <td class="muted" style="font-size:12px">${esc(m.created_at)}</td>
     <td style="text-align:right;white-space:nowrap">
       <button class="btn sm ghost" onclick="adjustBalance('${esc(m.username)}',100)">+1元</button>
@@ -2187,8 +2188,8 @@ function openAdjustBalance(username){
   if (!m) return;
   openModal(`<h3>调整余额</h3>
     <div class="kv"><span class="k">账号</span><span class="v">${esc(username)}</span></div>
-    <div class="kv" style="margin-bottom:14px"><span class="k">当前余额</span><span class="v" style="color:#b45309">${usdt(m.balance)} USDT</span></div>
-    <label class="field"><span>调整金额（元，正数增加，负数减少）</span>
+    <div class="kv" style="margin-bottom:14px"><span class="k">当前余额</span><span class="v" style="color:#b45309">¥${yuan(m.balance)}元（≈${usdt(m.balance)} USDT）</span></div>
+    <label class="field"><span>调整金额（人民币元，正数增加，负数减少）</span>
       <input id="adj-amount" type="number" step="0.01" placeholder="例如：10 或 -5"></label>
     <div class="row" style="justify-content:flex-end">
       <button class="btn ghost" onclick="closeModal()">取消</button>

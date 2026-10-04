@@ -7,7 +7,7 @@
 <title>云发卡 · 自动发货</title>
 <style>
 :root{--bg:#f6f7fb;--card:#fff;--text:#1f2430;--muted:#6b7280;--line:#e8eaf0;--primary:#6366f1;--primary2:#8b5cf6;--danger:#ef4444;--ok:#10b981;--radius:14px;--shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px -8px rgba(16,24,40,.12);--tg-btn-color:#0088cc;--tg-btn-shadow:rgba(0,136,204,.6)}
-*{box-sizing:border-box}html,body{margin:0;padding:0}
+*{box-sizing:border-box}html,body{margin:0;padding:0;overflow-x:hidden;max-width:100%}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
 a{color:inherit;text-decoration:none}button{font-family:inherit}
 .nav{position:-webkit-sticky;position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
@@ -45,13 +45,13 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .hero{background:linear-gradient(135deg,#6366f1,#8b5cf6 60%,#a855f7);border-radius:20px;padding:34px 30px;color:#fff;margin-bottom:22px;position:relative;overflow:hidden}
 .hero h1{margin:0 0 8px;font-size:26px;letter-spacing:.5px}.hero p{margin:0;opacity:.92;font-size:14px}
 .hero .blob{position:absolute;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,.14);right:-70px;top:-90px}
-.cats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.cats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;max-width:100%;overflow:hidden}
 .cat-tab{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:4px;text-align:center}
 .cat-tab{padding:9px 18px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted);transition:.15s;font-family:inherit}
 .cat-tab:hover{border-color:#c7cbe0;color:var(--text)}
 .cat-tab.active{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;border-color:transparent;box-shadow:0 4px 12px -4px rgba(99,102,241,.55)}
 .cat-tab .n{opacity:.65;font-weight:500;margin-left:5px;font-size:12px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;max-width:100%}
 .product{padding:20px;display:flex;flex-direction:column;gap:12px;transition:.18s}
 .product:hover{transform:translateY(-2px);box-shadow:0 12px 30px -12px rgba(16,24,40,.22)}
 .p-name{font-size:16px;font-weight:700}
@@ -669,17 +669,10 @@ function renderHome(){
         <a class="btn primary sm" style="min-width:108px;text-align:center;margin-left:auto;flex-shrink:0;align-self:center" href="#/smm">${smmCount>0?'进入查看 →':'去同步 →'}</a>
       </div>`;
     })();
-  const tgUrl = tgUrlOf(cfg);
-  const tgBox = tgUrl ? `<div class="card panel" style="margin-top:24px;text-align:center">
-      <div style="font-size:15px;font-weight:700;margin-bottom:6px">遇到问题？联系客服</div>
-      <div class="muted" style="font-size:13px;margin-bottom:14px">Telegram 客服在线</div>
-      <a class="btn tg-btn" style="display:inline-flex!important" href="${tgUrl}" target="_blank" rel="noopener">联系 TG 客服</a>
-    </div>` : '';
   $('#app').innerHTML = `<div class="hero"><div class="blob"></div><h1>付款即发货，无需等待</h1><p>${esc(cfg.hero_subtitle || '7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额')}</p></div>
     ${memberBar}
     <div class="cats">${catTabs}</div>
-    <div class="grid">${cards}</div>
-    ${tgBox}`;
+    <div class="grid">${cards}</div>`;
 }
 
 /* ---------------- 购买 ---------------- */
@@ -4010,8 +4003,8 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     saveDB(db); window._smmSelected={}; toast('已将 '+n+' 个商品移入「'+cat+'」','success'); renderSmmTab();
     try{smmPushToCloud();}catch(e){}
   };
-  window.smmClearSearch = function(){ smmKeyword=''; var el=document.getElementById('smm-search-input'); if(el) el.value=''; renderSmmClient(); };
-  window.smmSearchBtn = function(){ var el=document.getElementById('smm-search-input'); if(el) smmDoSearch(el.value); };
+  window.smmClearSearch = function(){ smmKeyword=''; var el=document.getElementById('smm-search-input'); if(el) el.value=''; renderSmmClient(); setTimeout(function(){ var e=document.getElementById('smm-search-input'); if(e) e.focus(); }, 80); };
+  window.smmSearchBtn = function(){ var el=document.getElementById('smm-search-input'); if(el){ smmDoSearch(el.value); setTimeout(function(){ var e=document.getElementById('smm-search-input'); if(e){ e.focus(); var l=e.value.length; if(e.setSelectionRange) e.setSelectionRange(l,l); } }, 50); } };
   window.smmSetCustomPrice = function(id, val){ var db=loadDB(); var p=db.products.find(function(x){return String(x.id)===String(id);}); if(!p) return; var v=parseFloat(val); var mk=(getConfig(db).smm_markup||1.2); if(v && v>0){ p.smm_custom_price=Math.round(v*usdtRate()*100); p.price=p.smm_custom_price; toast('已设置自定义价 '+v+' USDT','success'); } else { delete p.smm_custom_price; p.price=Math.max(1,Math.round(parseFloat(p.smm_rate_usd||0)*mk*100)); toast('已恢复默认加价','success'); } p.smm_price_ver=2; saveDB(db); renderSmmTab(); };
 
   /* ========== 后台 SMM Tab ========== */

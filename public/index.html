@@ -3814,7 +3814,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         '<div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">' +
           '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数（上游人民币价 × 倍数 = 售价）</div><input id="smm-markup" type="number" step="0.05" min="1" value="' + cfg.smm_markup + '"></div>' +
           '<div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">USDT→CNY 汇率（后台「设置」统一管理）</div><input id="smm-usdt-rate" type="number" step="0.01" value="' + usdtRate() + '" disabled style="background:#f1f5f9;color:#6b7280;cursor:not-allowed"></div>' +
-          '<button class="btn primary" style="align-self:flex-end" onclick="smmSaveCfg()">保存并重算价格</button>' +'<button class="btn ghost" style="align-self:flex-end" onclick="smmForceRecalc()">🔄 强制重算</button>' +
+          '<label style="align-self:flex-end;display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:#374151"><input type="checkbox" id="smm-auto-sync" ' + ((getConfig(db).smm_auto_sync)?'checked':'') + '> 每30分钟自动同步上游</label>' + '<button class="btn primary" style="align-self:flex-end" onclick="smmSaveCfg()">保存并重算价格</button>' +'<button class="btn ghost" style="align-self:flex-end" onclick="smmForceRecalc()">🔄 强制重算</button>' +
           '<button class="btn ghost" style="align-self:flex-end;background:#ecfdf5;color:#047857;border-color:#a7f3d0" onclick="smmAutoClassify()">🏷️ 一键自动分类</button>' +'<button class="btn ghost" style="align-self:flex-end;background:#eff6ff;color:#1d4ed8;border-color:#93c5fd" onclick="smmPushToCloud(true)">☁️ 同步到云端</button>' +'<button class="btn ghost" style="align-self:flex-end" onclick="smmExportJson()">📋 导出JSON</button>' +
         '</div>' +
         '<div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">💡 上游为<b>人民币</b>计价：上游价 × 加价倍数 = 人民币售价；商品列表/USDT支付按「人民币售价 ÷ 上方汇率」显示<b>USDT</b>；支付宝口令红包直接显示<b>人民币</b>。修改汇率请到「设置」标签页。</div>' +
@@ -3985,9 +3985,9 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     }).catch(function(e){ toast('网络错误：' + e.message, 'error'); });
   };
 
-  window.smmSync = function(){
-    if (!confirm('将从 chinayinliu 拉取全部服务并加价上架，已存在的会更新价格。继续？')) return;
-    toast('正在拉取服务列表…');
+  window.smmSyncCore = function(silent){
+    if (!silent && !confirm('将从 chinayinliu 拉取全部服务并加价上架，已存在的会更新价格。继续？')) return;
+    if (!silent) toast('正在拉取服务列表…');
     smmApi('services').then(function(r){
       if (!r.ok){ toast('拉取失败：' + (r.msg || ''), 'error'); return; }
       var list = r.data;
@@ -4011,11 +4011,13 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         var min = parseInt(s.min) || 1;
         var max = parseInt(s.max) || 100000;
         if (exist){
-          exist.name = name; exist.price = priceFen; exist.description = desc;
+          exist.name = name; exist.description = desc;
           exist.smm_rate_usd = rateUsd.toFixed(4); exist.smm_price_ver = 2;
           exist.smm_min = min; exist.smm_max = max;
           exist.smm_type = s.type || ''; exist.smm_category = s.category || '';
           exist.smm_refill = !!s.refill; exist.smm_cancel = !!s.cancel;
+          /* ⭐ 保留自定义价：设置过自定义价的商品，上游更新不覆盖售价 */
+          if (!exist.smm_custom_price || exist.smm_custom_price <= 0) exist.price = priceFen;
           updated++;
         } else {
           db.seq.product++;
@@ -4032,10 +4034,19 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
         }
       });
       saveDB(db);
-      toast('同步完成：新增 ' + added + '，更新 ' + updated, 'success'); setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
+      if (!silent) toast('同步完成：新增 ' + added + '，更新 ' + updated, 'success');
+      setTimeout(function(){try{smmPushToCloud();}catch(e){}},500);
       renderSmmTab();
-    }).catch(function(e){ toast('网络错误：' + e.message, 'error'); });
+    }).catch(function(e){ if(!silent) toast('网络错误：' + e.message, 'error'); });
   };
+  window.smmSync = function(){ smmSyncCore(false); };
+  /* ⭐ 自动同步：每30分钟检查，开启则静默同步上游 */
+  setInterval(function(){
+    try{
+      var cfg = getConfig(loadDB());
+      if (cfg.smm_auto_sync) smmSyncCore(true);
+    }catch(e){}
+  }, 30*60*1000);
 
   window.smmToggle = function(id){
     var db = loadDB();
@@ -4051,11 +4062,11 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
     var db = loadDB();
     var items = db.products.filter(function(p){ return p.source === 'smm'; });
     if (!items.length){ toast('没有可清空的商品', 'error'); return; }
-    if (!confirm('确定清空全部 ' + items.length + ' 个推广商品？')) return;
+    if (!confirm('确定清空全部 ' + items.length + ' 个推广商品？\n清空后立即保存到服务器，刷新不会再恢复。')) return;
     db.products = db.products.filter(function(p){ return p.source !== 'smm'; });
     saveDB(db);
-    toast('已清空', 'success');
-    renderSmmTab();
+    toast('正在保存到服务器…', 'info');
+    setTimeout(function(){ toast('已清空并保存到服务器 ✅ 刷新不会再恢复', 'success'); renderSmmTab(); }, 2500);
   };
 
   /* ========== 后台 tab 注入 ========== */

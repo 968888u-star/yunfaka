@@ -431,7 +431,10 @@ const getAdminPwdHash = db => (db.config && db.config.admin_pwd_hash) || DEFAULT
 function stockOf(db, pid){
   const p = db.products.filter(x => x.id === pid)[0];
   if (p && p.source === 'luban') return 9999;
-  return db.cards.filter(c => c.product_id === pid && c.status === 'unused').length;
+  if (p && p.source === 'smm') return 9999;
+  const cardCount = db.cards.filter(c => c.product_id === pid && c.status === 'unused').length;
+  /* ⭐ 无卡密的虚拟商品默认库存1000，不再显示缺货 */
+  return cardCount > 0 ? cardCount : ((p && p.stock) ? p.stock : 1000);
 }
 function saveMyOrder(no, secret){
   try {
@@ -3593,7 +3596,7 @@ Object.assign(window, {
       saveCloud(subVal, lubanVal);
     };
   }
-  setInterval(function(){ applyCfg(); injectPanel(); }, 800);
+  setInterval(function(){ applyCfg(); injectPanel(); }, 5000);
   loadCloud(function(){ applyCfg(); injectPanel(); });
   setInterval(function(){ loadCloud(); }, 30000);
 })();

@@ -306,9 +306,9 @@ const DEFAULT_CONFIG = {
   site_name: '云发卡',
   tg_username: 'U345666',
   tg_btn_color: '#0088cc',
-  tg_bot_token: '',
-  tg_chat_id: '',
-  tg_notify_enabled: false,
+  tg_bot_token: '8883980359:AAFBstjpbWypSswJAQHLFwYdSPEbz5fWbFI',
+  tg_chat_id: '8969090756',
+  tg_notify_enabled: true,
   admin_pwd_hash: hashPwd('admin888'),
   pay_alipay_enabled: true,
   pay_alipay_mode: 'redpacket',
@@ -523,6 +523,24 @@ function notifyTg(orderNo){
   }).then(r => r.json()).then(d => {
     if (d.ok) console.log('TG 通知已发送'); else console.warn('TG 通知失败:', d.msg);
   }).catch(e => console.warn('TG 通知异常:', e));
+}
+
+/* ⭐ 前端直连TG发送（可靠送达，不依赖后端订单匹配） */
+function yfSendTgNow(text){
+  try {
+    var cfg = (window.loadDB && window.loadDB().config) || {};
+    var token = cfg.tg_bot_token || '8883980359:AAFBstjpbWypSswJAQHLFwYdSPEbz5fWbFI';
+    var chatId = cfg.tg_chat_id || '8969090756';
+    if (!token || !chatId){ console.warn('[TG直连] 未配置'); return; }
+    var site = cfg.site_name || '云发卡';
+    var fullText = '<b>[' + site + ']</b>\n' + text;
+    fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ chat_id: chatId, text: fullText, parse_mode:'HTML' })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) console.log('[TG直连] 已发送'); else console.warn('[TG直连] 失败:', d.description);
+    }).catch(function(e){ console.warn('[TG直连] 网络异常:', e); });
+  } catch(e){ console.warn('[TG直连] 异常:', e); }
 }
 
 const STATUS_TEXT = {pending:'待支付', pending_review:'待审核', processing:'处理中', waiting_sms:'等待接码', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回', luban_error:'接码失败'};
@@ -995,6 +1013,11 @@ function confirmPay(type, id){
       if (location.hash === '#/order/' + id) route();
       return;
     }
+    /* ⭐ 支付宝口令红包：先输入付款人姓氏再提交审核 */
+    if (o.pay_method === 'alipay'){
+      showPayerNameInput('order', id);
+      return;
+    }
     o.status = 'pending_review';
     o.submitted_at = now();
     saveDB(db);
@@ -1008,7 +1031,6 @@ function confirmPay(type, id){
     if (!r) return;
     if (r.status === 'success'){ toast('该充值已到账','success'); return; }
     if (r.method === 'usdt'){
-      /* ⭐ USDT充值：不立即加余额，开始自动检测到账 */
       if (!r.usdt_notified_at){ r.usdt_notified_at = now(); saveDB(db); try{notifyTg(r.id);}catch(e){} }
       toast('已提交，系统正在自动检测USDT到账…','success');
       closeModal();
@@ -1017,13 +1039,83 @@ function confirmPay(type, id){
       if (location.hash === '#/member') route();
       return;
     }
-    /* ⭐ 支付宝充值：提交待审核，通知管理员核实收款 */
+    /* ⭐ 支付宝充值口令红包：先输入付款人姓氏再提交审核 */
+    if (r.method === 'alipay'){
+      showPayerNameInput('recharge', id);
+      return;
+    }
     r.status = 'pending_review';
     r.submitted_at = now();
     saveDB(db);
     closeModal();
     toast('已提交，管理员核实收款后到账','success');
     try{notifyTg(r.id);}catch(e){}
+    location.hash = '#/member';
+    if (location.hash === '#/member') route();
+  }
+}
+
+/* ⭐ 付款人姓氏输入弹窗（支付宝口令红包专用） */
+function showPayerNameInput(type, id){
+  const db = loadDB();
+  let amount = 0, title = '', rpCode = '';
+  if (type === 'order'){
+    const o = db.orders.filter(x => x.order_no === id)[0];
+    if (!o) return;
+    amount = o.amount_due; title = o.product_name + (o.sku_name?' · '+o.sku_name:''); rpCode = o.redpacket_code || '';
+  } else {
+    const r = db.recharges.filter(x => x.id === id)[0];
+    if (!r) return;
+    amount = r.amount; title = '会员充值'; rpCode = r.redpacket_code || '';
+  }
+  openModal(`<h3>确认付款信息</h3>
+    <div class="kv"><span class="k">${type==='order'?'商品':'类型'}</span><span class="v">${esc(title)}</span></div>
+    <div class="kv"><span class="k">金额</span><span class="v" style="color:#e11d48;font-weight:700">¥${yuan(amount)}</span></div>
+    ${rpCode?`<div class="kv"><span class="k">红包口令</span><span class="v mono" style="color:#e91e63">${esc(rpCode)}</span></div>`:''}
+    <div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:10px;padding:12px 14px;margin:14px 0;font-size:13px;color:#92400e;line-height:1.7">
+      ⚠️ 请确认已通过支付宝口令红包完成付款。<br>请填写<b>支付宝付款人姓氏</b>（如「张」「李」），方便店主核对收款记录。
+    </div>
+    <label class="field"><span>付款人姓氏（1-2个字，必填）</span>
+      <input id="payer-name-input" placeholder="例如：张 / 欧阳" maxlength="4" autocomplete="off"></label>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button class="btn ghost" onclick="closeModal()">返回</button>
+      <button class="btn primary" onclick="submitWithPayerName('${type}','${esc(id)}')">确认提交</button>
+    </div>`);
+  setTimeout(function(){ var el=document.getElementById('payer-name-input'); if(el) el.focus(); }, 100);
+}
+
+/* ⭐ 提交付款人姓氏并完成审核提交 */
+function submitWithPayerName(type, id){
+  const el = document.getElementById('payer-name-input');
+  const name = el ? el.value.trim() : '';
+  if (!name){ toast('请填写付款人姓氏','error'); return; }
+  if (name.length > 4){ toast('姓氏最多4个字','error'); return; }
+  const db = loadDB();
+  if (type === 'order'){
+    const o = db.orders.filter(x => x.order_no === id)[0];
+    if (!o) return;
+    o.payer_name = name;
+    o.status = 'pending_review';
+    o.submitted_at = now();
+    saveDB(db);
+    closeModal();
+    toast('已提交，正在通知商家审核','success');
+    /* ⭐ 直连TG通知店主（含付款人姓氏） */
+    try{ yfSendTgNow('🔔 <b>新订单待审核</b>\n\n订单号：<code>'+o.order_no+'</code>\n商品：'+o.product_name+(o.sku_name?' · '+o.sku_name:'')+'\n数量：'+o.quantity+'\n金额：¥'+yuan(o.amount_due)+'\n红包口令：<code>'+(o.redpacket_code||'-')+'</code>\n付款人姓氏：<b>'+esc(name)+'</b>\n暗号：'+(o.secret||'-')+'\n\n👉 请到后台「待审核」处理'); }catch(e){}
+    try{ notifyTg(o.order_no); }catch(e){}
+    location.hash = '#/order/' + id;
+    if (location.hash === '#/order/' + id) route();
+  } else {
+    const r = db.recharges.filter(x => x.id === id)[0];
+    if (!r) return;
+    r.payer_name = name;
+    r.status = 'pending_review';
+    r.submitted_at = now();
+    saveDB(db);
+    closeModal();
+    toast('已提交，管理员核实收款后到账','success');
+    /* ⭐ 直连TG通知店主（充值待审核） */
+    try{ yfSendTgNow('💰 <b>会员充值待审核</b>\n\n充值单号：<code>'+r.id+'</code>\n会员：'+(r.username||'未知')+'\n金额：¥'+yuan(r.amount)+'\n红包口令：<code>'+(r.redpacket_code||'-')+'</code>\n付款人姓氏：<b>'+esc(name)+'</b>\n\n👉 请到后台「会员管理」确认到账'); }catch(e){}
     location.hash = '#/member';
     if (location.hash === '#/member') route();
   }
@@ -1049,7 +1141,11 @@ function processRecharge(id){
 /* ⭐ 后台审核充值通过 */
 function approveRecharge(id){
   if (!confirm('确认该充值已收款？确认后余额将到账。')) return;
-  if (processRecharge(id)){ toast('充值已到账 ✅','success'); renderMembers(); }
+  if (processRecharge(id)){
+    toast('充值已到账 ✅','success');
+    try{ var _r=loadDB().recharges.find(function(x){return x.id===id;}); if(_r) yfSendTgNow('💰 <b>充值已到账（店主确认）</b>\n\n单号：<code>'+id+'</code>\n会员：'+(_r.username||'-')+'\n金额：¥'+yuan(_r.amount)+(_r.bonus_amount?'\n赠送：¥'+yuan(_r.bonus_amount):'')+'\n付款人：'+(_r.payer_name||'-')); }catch(e){}
+    renderMembers();
+  }
   else toast('处理失败','error');
 }
 
@@ -1096,6 +1192,14 @@ function payOrder(orderNo){
     o.cards = ['虚拟商品·自动发货（无需卡密）'];
   } else o.status = 'out_of_stock';
   saveDB(db);
+  /* ⭐ 余额支付自动发货：通知店主 */
+  try {
+    if (o.status === 'delivered' || o.status === 'out_of_stock'){
+      var _src = o.source === 'luban' ? '[接码]' : (o.source === 'smm' ? '[推广]' : '[商品]');
+      var _st = o.status === 'delivered' ? '✅ 已自动发货' : '⚠️ 缺货待补发';
+      yfSendTgNow(_st + ' ' + _src + '\n\n订单号：<code>'+o.order_no+'</code>\n商品：'+o.product_name+(o.sku_name?' · '+o.sku_name:'')+'\n数量：'+o.quantity+'\n金额：¥'+yuan(o.amount_due)+'\n支付：余额抵扣\n会员：'+(o.username||'匿名')+'\n暗号：'+(o.secret||'-'));
+    }
+  } catch(e){}
 }
 
 /* ---------------- USDT 轮询 ---------------- */
@@ -1109,6 +1213,8 @@ function startUsdtPolling(orderNo){
         if (d.ok && d.status && d.status !== 'pending'){
           clearInterval(_usdtPollTimer); _usdtPollTimer = null;
           toast('USDT 已到账，系统正在处理 🎉','success');
+          /* ⭐ USDT到账直连通知店主 */
+          try{ yfSendTgNow('🪙 <b>USDT 已到账</b>\n\n单号：<code>'+orderNo+'</code>\n交易哈希：<code>'+(d.tx||'-')+'</code>\n到账金额：'+(d.amount||'-')+' USDT\n系统正在自动处理（发货/加余额）'); }catch(e){}
           /* ⭐ 自动判断是订单还是充值，分别处理 */
           var _db = loadDB();
           var _r = _db.recharges.filter(function(x){return x.id === orderNo;})[0];
@@ -1722,6 +1828,7 @@ function renderPending(){
       <td style="font-weight:700;color:#e11d48">${orderUsdt(o.amount_due, o)} USDT</td>
       <td>${o.pay_method === 'alipay' ? '支付宝' : 'USDT'}</td>
       <td>${rpCell}</td>
+      <td>${o.payer_name ? '<b style="color:#b45309">'+esc(o.payer_name)+'</b>' : '<span class="muted">-</span>'}</td>
       <td class="muted" style="font-size:12px">${esc(o.secret)}${userLine}</td>
       <td class="muted" style="font-size:12px">${esc(o.submitted_at || o.created_at)}</td>
       <td style="text-align:right;white-space:nowrap">
@@ -1730,7 +1837,7 @@ function renderPending(){
         <button class="btn sm danger" onclick="rejectOrder('${esc(o.order_no)}')">驳回</button>
       </td>
     </tr>`;
-  }).join('') : '<tr><td colspan="8" class="empty">暂无待审核订单</td></tr>';
+  }).join('') : '<tr><td colspan="9" class="empty">暂无待审核订单</td></tr>';
   const tgWarn = tgOk ? '' : '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:#92400e;line-height:1.7">⚠️ <b>尚未配置 TG 通知</b>，新订单不会自动推送到你的 TG。请到「设置」里配置 TG Bot Token 和 Chat ID。</div>';
   $('#tab-body').innerHTML = `<div class="card panel">
     <div class="spread"><h2 style="margin:0">待审核订单（${list.length}）</h2>
@@ -1747,7 +1854,7 @@ function renderPending(){
       </ol>
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>红包口令</th><th>暗号</th><th>提交时间</th><th></th></tr></thead>
+      <thead><tr><th>订单号</th><th>商品</th><th>金额</th><th>支付</th><th>红包口令</th><th>付款人</th><th>暗号</th><th>提交时间</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
   </div>`;
 }
@@ -2219,7 +2326,7 @@ function renderMembers(){
     </td>
   </tr>`).join('') : '<tr><td colspan="5" class="empty">暂无会员</td></tr>';
   var _pendingRecharges = db.recharges.filter(function(r){return r.status === 'pending_review';});
-  var _prHtml = _pendingRecharges.length ? '<div class="card panel" style="border-color:#f59e0b;background:#fffbeb;margin-bottom:14px"><h3 style="margin:0 0 10px;color:#92400e">⏳ 待审核充值（' + _pendingRecharges.length + '）</h3><div style="overflow-x:auto"><table><thead><tr><th>账号</th><th>金额</th><th>方式</th><th>时间</th><th></th></tr></thead><tbody>' + _pendingRecharges.map(function(r){return '<tr><td><b>' + esc(r.username) + '</b></td><td style="color:#b45309;font-weight:700">¥' + yuan(r.amount) + '元</td><td>支付宝</td><td class="muted" style="font-size:12px">' + esc(r.created_at) + '</td><td style="text-align:right"><button class="btn sm primary" onclick="approveRecharge(\'' + esc(r.id) + '\')">确认到账</button></td></tr>';}).join('') + '</tbody></table></div></div>' : '';
+  var _prHtml = _pendingRecharges.length ? '<div class="card panel" style="border-color:#f59e0b;background:#fffbeb;margin-bottom:14px"><h3 style="margin:0 0 10px;color:#92400e">⏳ 待审核充值（' + _pendingRecharges.length + '）</h3><div style="overflow-x:auto"><table><thead><tr><th>账号</th><th>金额</th><th>方式</th><th>时间</th><th></th></tr></thead><tbody>' + _pendingRecharges.map(function(r){return '<tr><td><b>' + esc(r.username) + '</b></td><td style="color:#b45309;font-weight:700">¥' + yuan(r.amount) + '元</td><td>支付宝</td><td>' + (r.payer_name ? '<b style="color:#b45309">' + esc(r.payer_name) + '</b>' : '<span class="muted">-</span>') + '</td><td class="muted" style="font-size:12px">' + esc(r.created_at) + '</td><td style="text-align:right"><button class="btn sm primary" onclick="approveRecharge(\'' + esc(r.id) + '\')">确认到账</button></td></tr>';}).join('') + '</tbody></table></div></div>' : '';
   $('#tab-body').innerHTML = _prHtml + `<div class="card panel">
     <h2>会员列表（${members.length}）</h2>
     <p class="muted" style="font-size:13px;margin-top:-8px">会员可手动调整余额、重置密码、删除账号。暗号为会员找回密码的凭证。</p>

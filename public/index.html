@@ -46,7 +46,7 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .hero h1{margin:0 0 8px;font-size:26px;letter-spacing:.5px}.hero p{margin:0;opacity:.92;font-size:14px}
 .hero .blob{position:absolute;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,.14);right:-70px;top:-90px}
 .cats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
-.cat-tab{flex:1 1 44%;min-width:44%;display:flex;align-items:center;justify-content:center;gap:4px;text-align:center}
+.cat-tab{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:4px;text-align:center}
 .cat-tab{padding:9px 18px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted);transition:.15s;font-family:inherit}
 .cat-tab:hover{border-color:#c7cbe0;color:var(--text)}
 .cat-tab.active{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;border-color:transparent;box-shadow:0 4px 12px -4px rgba(99,102,241,.55)}
@@ -4337,6 +4337,14 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
 
   /* ========== 客户端 SMM 页 ========== */
   function renderSmmClient(){
+    /* ⭐ 首次进入立即显示loading，避免857商品渲染阻塞 */
+    var app = document.getElementById('app');
+    if (app && !app.querySelector('.smm-loaded')){
+      app.innerHTML = '<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 社交媒体推广</h1><p>正在加载服务列表…</p></div><div class="loading" style="padding:60px 0;text-align:center;color:#6b7280">⏳ 正在加载推广服务，请稍候…</div>';
+    }
+    setTimeout(function(){ renderSmmClientReal(); }, 30);
+  }
+  function renderSmmClientReal(){
     var db = loadDB();
     var cfg = getConfig(db);
     var items = db.products.filter(function(p){ return p.source === 'smm' && p.active; });
@@ -4376,7 +4384,7 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
       '<div class="card panel" style="background:#f0fdf4;border-color:#86efac;font-size:13px;color:#15803d;line-height:1.8;margin-bottom:16px">📌 <b>使用说明：</b><br>' + (cfg.smm_usage_text || '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度') + '</div>' +
       '<div style="margin-bottom:12px;display:flex;gap:8px"><input id="smm-search-input" placeholder="🔍 输入关键词后点右侧搜索" value="' + esc(smmKeyword) + '" style="padding-left:14px;flex:1" onkeydown="if(event.key===\"Enter\")smmSearchBtn()">' + '<button onclick="smmSearchBtn()" style="flex-shrink:0;padding:0 18px;background:#6366f1;color:#fff;border:0;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">搜索</button>' + (smmKeyword ? '<button onclick="smmClearSearch()" style="flex-shrink:0;padding:0 14px;background:#eef0f6;border:0;border-radius:10px;font-size:13px;cursor:pointer">清除</button>' : '') + '</div>' +
       '<div class="cats" style="margin-bottom:16px">' + catTabs + '</div>' +
-      '<div class="grid">' + cards + '</div>';
+      '<div class="grid smm-loaded">' + cards + '</div>';
     if (smmSearchJustFired || smmKeyword){
       smmSearchJustFired = false;
       setTimeout(function(){
@@ -5100,7 +5108,110 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
 </script>
 <!-- ============================================================
      加固补丁 v2 · 全面修复 + TG 机器人联动升级
-     粘贴位置：紧跟在"加固补丁 v1"之后，</body> 之前
+     粘贴位置：紧跟在"加固补丁 v1"之后，
+<!-- ============================================================
+     在线客服模块（TG机器人双向对话）
+     ============================================================ -->
+<style>
+.cs-float{position:fixed;right:22px;bottom:96px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px -6px rgba(16,185,129,.5);z-index:140;cursor:pointer;transition:.2s;border:0;font-size:24px}
+.cs-float:hover{transform:scale(1.08)}
+.cs-float .cs-dot{position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#ef4444;border:2px solid #fff;display:none}
+.cs-float.has-msg .cs-dot{display:block;animation:csPulse 1.5s infinite}
+@keyframes csPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
+.cs-panel{position:fixed;right:16px;bottom:160px;width:340px;max-width:calc(100vw - 32px);height:480px;max-height:calc(100vh - 200px);background:#fff;border-radius:16px;box-shadow:0 20px 60px -12px rgba(0,0,0,.25);z-index:250;display:none;flex-direction:column;overflow:hidden;border:1px solid #e5e7eb}
+.cs-panel.open{display:flex}
+.cs-header{background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.cs-header h3{margin:0;font-size:15px;font-weight:700}
+.cs-header .cs-close{background:rgba(255,255,255,.2);border:0;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.cs-msgs{flex:1;overflow-y:auto;padding:14px;background:#f9fafb;display:flex;flex-direction:column;gap:10px}
+.cs-msg{max-width:82%;padding:9px 13px;border-radius:12px;font-size:13.5px;line-height:1.5;word-break:break-word;animation:csIn .2s}
+@keyframes csIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.cs-msg.customer{align-self:flex-end;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-bottom-right-radius:4px}
+.cs-msg.admin{align-self:flex-start;background:#fff;border:1px solid #e5e7eb;border-bottom-left-radius:4px;color:#1f2937}
+.cs-msg .cs-time{display:block;font-size:10px;opacity:.6;margin-top:4px}
+.cs-input{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #e5e7eb;background:#fff;flex-shrink:0}
+.cs-input input{flex:1;padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;font-size:14px;outline:none}
+.cs-input input:focus{border-color:#10b981}
+.cs-input button{background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:0;border-radius:10px;padding:0 18px;font-weight:600;cursor:pointer;font-size:14px}
+.cs-input button:disabled{opacity:.4;cursor:not-allowed}
+.cs-tip{font-size:11px;color:#6b7280;text-align:center;padding:6px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;flex-shrink:0}
+.cs-empty{text-align:center;color:#9ca3af;font-size:13px;padding:30px 10px}
+</style>
+<button class="cs-float" id="cs-float" title="在线客服">💬<span class="cs-dot"></span></button>
+<div class="cs-panel" id="cs-panel">
+  <div class="cs-header"><h3>💬 在线客服</h3><button class="cs-close" onclick="document.getElementById('cs-panel').classList.remove('open')">×</button></div>
+  <div class="cs-tip">消息会实时推送到店主TG，店主回复后自动显示在这里</div>
+  <div class="cs-msgs" id="cs-msgs"><div class="cs-empty">有任何问题请留言，店主会尽快回复～</div></div>
+  <div class="cs-input">
+    <input id="cs-input" placeholder="输入消息…" maxlength="500" autocomplete="off">
+    <button id="cs-send" onclick="csSend()">发送</button>
+  </div>
+</div>
+<script>
+(function(){
+  var CS_KEY = 'yunfaka_chat_session';
+  var csSession = localStorage.getItem(CS_KEY);
+  if (!csSession){ csSession = 'C' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); localStorage.setItem(CS_KEY, csSession); }
+  var csPollTimer = null;
+  var csLastCount = 0;
+
+  function csEsc(s){ return String(s||'').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  window.csRender = function(msgs){
+    var box = document.getElementById('cs-msgs');
+    if (!msgs || !msgs.length){ box.innerHTML = '<div class="cs-empty">有任何问题请留言，店主会尽快回复～</div>'; return; }
+    box.innerHTML = msgs.map(function(m){
+      return '<div class="cs-msg ' + (m.role==='admin'?'admin':'customer') + '">' + csEsc(m.text) + '<span class="cs-time">' + csEsc(m.time||'') + '</span></div>';
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+    // 检测是否有新的店主回复
+    var adminCount = msgs.filter(function(m){ return m.role==='admin'; }).length;
+    if (adminCount > (window._csLastAdmin||0) && !document.getElementById('cs-panel').classList.contains('open')){
+      document.getElementById('cs-float').classList.add('has-msg');
+    }
+    window._csLastAdmin = adminCount;
+  };
+
+  window.csPoll = function(){
+    fetch('/api/chat?session=' + encodeURIComponent(csSession) + '&t=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d.ok && d.messages){ csRender(d.messages); csLastCount = d.messages.length; } })
+      .catch(function(){});
+  };
+
+  window.csSend = function(){
+    var input = document.getElementById('cs-input');
+    var text = input.value.trim();
+    if (!text) return;
+    var btn = document.getElementById('cs-send');
+    btn.disabled = true; btn.textContent = '…';
+    fetch('/api/chat', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session: csSession, text: text })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      input.value = ''; btn.disabled = false; btn.textContent = '发送';
+      if (d.ok){ csPoll(); }
+      else { alert('发送失败：' + (d.msg||'未知错误')); }
+    }).catch(function(){ btn.disabled = false; btn.textContent = '发送'; alert('网络错误'); });
+  };
+
+  document.getElementById('cs-input').addEventListener('keydown', function(e){ if (e.key==='Enter') csSend(); });
+  document.getElementById('cs-float').addEventListener('click', function(){
+    var panel = document.getElementById('cs-panel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')){
+      document.getElementById('cs-float').classList.remove('has-msg');
+      csPoll();
+      if (!csPollTimer){ csPollTimer = setInterval(csPoll, 5000); }
+      setTimeout(function(){ document.getElementById('cs-input').focus(); }, 100);
+    }
+  });
+  // 页面加载后静默拉一次（检查是否有未读回复）
+  setTimeout(csPoll, 2000);
+})();
+</script>
+
+</body> 之前
      ============================================================ -->
 <script>
 (function(){

@@ -54,10 +54,15 @@ export async function onRequest(context) {
     const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
     const nowStr = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 
+    /* ⭐ 收集已使用的tx（防重复匹配） */
+    const usedTxs = new Set();
+    (state.db.orders || []).forEach(o => { if (o.pay_tx) usedTxs.add(o.pay_tx); });
+    (state.db.recharges || []).forEach(r => { if (r.pay_tx) usedTxs.add(r.pay_tx); });
     for (const tx of (data.data || [])) {
       if (tx.type !== 'Transfer') continue;
       if (!tx.token_info || tx.token_info.address !== USDT_CONTRACT) continue;
       if (tx.to !== usdtAddress) continue;
+      if (usedTxs.has(tx.transaction_id)) continue;  /* ⭐ 已被其他订单使用，跳过 */
       const txTime = tx.block_timestamp;
       if (txTime < orderTime - 5 * 60 * 1000) continue;
       if (txTime > orderTime + 24 * 60 * 60 * 1000) continue;

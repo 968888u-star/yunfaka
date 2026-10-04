@@ -25,7 +25,8 @@ export async function onRequest(context) {
     }
     if (request.method === 'POST') {
       const body = await request.json();
-      if (body.key !== 'yunfaka-smm-sync-2026') return new Response(JSON.stringify({ ok: false, msg: 'key invalid' }), { headers: cors, status: 403 });
+      const expectedKey = env.SMM_SYNC_KEY || 'yunfaka-smm-sync-2026';
+      if (body.key !== expectedKey) return new Response(JSON.stringify({ ok: false, msg: 'key invalid' }), { headers: cors, status: 403 });
       if (!GH_TOKEN) return new Response(JSON.stringify({ ok: false, msg: '后端未配置GH_TOKEN环境变量' }), { headers: cors, status: 500 });
       const payload = { products: body.products || [], updated: Date.now(), markup: body.markup || null };
       const content = btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2))));

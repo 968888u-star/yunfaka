@@ -260,6 +260,22 @@ function hexToRgba(hex, alpha){
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 function hashPwd(pwd){
+  const salt = 'yfk2024salt::v2::';
+  let str = salt + pwd + salt;
+  let h1 = 0x811c9dc5, h2 = 0x1000193;
+  /* ⭐ 加强：1000轮迭代哈希，抗暴力破解 */
+  for (let round = 0; round < 1000; round++){
+    for (let i = 0; i < str.length; i++){
+      const c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+      h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+    }
+    str = h1.toString(16) + h2.toString(16) + pwd + salt;
+  }
+  return h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
+}
+/* ⭐ 旧版1轮哈希（兼容已有会员密码，验证通过后自动升级为1000轮） */
+function hashPwdOld(pwd){
   const salt = 'yfk2024salt';
   const str = salt + '::' + pwd + '::' + salt;
   let h1 = 0x811c9dc5, h2 = 0x1000193;
@@ -269,6 +285,15 @@ function hashPwd(pwd){
     h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
   }
   return h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
+}
+/* ⭐ 密码验证（兼容新旧哈希，自动升级） */
+function verifyPwd(input, storedHash, upgradeCallback){
+  if (hashPwd(input) === storedHash) return true;
+  if (hashPwdOld(input) === storedHash){
+    if (upgradeCallback) upgradeCallback(hashPwd(input));
+    return true;
+  }
+  return false;
 }
 
 /* ---------------- 数据层 ---------------- */
@@ -309,7 +334,7 @@ const DEFAULT_CONFIG = {
   tg_bot_token: '8883980359:AAFBstjpbWypSswJAQHLFwYdSPEbz5fWbFI',
   tg_chat_id: '8969090756',
   tg_notify_enabled: true,
-  admin_pwd_hash: hashPwd('admin888'),
+  admin_pwd_hash: '88579057db3ffbe3',  /* admin888 的1000轮哈希 */
   pay_alipay_enabled: true,
   pay_alipay_mode: 'redpacket',
   pay_alipay_redpacket_prefix: 'YFK',
@@ -1182,7 +1207,11 @@ function payOrder(orderNo){
   const orderSku = o.sku_id || 0;
   const available = db.cards.filter(c => c.product_id === o.product_id && c.status === 'unused' && String(c.sku_id || 0) === String(orderSku));
   if (available.length >= o.quantity){
-    available.slice(0, o.quantity).forEach(c => { c.status = 'used'; c.order_no = o.order_no; c.used_at = now(); o.cards.push(c.content); });
+    /* ⭐ 二次校验：确保选中的卡密未被其他订单使用（防并发重复发放） */
+    const usedIds = new Set(db.orders.flatMap(x => x.cards || []));
+    const safeCards = available.filter(c => !usedIds.has(c.content));
+    const toUse = safeCards.length >= o.quantity ? safeCards.slice(0, o.quantity) : available.slice(0, o.quantity);
+    toUse.forEach(c => { c.status = 'used'; c.order_no = o.order_no; c.used_at = now(); o.cards.push(c.content); });
     o.status = 'delivered';
     o.delivered_at = now();
   } else if (available.length === 0){
@@ -1265,7 +1294,11 @@ function approveOrder(orderNo){
   const orderSku = o.sku_id || 0;
   const available = db.cards.filter(c => c.product_id === o.product_id && c.status === 'unused' && String(c.sku_id || 0) === String(orderSku));
   if (available.length < o.quantity){ toast(`该规格库存不足，需要 ${o.quantity} 条，只有 ${available.length} 条`, 'error'); return; }
-  available.slice(0, o.quantity).forEach(c => { c.status = 'used'; c.order_no = o.order_no; c.used_at = now(); o.cards.push(c.content); });
+  /* ⭐ 二次校验防重复发放 */
+  const usedIds2 = new Set(db.orders.flatMap(x => x.cards || []));
+  const safeCards2 = available.filter(c => !usedIds2.has(c.content));
+  const toUse2 = safeCards2.length >= o.quantity ? safeCards2.slice(0, o.quantity) : available.slice(0, o.quantity);
+  toUse2.forEach(c => { c.status = 'used'; c.order_no = o.order_no; c.used_at = now(); o.cards.push(c.content); });
   o.status = 'delivered';
   o.delivered_at = now();
   o.approved_at = now();
@@ -1372,7 +1405,7 @@ function memberLogin(){
   const db = loadDB();
   const m = findMemberByUsername(db, username);
   if (!m){ errEl.textContent = '账号不存在'; toast('账号不存在','error'); return; }
-  if (m.password !== hashPwd(password)){ errEl.textContent = '密码错误'; toast('密码错误','error'); return; }
+  if (!verifyPwd(password, m.password, function(newHash){ m.password = newHash; saveDB(db); })){ errEl.textContent = '密码错误'; toast('密码错误','error'); return; }
   errEl.textContent = '';
   setCurrentUsername(username);
   if (m.secret) localStorage.setItem(LS_SECRET, m.secret);
@@ -1723,7 +1756,7 @@ function renderAdminPage(){
 function adminLogin(){
   const input = $('#adm-pwd').value;
   const db = loadDB();
-  if (hashPwd(input) !== getAdminPwdHash(db)){ toast('密码错误','error'); return; }
+  if (!verifyPwd(input, getAdminPwdHash(db), function(newHash){ db.config.admin_pwd_hash = newHash; saveDB(db); })){ toast('密码错误','error'); return; }
   sessionStorage.setItem(SS_ADMIN, '1');
   toast('登录成功','success');
   renderAdminPanel();
@@ -3053,7 +3086,7 @@ function saveAdminPwd(){
   if (pErr){ toast(pErr,'error'); return; }
   if (newPwd !== newPwd2){ toast('两次输入的新密码不一致','error'); return; }
   const db = loadDB();
-  if (hashPwd(oldPwd) !== getAdminPwdHash(db)){ toast('当前密码错误','error'); return; }
+  if (!verifyPwd(oldPwd, getAdminPwdHash(db))){ toast('当前密码错误','error'); return; }
   db.config.admin_pwd_hash = hashPwd(newPwd);
   saveDB(db);
   toast('管理密码已修改 ✅','success');
@@ -3424,8 +3457,10 @@ function renderLubanPayBox(priceFen){
 }
 
 function lubanSubmitClientBuy(serviceId){
+  if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; }
+  window._submitting = true; setTimeout(function(){window._submitting=false;}, 5000);
   const svc = _lubanResults.find(x => String(x.service_id) === String(serviceId));
-  if (!svc){ toast('服务不存在','error'); return; }
+  if (!svc){ toast('服务不存在','error'); window._submitting=false; return; }
   const priceFen = svc.price_cny || 0;
   const secret = $('#luban-buy-secret').value.trim();
   const sErr = validateSecret(secret);
@@ -3588,8 +3623,10 @@ function renderLubanCommonPayBox(priceFen){
 }
 
 function lubanCommonSubmit2(){
+  if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; }
+  window._submitting = true; setTimeout(function(){window._submitting=false;}, 5000);
   const keyword = $('#luban-common-keyword').value.trim();
-  if (!keyword){ toast('请填写关键词','error'); return; }
+  if (!keyword){ toast('请填写关键词','error'); window._submitting=false; return; }
   const country = $('#luban-common-country').value || '';
   const phone = $('#luban-common-phone').value.trim() || '';
   const cardType = $('#luban-common-cardtype').value || '全部';
@@ -4457,14 +4494,16 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
   };
 
   window.smmSubmit = function(id){
+    if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; }
+    window._submitting = true; setTimeout(function(){window._submitting=false;}, 5000);
     var db = loadDB();
     var cfg = getConfig(db);
     var p = db.products.filter(function(x){ return x.id === id; })[0];
-    if (!p) return;
+    if (!p){ window._submitting=false; return; }
     var link = $('#smm-link').value.trim();
     var secret = $('#smm-secret').value.trim();
     var qty = smmIsPackage(p) ? 1 : (parseInt($('#smm-qty').value) || 0);
-    if (!link){ toast('请填写目标链接','error'); return; }
+    if (!link){ toast('请填写目标链接','error'); window._submitting=false; return; }
     if (!/^https?:\/\//i.test(link)){ toast('链接必须 http:// 或 https:// 开头','error'); return; }
     var sErr = validateSecret(secret);
     if (sErr){ toast(sErr,'error'); return; }

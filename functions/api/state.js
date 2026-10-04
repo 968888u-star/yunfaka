@@ -21,6 +21,14 @@ export async function onRequest(context) {
 
   if (request.method === 'POST') {
     try {
+      /* ⭐ 可选鉴权：若配置了ACCESS_TOKEN环境变量则校验 */
+      const token = env.ACCESS_TOKEN || '';
+      if (token) {
+        const clientToken = request.headers.get('x-access-token') || request.headers.get('X-Access-Token') || '';
+        if (clientToken !== token) {
+          return Response.json({ ok: false, msg: '无权限写入' }, { status: 403, headers: corsHeaders });
+        }
+      }
       const body = await request.json();
       if (!body || !body.db) throw new Error('bad');
 

@@ -1053,6 +1053,17 @@ function approveRecharge(id){
   else toast('处理失败','error');
 }
 
+function cancelOrderRefund(orderNo){
+  if (!confirm('确定取消订单？已抵扣的余额 ¥' + yuan((loadDB().orders.filter(function(x){return x.order_no===orderNo;})[0]||{}).balance_used || 0) + ' 将退回到会员账户。')) return;
+  var db = loadDB();
+  var o = db.orders.filter(function(x){return x.order_no===orderNo;})[0];
+  if (!o || o.status !== 'pending'){ toast('订单状态不允许取消','error'); return; }
+  if (o.balance_used && o.balance_used > 0){ addBalance(db, o.username, o.balance_used); }
+  o.status = 'rejected'; o.completed_at = now();
+  saveDB(db);
+  toast('订单已取消，余额已退还','success');
+  route();
+}
 function payOrder(orderNo){
   const db = loadDB();
   const o = db.orders.filter(x => x.order_no === orderNo)[0];
@@ -1302,7 +1313,7 @@ function saveFindPwd(username){
   authTab = 'login';
   renderAuthPage();
 }
-function memberLogout(){ setCurrentUsername(''); toast('已退出登录'); route(); }
+function memberLogout(){ setCurrentUsername(''); try{localStorage.removeItem('LS_SECRET');}catch(e){} toast('已退出登录'); route(); }
 
 function renderMemberDashboard(member){
   const db = loadDB();

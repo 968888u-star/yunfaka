@@ -4906,5 +4906,558 @@ window.yfOpenAlipayRedpacket = yfOpenAlipayRedpacket;
               'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     加固补丁 v2 · 全面修复 + TG 机器人联动升级
+     粘贴位置：紧跟在"加固补丁 v1"之后，</body> 之前
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+if (!window.loadDB || !window.saveDB){
+  console.warn('[Patch v2] 核心 API 未就绪'); return;
+}
+
+/* ---------- 局部工具 ---------- */
+var _toast = function(m,t){ try{ if(window.toast) window.toast(m,t||''); }catch(e){} };
+var _now = function(){
+  var d=new Date(),p=function(n){return String(n).padStart(2,'0');};
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+
+         p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+};
+var _yuan = function(fen){ return (Number(fen||0)/100).toFixed(2); };
+var _esc  = function(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+};
+
+/* ============================================================
+   [1] 订单号唯一性保障（时间戳 + 6位随机 + 存在性检查）
+   ============================================================ */
+(function(){
+  var orig = window.genOrderNo;
+  window.genOrderNo = function(){
+    var db = null;
+    try { db = window.loadDB(); } catch(e){}
+    var existing = {};
+    if (db && db.orders) db.orders.forEach(function(o){ existing[o.order_no] = true; });
+    for (var i = 0; i < 20; i++){
+      var d = new Date(), p = function(n){ return String(n).padStart(2,'0'); };
+      var no = d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())
+             + p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())
+             + Math.floor(Math.random()*900000+100000);
+      if (!existing[no]) return no;
+    }
+    return orig ? orig() : ('O'+Date.now()+Math.floor(Math.random()*10000));
+  };
+})();
+
+/* ============================================================
+   [2] TG 机器人通知增强（兼容旧 body {order_no}）
+       新结构：{ type, order_no, order:{...}, buyer_chat_id, site_name }
+   ============================================================ */
+window.yfTgNotify = function(payload){
+  var cfg = {};
+  try { cfg = window.loadDB().config || {}; } catch(e){}
+  if (!cfg.tg_notify_enabled){
+    console.log('[TG] 未启用通知，跳过');
+    return;
+  }
+  if (!cfg.tg_bot_token || !cfg.tg_chat_id){
+    console.warn('[TG] 未配置 Bot Token / Chat ID');
+    return;
+  }
+
+  var body;
+  if (typeof payload === 'string') body = { type: 'order', order_no: payload };
+  else body = Object.assign({ type: 'order' }, payload || {});
+
+  /* 订单事件：附加详情，并校验订单存在（过滤掉 _recharge_success 之类的脏 ID） */
+  if (body.order_no){
+    var db = null, found = null;
+    try { db = window.loadDB(); } catch(e){}
+    if (db){
+      found = db.orders.find(function(x){ return x.order_no === body.order_no; });
+    }
+    if (body.type === 'order' && !found){
+      console.log('[TG] 未知订单号，跳过通知:', body.order_no);
+      return;
+    }
+    if (found){
+      body.order = {
+        order_no: found.order_no,
+        product: found.product_name + (found.sku_name ? ' · ' + found.sku_name : ''),
+        qty: found.quantity,
+        amount_cny: _yuan(found.amount),
+        amount_usdt: window.orderUsdt ? window.orderUsdt(found.amount, found) : (found.amount/100/7.2).toFixed(2),
+        due_cny: _yuan(found.amount_due),
+        due_usdt: window.orderUsdt ? window.orderUsdt(found.amount_due, found) : (found.amount_due/100/7.2).toFixed(2),
+        balance_used_cny: _yuan(found.balance_used || 0),
+        pay_method: found.pay_method,
+        secret: found.secret,
+        username: found.username || '匿名',
+        status: found.status,
+        source: found.source,
+        created_at: found.created_at,
+        submitted_at: found.submitted_at || '',
+        rp_code: found.redpacket_code || '',
+        link: found.smm_link || found.luban_number || '',
+        keyword: found.luban_keyword || ''
+      };
+      /* 会员 TG chat_id */
+      if (found.username && db.members){
+        var m = db.members.find(function(x){ return x.username === found.username; });
+        if (m && m.tg_chat_id) body.buyer_chat_id = m.tg_chat_id;
+      }
+    }
+  }
+  try { body.site_name = (window.loadDB().config||{}).site_name || '云发卡'; } catch(e){}
+
+  fetch('/api/tg-notify', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d && d.ok) console.log('[TG] 已发送:', body.type, body.order_no || '');
+    else console.warn('[TG] 发送失败:', d && d.msg);
+  })
+  .catch(function(e){ console.warn('[TG] 网络异常:', e); });
+};
+
+/* 向后兼容：原代码里的 notifyTg(orderNo) 调用 */
+window.notifyTg = function(orderNo){ window.yfTgNotify(orderNo); };
+
+/* ============================================================
+   [3] 会员系统升级 · TG Chat ID 绑定面板
+   ============================================================ */
+(function(){
+  var orig = window.renderMemberDashboard;
+  if (typeof orig !== 'function') return;
+
+  window.renderMemberDashboard = function(member){
+    orig.apply(this, arguments);
+    var app = document.getElementById('app');
+    if (!app) return;
+    var old = document.getElementById('yf-tg-bind-panel');
+    if (old) old.remove();
+
+    var panel = document.createElement('div');
+    panel.id = 'yf-tg-bind-panel';
+    panel.className = 'card panel';
+    panel.style.marginBottom = '14px';
+    panel.innerHTML =
+      '<div class="spread" style="margin-bottom:10px">' +
+        '<h2 style="margin:0">🤖 Telegram 通知绑定</h2>' +
+        '<span class="badge ' + (member.tg_chat_id ? 'ok' : 'gray') + '">' +
+          (member.tg_chat_id ? '已绑定' : '未绑定') + '</span>' +
+      '</div>' +
+      '<p class="muted" style="font-size:12px;margin-top:-4px;line-height:1.7">' +
+        '绑定后，新订单、充值到账、发货完成等状态变化会通过商家机器人推送到你的 TG。' +
+      '</p>' +
+      '<label class="field"><span>Telegram Chat ID</span>' +
+        '<input id="yf-tg-chatid" placeholder="例如：123456789 或 -1001234567890" value="' + _esc(member.tg_chat_id||'') + '">' +
+      '</label>' +
+      '<p class="muted" style="font-size:12px;margin-top:-6px">' +
+        '💡 不知道 Chat ID？私聊 Telegram 上的 <b>@userinfobot</b>，它会返回你的数字 ID。' +
+      '</p>' +
+      '<div class="row" style="justify-content:flex-end;gap:8px">' +
+        '<button class="btn ghost sm" onclick="yfTgSendTest()">发送测试消息</button>' +
+        '<button class="btn primary sm" onclick="yfTgSaveBinding()">保存绑定</button>' +
+      '</div>';
+
+    var firstPanel = app.querySelector('.card.panel');
+    if (firstPanel && firstPanel.parentNode) firstPanel.parentNode.insertBefore(panel, firstPanel);
+    else app.appendChild(panel);
+  };
+
+  window.yfTgSaveBinding = function(){
+    var el = document.getElementById('yf-tg-chatid');
+    if (!el) return;
+    var val = el.value.trim();
+    var u = localStorage.getItem('yunfaka_member_user');
+    if (!u){ _toast('请先登录','error'); return; }
+    if (val && !/^-?\d{5,20}$/.test(val)){ _toast('Chat ID 格式不正确（纯数字，可带负号）','error'); return; }
+    var db = window.loadDB();
+    var m = db.members.find(function(x){ return x.username === u; });
+    if (!m){ _toast('会员不存在','error'); return; }
+    m.tg_chat_id = val;
+    window.saveDB(db);
+    _toast(val ? 'TG 绑定成功' : '已解绑','success');
+    if (window.route) window.route();
+  };
+
+  window.yfTgSendTest = function(){
+    var el = document.getElementById('yf-tg-chatid');
+    if (!el) return;
+    var val = el.value.trim();
+    if (!val){ _toast('请先填写 Chat ID','error'); return; }
+    var cfg = window.loadDB().config || {};
+    if (!cfg.tg_bot_token){ _toast('商家未配置 Bot Token','error'); return; }
+    _toast('正在发送测试…');
+    fetch('https://api.telegram.org/bot' + cfg.tg_bot_token + '/sendMessage', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        chat_id: val,
+        text: '✅ ' + (cfg.site_name||'云发卡') + ' 通知绑定测试成功！\n\n以后订单/充值状态变化会推送到这里。'
+      })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) _toast('测试消息已发送 ✅','success');
+      else _toast('发送失败：' + (d.description||'未知错误'),'error');
+    }).catch(function(){ _toast('网络错误（可能无法访问 TG）','error'); });
+  };
+})();
+
+/* ============================================================
+   [4] 事件埋点 · 让 TG 机器人"活"起来
+   ============================================================ */
+
+/* 4.1 新会员注册 → 店主通知 */
+(function(){
+  var orig = window.memberRegister;
+  if (typeof orig !== 'function') return;
+  window.memberRegister = function(){
+    var before = window.loadDB().members.length;
+    var r = orig.apply(this, arguments);
+    var db = window.loadDB();
+    if (db.members.length > before){
+      var m = db.members[db.members.length-1];
+      window.yfTgNotify({
+        type: 'member_new',
+        username: m.username,
+        secret: m.secret,
+        created_at: m.created_at,
+        total_members: db.members.length
+      });
+    }
+    return r;
+  };
+})();
+
+/* 4.2 充值到账 → 通知（替换原来奇怪的 _recharge_success 串） */
+(function(){
+  var orig = window.processRecharge;
+  if (typeof orig !== 'function') return;
+  window.processRecharge = function(id){
+    var ok = orig.apply(this, arguments);
+    if (ok){
+      try {
+        var db = window.loadDB();
+        var r = db.recharges.find(function(x){ return x.id === id; });
+        if (r){
+          window.yfTgNotify({
+            type: 'recharge_success',
+            recharge_id: r.id,
+            username: r.username,
+            amount_cny: _yuan(r.amount),
+            amount_usdt: window.orderUsdt ? window.orderUsdt(r.amount, r) : (r.amount/100/7.2).toFixed(2),
+            method: r.method,
+            bonus_cny: r.bonus_amount ? _yuan(r.bonus_amount) : ''
+          });
+        }
+      } catch(e){}
+    }
+    return ok;
+  };
+})();
+
+/* 4.3 客户点"我已完成发送/转账" → 店主通知（含红包口令） */
+(function(){
+  var orig = window.confirmPay;
+  if (typeof orig !== 'function') return;
+  window.confirmPay = function(type, id){
+    var r = orig.apply(this, arguments);
+    if (type === 'order'){
+      try {
+        var db = window.loadDB();
+        var o = db.orders.find(function(x){ return x.order_no === id; });
+        if (o && o.status === 'pending_review'){
+          window.yfTgNotify({ type: 'order_review', order_no: id });
+        }
+      } catch(e){}
+    }
+    return r;
+  };
+})();
+
+/* 4.4 订单发货 / 缺货 / 接码失败 → 通知 */
+(function(){
+  var orig = window.payOrder;
+  if (typeof orig !== 'function') return;
+  window.payOrder = function(orderNo){
+    var dbBefore = window.loadDB();
+    var oBefore = dbBefore.orders.find(function(x){ return x.order_no === orderNo; });
+    var prev = oBefore && oBefore.status;
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var db = window.loadDB();
+        var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+        if (!o || o.status === prev) return;
+        if (o.status === 'delivered')      window.yfTgNotify({ type: 'order_delivered', order_no: orderNo });
+        else if (o.status === 'out_of_stock') window.yfTgNotify({ type: 'order_oos',       order_no: orderNo });
+        else if (o.status === 'luban_error')  window.yfTgNotify({ type: 'order_failed',    order_no: orderNo });
+      } catch(e){}
+    }, 1500);
+    return r;
+  };
+})();
+
+/* ============================================================
+   [5] 客户端 payOrder 防护 + USDT 可信标记
+   ============================================================ */
+/* 5.1 让 startUsdtPolling 打"可信"标记 */
+(function(){
+  var orig = window.startUsdtPolling;
+  if (typeof orig !== 'function') return;
+  window.startUsdtPolling = function(orderNo){
+    window._yfTrustedPayments = window._yfTrustedPayments || {};
+    window._yfTrustedPayments[orderNo] = Date.now();
+    return orig.apply(this, arguments);
+  };
+})();
+
+/* 5.2 payOrder 合法性检查 */
+(function(){
+  var orig = window.payOrder;
+  if (typeof orig !== 'function') return;
+  window.payOrder = function(orderNo){
+    var db = window.loadDB();
+    var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+    if (o && o.status === 'pending'){
+      var trusted = window._yfTrustedPayments && window._yfTrustedPayments[orderNo]
+                 && (Date.now() - window._yfTrustedPayments[orderNo] < 10 * 60 * 1000);
+      var legitimate = (o.amount_due <= 0) || o.usdt_notified_at || o.pay_tx || trusted;
+      if (!legitimate){
+        console.warn('[Guard] 拦截未经确认支付的 payOrder:', orderNo);
+        return;
+      }
+    }
+    return orig.apply(this, arguments);
+  };
+})();
+
+/* ============================================================
+   [6] 店主概览 · 退款统计卡片
+   ============================================================ */
+(function(){
+  var orig = window.renderStats;
+  if (typeof orig !== 'function') return;
+  window.renderStats = function(){
+    orig.apply(this, arguments);
+    try {
+      var db = window.loadDB();
+      var total = 0, count = 0;
+      (db.orders || []).forEach(function(o){
+        if (o.refunded_amount > 0){ total += o.refunded_amount; count++; }
+      });
+      if (!count) return;
+      var body = document.getElementById('tab-body');
+      if (!body) return;
+      var extra = document.createElement('div');
+      extra.className = 'card panel';
+      extra.style.marginTop = '14px';
+      extra.innerHTML =
+        '<h2>💸 退款统计</h2>' +
+        '<div class="stat-grid">' +
+          '<div class="stat"><div class="n" style="color:#b45309">' + count + '</div><div class="l">退款订单数</div></div>' +
+          '<div class="stat"><div class="n" style="color:#b45309">' + window.usdt(total) + '</div><div class="l">累计退款(USDT)</div></div>' +
+        '</div>' +
+        '<p class="muted" style="font-size:12px;margin-top:10px">注：退款仅返还会员余额抵扣部分，链上/USDT 真实支付请到后台手动处理。</p>';
+      body.appendChild(extra);
+    } catch(e){}
+  };
+})();
+
+/* ============================================================
+   [7] 客户端订单页 · 退款徽章 + 稳健插入
+   ============================================================ */
+(function(){
+  var orig = window.renderOrderView;
+  if (typeof orig !== 'function') return;
+  window.renderOrderView = function(orderNo, secret){
+    var r = orig.apply(this, arguments);
+    try {
+      var db = window.loadDB();
+      var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+      if (!o || !o.refunded_at || !(o.refunded_amount > 0)) return r;
+      var app = document.getElementById('app');
+      if (!app) return r;
+      var old = document.getElementById('yf-refund-badge');
+      if (old) old.remove();
+      var badge = document.createElement('div');
+      badge.id = 'yf-refund-badge';
+      badge.className = 'card panel';
+      badge.style.cssText = 'max-width:640px;margin:12px auto;background:#ecfdf5;border-color:#6ee7b7;color:#065f46;font-size:13px;line-height:1.7';
+      var usdtAmt = window.orderUsdt ? window.orderUsdt(o.refunded_amount, o) : (o.refunded_amount/100/7.2).toFixed(2);
+      badge.innerHTML = '💸 本单已退款 <b>' + usdtAmt + ' USDT</b>' +
+                        '，原因：' + _esc(o.refund_reason || '订单取消') +
+                        '（' + _esc(o.refunded_at) + '）';
+      var first = app.firstElementChild;
+      if (first && first.nextSibling) first.parentNode.insertBefore(badge, first.nextSibling);
+      else app.insertBefore(badge, app.firstChild);
+    } catch(e){}
+    return r;
+  };
+})();
+
+/* ============================================================
+   [8] 后台订单列表 · 已退款行高亮 + 徽章
+   ============================================================ */
+(function(){
+  var orig = window.renderOrders;
+  if (typeof orig !== 'function') return;
+  window.renderOrders = function(){
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var db = window.loadDB();
+        var body = document.getElementById('tab-body');
+        if (!body) return;
+        body.querySelectorAll('tbody tr').forEach(function(tr){
+          var cell = tr.querySelector('td.mono');
+          if (!cell) return;
+          var no = cell.textContent.trim();
+          var o = db.orders.find(function(x){ return x.order_no === no; });
+          if (o && o.refunded_at){
+            tr.style.background = '#f0fdf4';
+            var td = tr.querySelector('td:last-child');
+            if (td && td.innerHTML.indexOf('已退款') < 0){
+              td.insertAdjacentHTML('afterbegin',
+                '<span class="badge" style="background:#d1fae5;color:#065f46;margin-right:4px">已退款</span>');
+            }
+          }
+        });
+      } catch(e){}
+    }, 0);
+    return r;
+  };
+})();
+
+/* ============================================================
+   [9] 店主 · 一键导出订单 CSV（UTF-8 BOM 防 Excel 乱码）
+   ============================================================ */
+window.yfExportOrdersCsv = function(){
+  try {
+    var db = window.loadDB();
+    var orders = db.orders || [];
+    if (!orders.length){ _toast('没有订单可导出','error'); return; }
+    var headers = ['订单号','商品','规格','数量','金额(元)','已抵扣(元)','应收(元)',
+                   '支付方式','暗号','账号','状态','来源','红包口令',
+                   '创建时间','完成时间','退款时间','退款金额(元)'];
+    var lines = [headers.join(',')];
+    orders.forEach(function(o){
+      var row = [
+        o.order_no, o.product_name, o.sku_name || '', o.quantity,
+        _yuan(o.amount), _yuan(o.balance_used||0), _yuan(o.amount_due||0),
+        o.pay_method, o.secret, o.username || '', o.status, o.source || '',
+        o.redpacket_code || '', o.created_at, o.delivered_at || '',
+        o.refunded_at || '', _yuan(o.refunded_amount||0)
+      ].map(function(v){
+        var s = String(v==null?'':v);
+        if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"';
+        return s;
+      });
+      lines.push(row.join(','));
+    });
+    var csv = '\ufeff' + lines.join('\r\n');
+    var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'orders_' + _now().replace(/[^\d]/g,'') + '.csv';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 500);
+    _toast('已导出 ' + orders.length + ' 条订单','success');
+  } catch(e){ _toast('导出失败：' + e.message,'error'); }
+};
+
+/* 在订单页注入"导出 CSV"按钮 */
+(function(){
+  var orig = window.renderOrders;
+  if (typeof orig !== 'function') return;
+  window.renderOrders = function(){
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var body = document.getElementById('tab-body');
+        if (!body) return;
+        var head = body.querySelector('.spread');
+        if (!head || head.querySelector('.yf-export-btn')) return;
+        var btn = document.createElement('button');
+        btn.className = 'btn ghost sm yf-export-btn';
+        btn.textContent = '📥 导出 CSV';
+        btn.onclick = window.yfExportOrdersCsv;
+        var rowDiv = head.querySelector('.row');
+        if (rowDiv) rowDiv.insertBefore(btn, rowDiv.firstChild);
+        else head.appendChild(btn);
+      } catch(e){}
+    }, 0);
+    return r;
+  };
+})();
+
+/* ============================================================
+   [10] 清除接码客户端渲染缓存（saveDB 后不再卡 200ms 判断）
+   ============================================================ */
+(function(){
+  var orig = window.saveDB;
+  if (typeof orig !== 'function') return;
+  window.saveDB = function(db){
+    window._lubanCache = 0;
+    window._lastLubanRenderAt = 0;
+    window._lastLubanRenderTab = '';
+    return orig.apply(this, arguments);
+  };
+})();
+
+/* ============================================================
+   [11] SMM 分类名保存时剥离危险字符（防 HTML 注入）
+   ============================================================ */
+(function(){
+  var orig = window.smmSaveCats;
+  if (typeof orig !== 'function') return;
+  window.smmSaveCats = function(){
+    var el = document.getElementById('smm-cats-text');
+    if (el){
+      el.value = el.value.split('\n').map(function(s){
+        return s.replace(/[<>"'&]/g,'').trim();
+      }).filter(Boolean).join('\n');
+    }
+    return orig.apply(this, arguments);
+  };
+})();
+
+/* ============================================================
+   [12] 后台页面恢复可见 · 刷新"待审核"红徽章
+   ============================================================ */
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden) return;
+  if (location.hash.indexOf('/admin') !== 0) return;
+  try {
+    var db = window.loadDB();
+    var n = (db.orders || []).filter(function(o){ return o.status === 'pending_review'; }).length;
+    document.querySelectorAll('.tabs button').forEach(function(b){
+      if (b.dataset.tab !== 'pending') return;
+      var badge = b.querySelector('.nb');
+      if (n > 0){
+        if (!badge){
+          badge = document.createElement('span');
+          badge.className = 'nb';
+          b.appendChild(badge);
+        }
+        badge.textContent = n;
+      } else if (badge) badge.remove();
+    });
+  } catch(e){}
+});
+
+console.log('%c[YunFaKa Patch v2] 全面加固 + TG 机器人联动升级 完成',
+            'color:#6366f1;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

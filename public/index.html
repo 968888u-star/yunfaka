@@ -2214,6 +2214,7 @@ function renderMembers(){
       <button class="btn sm ghost" onclick="adjustBalance('${esc(m.username)}',-100)">-1元</button>
       <button class="btn sm ghost" onclick="openAdjustBalance('${esc(m.username)}')">调整</button>
       <button class="btn sm ghost" onclick="openResetPwd('${esc(m.username)}')">改密</button>
+      <button class="btn sm ${m.tg_chat_id?'primary':'ghost'}" onclick="openTgBind('${esc(m.username)}')" title="${m.tg_chat_id?'已绑定 '+m.tg_chat_id:'未绑定TG'}">TG${m.tg_chat_id?'✓':''}</button>
       <button class="btn sm danger" onclick="deleteMember('${esc(m.username)}')">删除</button>
     </td>
   </tr>`).join('') : '<tr><td colspan="5" class="empty">暂无会员</td></tr>';
@@ -2294,6 +2295,51 @@ function deleteMember(username){
   saveDB(db);
   toast('会员已删除','success');
   renderMembers();
+}
+
+function openTgBind(username){
+  const db = loadDB();
+  const m = findMemberByUsername(db, username);
+  if (!m) return;
+  openModal(`<h3>Telegram 通知绑定</h3>
+    <div class="kv"><span class="k">账号</span><span class="v">${esc(username)}</span></div>
+    <div class="kv" style="margin-bottom:14px"><span class="k">当前状态</span><span class="v">${m.tg_chat_id ? '<span class="badge ok">已绑定 '+esc(m.tg_chat_id)+'</span>' : '<span class="badge gray">未绑定</span>'}</span></div>
+    <label class="field"><span>Telegram Chat ID（留空=解绑）</span>
+      <input id="tg-chatid-input" placeholder="例如：123456789 或 -1001234567890" value="${esc(m.tg_chat_id||'')}"></label>
+    <p class="muted" style="font-size:12px;margin-top:-6px;line-height:1.7">💡 会员私聊 Telegram 上的 <b>@userinfobot</b> 可获取其数字 ID。绑定后订单/充值状态变化会推送到该会员的 TG。</p>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <button class="btn ghost" onclick="closeModal()">取消</button>
+      <button class="btn ghost" onclick="tgSendTest('${esc(username)}')">发送测试</button>
+      <button class="btn primary" onclick="saveTgBind('${esc(username)}')">保存</button>
+    </div>`);
+}
+function saveTgBind(username){
+  const el = document.getElementById('tg-chatid-input');
+  const val = el ? el.value.trim() : '';
+  if (val && !/^-?\d{5,20}$/.test(val)){ toast('Chat ID 格式不正确（纯数字，可带负号）','error'); return; }
+  const db = loadDB();
+  const m = findMemberByUsername(db, username);
+  if (!m) return;
+  m.tg_chat_id = val;
+  saveDB(db);
+  closeModal();
+  toast(val ? 'TG 绑定已保存' : '已解绑 TG','success');
+  renderMembers();
+}
+function tgSendTest(username){
+  const el = document.getElementById('tg-chatid-input');
+  const val = el ? el.value.trim() : '';
+  if (!val){ toast('请先填写 Chat ID','error'); return; }
+  const cfg = getConfig(loadDB());
+  if (!cfg.tg_bot_token){ toast('请先在「设置」里配置 Bot Token','error'); return; }
+  toast('正在发送测试…');
+  fetch('https://api.telegram.org/bot' + cfg.tg_bot_token + '/sendMessage', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ chat_id: val, text: '✅ ' + (cfg.site_name||'云发卡') + ' 通知绑定测试成功！\n\n会员账号：' + username + '\n以后订单/充值状态变化会推送到这里。' })
+  }).then(r=>r.json()).then(d=>{
+    if (d.ok) toast('测试消息已发送 ✅','success');
+    else toast('发送失败：' + (d.description||'未知错误'),'error');
+  }).catch(()=> toast('网络错误（可能无法访问 TG）','error'));
 }
 
 /* ==================================================================
@@ -5031,87 +5077,6 @@ window.yfTgNotify = function(payload){
 window.notifyTg = function(orderNo){ window.yfTgNotify(orderNo); };
 
 /* ============================================================
-   [3] 会员系统升级 · TG Chat ID 绑定面板
-   ============================================================ */
-(function(){
-  var orig = window.renderMemberDashboard;
-  if (typeof orig !== 'function') return;
-
-  window.renderMemberDashboard = function(member){
-    orig.apply(this, arguments);
-    var app = document.getElementById('app');
-    if (!app) return;
-    var old = document.getElementById('yf-tg-bind-panel');
-    if (old) old.remove();
-
-    var panel = document.createElement('div');
-    panel.id = 'yf-tg-bind-panel';
-    panel.className = 'card panel';
-    panel.style.marginBottom = '14px';
-    panel.innerHTML =
-      '<div class="spread" style="margin-bottom:10px">' +
-        '<h2 style="margin:0">🤖 Telegram 通知绑定</h2>' +
-        '<span class="badge ' + (member.tg_chat_id ? 'ok' : 'gray') + '">' +
-          (member.tg_chat_id ? '已绑定' : '未绑定') + '</span>' +
-      '</div>' +
-      '<p class="muted" style="font-size:12px;margin-top:-4px;line-height:1.7">' +
-        '绑定后，新订单、充值到账、发货完成等状态变化会通过商家机器人推送到你的 TG。' +
-      '</p>' +
-      '<label class="field"><span>Telegram Chat ID</span>' +
-        '<input id="yf-tg-chatid" placeholder="例如：123456789 或 -1001234567890" value="' + _esc(member.tg_chat_id||'') + '">' +
-      '</label>' +
-      '<p class="muted" style="font-size:12px;margin-top:-6px">' +
-        '💡 不知道 Chat ID？私聊 Telegram 上的 <b>@userinfobot</b>，它会返回你的数字 ID。' +
-      '</p>' +
-      '<div class="row" style="justify-content:flex-end;gap:8px">' +
-        '<button class="btn ghost sm" onclick="yfTgSendTest()">发送测试消息</button>' +
-        '<button class="btn primary sm" onclick="yfTgSaveBinding()">保存绑定</button>' +
-      '</div>';
-
-    var firstPanel = app.querySelector('.card.panel');
-    if (firstPanel && firstPanel.parentNode) firstPanel.parentNode.insertBefore(panel, firstPanel);
-    else app.appendChild(panel);
-  };
-
-  window.yfTgSaveBinding = function(){
-    var el = document.getElementById('yf-tg-chatid');
-    if (!el) return;
-    var val = el.value.trim();
-    var u = localStorage.getItem('yunfaka_member_user');
-    if (!u){ _toast('请先登录','error'); return; }
-    if (val && !/^-?\d{5,20}$/.test(val)){ _toast('Chat ID 格式不正确（纯数字，可带负号）','error'); return; }
-    var db = window.loadDB();
-    var m = db.members.find(function(x){ return x.username === u; });
-    if (!m){ _toast('会员不存在','error'); return; }
-    m.tg_chat_id = val;
-    window.saveDB(db);
-    _toast(val ? 'TG 绑定成功' : '已解绑','success');
-    if (window.route) window.route();
-  };
-
-  window.yfTgSendTest = function(){
-    var el = document.getElementById('yf-tg-chatid');
-    if (!el) return;
-    var val = el.value.trim();
-    if (!val){ _toast('请先填写 Chat ID','error'); return; }
-    var cfg = window.loadDB().config || {};
-    if (!cfg.tg_bot_token){ _toast('商家未配置 Bot Token','error'); return; }
-    _toast('正在发送测试…');
-    fetch('https://api.telegram.org/bot' + cfg.tg_bot_token + '/sendMessage', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        chat_id: val,
-        text: '✅ ' + (cfg.site_name||'云发卡') + ' 通知绑定测试成功！\n\n以后订单/充值状态变化会推送到这里。'
-      })
-    }).then(function(r){ return r.json(); }).then(function(d){
-      if (d.ok) _toast('测试消息已发送 ✅','success');
-      else _toast('发送失败：' + (d.description||'未知错误'),'error');
-    }).catch(function(){ _toast('网络错误（可能无法访问 TG）','error'); });
-  };
-})();
-
-/* ============================================================
    [4] 事件埋点 · 让 TG 机器人"活"起来
    ============================================================ */
 
@@ -5475,55 +5440,6 @@ var _now = function(){ var d=new Date(),p=function(n){return String(n).padStart(
   return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); };
 var _yuan = function(fen){ return (Number(fen||0)/100).toFixed(2); };
 var _uid  = function(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); };
-
-/* ============================================================
-   [C1] 首页商城 · 搜索框
-   ============================================================ */
-window.yfHomeSearch = '';
-(function(){
-  var orig = window.renderHome;
-  if (typeof orig !== 'function') return;
-  window.renderHome = function(){
-    orig.apply(this, arguments);
-    try {
-      var app = document.getElementById('app');
-      if (!app || !app.querySelector('.cats')) return;   // 非首页
-      var cats = app.querySelector('.cats');
-      if (app.querySelector('#yf-home-search')) return;
-      var wrap = document.createElement('div');
-      wrap.id = 'yf-home-search';
-      wrap.style.cssText = 'margin-bottom:12px;display:flex;gap:8px';
-      wrap.innerHTML =
-        '<input id="yf-home-search-input" placeholder="🔍 搜索商品名称 / 描述" value="' + _esc(window.yfHomeSearch) + '" ' +
-        'style="flex:1;padding-left:14px" ' +
-        'onkeydown="if(event.key===\'Enter\')yfHomeSearchDo()">' +
-        '<button onclick="yfHomeSearchDo()" style="flex-shrink:0;padding:0 18px;background:#6366f1;color:#fff;border:0;border-radius:10px;font-weight:600;cursor:pointer">搜索</button>' +
-        (window.yfHomeSearch ? '<button onclick="yfHomeSearchClear()" style="flex-shrink:0;padding:0 14px;background:#eef0f6;border:0;border-radius:10px;cursor:pointer">清除</button>' : '');
-      cats.parentNode.insertBefore(wrap, cats);
-    } catch(e){}
-  };
-  window.yfHomeSearchDo = function(){
-    var el = document.getElementById('yf-home-search-input');
-    window.yfHomeSearch = el ? el.value.trim().toLowerCase() : '';
-    // 直接在现有 DOM 上过滤，避免重渲染
-    var app = document.getElementById('app');
-    var cards = app.querySelectorAll('.grid .product');
-    var hit = 0;
-    cards.forEach(function(card){
-      var t = (card.textContent || '').toLowerCase();
-      var ok = !window.yfHomeSearch || t.indexOf(window.yfHomeSearch) >= 0;
-      card.style.display = ok ? '' : 'none';
-      if (ok) hit++;
-    });
-    if (window.yfHomeSearch){
-      var grid = app.querySelector('.grid');
-      var empty = grid.querySelector('.yf-empty');
-      if (!empty){ empty = document.createElement('div'); empty.className='empty yf-empty'; empty.style.gridColumn='1/-1'; grid.appendChild(empty); }
-      empty.textContent = hit ? ('匹配 ' + hit + ' 个商品') : ('没有匹配「' + window.yfHomeSearch + '」的商品');
-    }
-  };
-  window.yfHomeSearchClear = function(){ window.yfHomeSearch = ''; window.renderHome(); };
-})();
 
 /* ============================================================
    [C2][C7] 会员中心 · 我的全部订单（分页）+ 客户可取消待支付

@@ -1,0 +1,18 @@
+# wrangler.toml · Cloudflare Pages 部署配置
+# 文档：https://developers.cloudflare.com/pages/functions/wrangler-configuration/
+name = "yunfaka"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "public"
+
+# KV 命名空间绑定（必须，名称固定为 YUNFAKA_KV）
+# 部署脚本会自动创建并回填 id；手动部署时先执行：
+#   npx wrangler kv namespace create YUNFAKA_KV
+# 然后把返回的 id 填到下面
+[[kv_namespaces]]
+binding = "YUNFAKA_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# 预览环境也绑定同一个 KV（可选，注释掉则预览环境无数据）
+# [[env.preview.kv_namespaces]]
+# binding = "YUNFAKA_KV"
+# id = "REPLACE_WITH_KV_NAMESPACE_ID"

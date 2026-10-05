@@ -2,6 +2,13 @@
   "name": "yunfaka",
   "version": "1.0.0",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "npx wrangler pages dev public --kv YUNFAKA_KV",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  },
   "engines": { "node": ">=16" }
 }

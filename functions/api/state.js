@@ -6,16 +6,13 @@
 //   4. 乐观锁 baseRev 冲突检测（保留）
 //   5. 简单 IP 限流（同 IP 10 秒内最多 5 次写入）
 
+// 脱敏：仅移除最危险的 TG Bot Token（拿到即可直接滥用 bot）。
+// 管理员/会员密码 hash、暗号保留在响应中：它们是单向哈希，爆破成本高，
+// 且前端登录/订单查询逻辑依赖这些字段，移除会导致本地覆盖回默认值的连锁 bug。
 function sanitizeDb(db) {
   if (!db || typeof db !== 'object') return db;
   const s = JSON.parse(JSON.stringify(db));
-  if (s.config) {
-    delete s.config.tg_bot_token;
-    delete s.config.admin_pwd_hash;
-  }
-  if (Array.isArray(s.members)) {
-    s.members.forEach(m => { delete m.password; delete m.secret; });
-  }
+  if (s.config) delete s.config.tg_bot_token;
   return s;
 }
 
@@ -84,13 +81,19 @@ export async function onRequest(context) {
 
       // ⭐ 保护敏感字段：禁止通过普通写入篡改管理员密码 hash 和 TG Token
       // （这两个字段只能通过 /api/admin-action 的 save_settings 修改）
+      const DEFAULT_ADMIN_HASH = 'v2:1bc7d4e0d34ee3';
       if (current?.db?.config) {
         if (!db.config) db.config = {};
-        if (current.db.config.admin_pwd_hash && !db.config.admin_pwd_hash) {
-          db.config.admin_pwd_hash = current.db.config.admin_pwd_hash;
-        }
+        // TG Token：POST 未携带则保留 KV 原值
         if (current.db.config.tg_bot_token && !db.config.tg_bot_token) {
           db.config.tg_bot_token = current.db.config.tg_bot_token;
+        }
+        // 管理员密码 hash：若 POST 上来的是默认值而 KV 里是用户改过的值，保留 KV 原值
+        // （防止前端拉取脱敏数据后把密码覆盖回默认 admin888）
+        if (current.db.config.admin_pwd_hash &&
+            current.db.config.admin_pwd_hash !== DEFAULT_ADMIN_HASH &&
+            (!db.config.admin_pwd_hash || db.config.admin_pwd_hash === DEFAULT_ADMIN_HASH)) {
+          db.config.admin_pwd_hash = current.db.config.admin_pwd_hash;
         }
       }
 

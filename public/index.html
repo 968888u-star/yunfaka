@@ -2054,6 +2054,7 @@ function renderSettings(){
       <label class="field"><span>网络</span><input id="cfg-usdt-network" value="${esc(cfg.pay_usdt_network)}"></label>
       <label class="field"><span>汇率（1 USDT = ? CNY）</span><input id="cfg-usdt-rate" type="number" step="0.01" value="${cfg.pay_usdt_rate}"></label>
       <label class="field"><span>Luban接码加价倍数（上游成本×倍数=售价，默认1.3）</span><input id="cfg-luban-markup" type="number" step="0.05" min="1" value="${cfg.luban_markup || 1.3}"></label>
+      <label class="field"><span>通用接码上游成本参考价（元/条，×加价倍数=售价）</span><input id="cfg-luban-common-cost" type="number" step="0.1" min="0.1" value="${cfg.luban_common_cost || 2}"></label>
       <button class="btn primary" onclick="saveSettings()">保存设置</button></div>`;
   $('#cfg-alipay-mode').addEventListener('change', () => { const m = $('#cfg-alipay-mode').value; $('#rp-settings').style.display = m === 'redpacket' ? '' : 'none'; $('#qr-settings').style.display = m === 'qr' ? '' : 'none'; });
 }
@@ -2083,10 +2084,40 @@ function saveSettings(){
     pay_alipay_redpacket_prefix: ($('#cfg-rp-prefix').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'YFK').slice(0, 6),
     pay_alipay_qr: $('#cfg-alipay-qr').value.trim(),
     pay_usdt_enabled: $('#cfg-usdt-enabled').checked, pay_usdt_address: $('#cfg-usdt-address').value.trim(),
-    pay_usdt_network: $('#cfg-usdt-network').value.trim() || 'TRC20', pay_usdt_rate: Number($('#cfg-usdt-rate').value) || 7.2, luban_markup: Number($('#cfg-luban-markup') ? $('#cfg-luban-markup').value : '1.3') || 1.3,
+    pay_usdt_network: $('#cfg-usdt-network').value.trim() || 'TRC20', pay_usdt_rate: Number($('#cfg-usdt-rate').value) || 7.2, luban_markup: Number($('#cfg-luban-markup') ? $('#cfg-luban-markup').value : '1.3') || 1.3, luban_common_cost: Number($('#cfg-luban-common-cost') ? $('#cfg-luban-common-cost').value : '2') || 2,
     pay_usdt_qr: $('#cfg-usdt-qr') ? $('#cfg-usdt-qr').value.trim() : (db.config.pay_usdt_qr || '')
   });
-  saveDB(db); applySiteConfig(); toast('设置已保存','success'); renderSettings();
+  // ⭐ 汇率/加价变化联动全平台商品价格自动重算
+  const _rc = recalcAllPrices(db);
+  saveDB(db); applySiteConfig(); toast('设置已保存，已重算 '+(_rc.smmN+_rc.lbN)+' 个商品价格','success'); renderSettings();
+}
+/* ===== 全平台价格重算：汇率/加价变化后联动 SMM + Luban 商品（自定义价保留） ===== */
+function recalcAllPrices(db){
+  const cfg = db.config || {};
+  const rate = Number(cfg.pay_usdt_rate) || 7.2;
+  const smmMarkup = Number(cfg.smm_markup) || 1.5;
+  const lbMarkup = Number(cfg.luban_markup) || 1.3;
+  const costCur = cfg.smm_cost_currency || 'CNY';
+  let smmN = 0, lbN = 0;
+  (db.products || []).forEach(p => {
+    if (p.source === 'smm') {
+      if (p.smm_custom_price > 0) { p.price = p.smm_custom_price; return; }
+      const r = parseFloat(p.smm_rate_usd || 0);
+      const cny = costCur === 'USD' ? r * rate : r;
+      p.price = Math.max(1, Math.round(cny * smmMarkup * 100)); smmN++;
+    } else if (p.source === 'luban' && p.luban_type === 'sms') {
+      const origin = parseFloat(p.luban_origin_cost || 0);
+      if (origin > 0) { p.price = Math.max(1, Math.round(origin * rate * lbMarkup * 100)); lbN++; }
+    }
+  });
+  return { smmN, lbN };
+}
+/* ===== 通用接码售价 = 上游成本参考价 × Luban加价倍数 ===== */
+function lubanCommonPriceFen(cfg){
+  cfg = cfg || getConfig(loadDB());
+  const cost = Number(cfg.luban_common_cost) || 2;
+  const mk = Number(cfg.luban_markup) || 1.3;
+  return Math.max(1, Math.round(cost * mk * 100));
 }function renderLuban(){
   const db = loadDB(); const lubanProducts = db.products.filter(p => p.source === 'luban');
   $('#tab-body').innerHTML = `<div class="card panel"><h2>📱 LubanSms 接码</h2>
@@ -2121,10 +2152,10 @@ function lubanSyncServices(){
     if (!allServices.length){ toast('没有找到匹配的服务','error'); return; }
     const seenIds = {}; const uniqueServices = [];
     allServices.forEach(s => { const key = String(s.service_id); if (seenIds[key]) return; seenIds[key] = true; uniqueServices.push(s); });
-    const db = loadDB(); let added = 0, updated = 0;
+    const db = loadDB(); const _cfg = getConfig(db); const _rate = Number(_cfg.pay_usdt_rate)||7.2; const _lbm = Number(_cfg.luban_markup)||1.3; let added = 0, updated = 0;
     uniqueServices.forEach(s => {
       let origin = parseFloat(s.origin_cost); if (isNaN(origin)) origin = (parseFloat(s.cost) || 0) / 1.3;
-      const ourPriceFen = Math.round(origin * 7.2 * 100);
+      const ourPriceFen = Math.max(1, Math.round(origin * _rate * _lbm * 100));
       const exist = db.products.find(p => p.source === 'luban' && p.luban_service_id === String(s.service_id));
       if (exist){ exist.price = ourPriceFen; exist.luban_origin_cost = origin.toFixed(2); updated++; }
       else {
@@ -2145,7 +2176,7 @@ function renderLubanClient(){
   const now = Date.now(); const tab = window.__lubanTab || 'sms';
   if (now - _lastLubanRenderAt < 200 && tab === _lastLubanRenderTab) return;
   _lastLubanRenderAt = now; _lastLubanRenderTab = tab;
-  const cfg = getConfig(loadDB()); const commonPriceFen = cfg.luban_common_price || 200;
+  const cfg = getConfig(loadDB()); const commonPriceFen = lubanCommonPriceFen(cfg);
   const tabBar = `<div class="card panel" style="padding:14px 20px">
     <div class="tabs" style="margin:0">
       <button class="${tab === 'sms' ? 'active' : ''}" onclick="lubanSwitchTab('sms')">🎯 指定服务接码</button>
@@ -2303,7 +2334,7 @@ function lubanSubmitClientBuy(serviceId){
 function lubanCommonBuy(){
   const keyword = $('#luban-common-keyword').value.trim(); if (!keyword){ toast('请填写关键词','error'); $('#luban-common-keyword').focus(); return; }
   const country = $('#luban-common-country').value || ''; const phone = $('#luban-common-phone').value.trim() || ''; const cardType = $('#luban-common-cardtype').value || '全部'; const filter = $('#luban-common-filter').value || '否';
-  const db = loadDB(); const cfg = getConfig(db); const priceFen = cfg.luban_common_price || 200; const member = getCurrentMember(db);
+  const db = loadDB(); const cfg = getConfig(db); const priceFen = lubanCommonPriceFen(cfg); const member = getCurrentMember(db);
   let extraRows = ''; if (country) extraRows += `<div class="kv"><span class="k">国家</span><span class="v">${esc(country)}</span></div>`; if (phone) extraRows += `<div class="kv"><span class="k">指定号码</span><span class="v mono">${esc(phone)}</span></div>`;
   extraRows += `<div class="kv"><span class="k">类型</span><span class="v">${esc(cardType)}</span></div><div class="kv"><span class="k">过滤重复</span><span class="v">${esc(filter)}</span></div>`;
   openModal(`<h3>确认接码</h3>
@@ -2343,7 +2374,7 @@ function lubanCommonSubmit2(){
   if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; } window._submitting = true; setTimeout(function(){window._submitting=false;}, 5000);
   const keyword = $('#luban-common-keyword').value.trim(); if (!keyword){ toast('请填写关键词','error'); window._submitting=false; return; }
   const country = $('#luban-common-country').value || ''; const phone = $('#luban-common-phone').value.trim() || ''; const cardType = $('#luban-common-cardtype').value || '全部'; const filter = $('#luban-common-filter').value || '否';
-  const db = loadDB(); const cfg = getConfig(db); const priceFen = cfg.luban_common_price || 200; const member = getCurrentMember(db);
+  const db = loadDB(); const cfg = getConfig(db); const priceFen = lubanCommonPriceFen(cfg); const member = getCurrentMember(db);
   const secret = $('#luban-common-secret').value.trim(); if (!secret){ toast('请输入暗号','error'); return; }
   const balanceEnabled = cfg.balance_enabled !== false; const cb = $('#luban-common-use-balance'); const useBalance = cb && cb.checked && balanceEnabled && member;
   let deduct = useBalance ? Math.min(member ? (member.balance || 0) : 0, priceFen) : 0;

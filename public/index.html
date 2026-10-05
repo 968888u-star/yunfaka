@@ -7320,5 +7320,137 @@ console.log('%c[P22] 实时同步已启用：3s 轮询 + 保存后立即刷 + �
 console.log('%c  诊断：yfSyncStatus()', 'color:#6b7280;font-size:11px');
 })();
 </script>
+<!-- ============================================================
+     P23 · 自动版本检测（从 Cloudflare 自动读，永不需手动改）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+var KEY = 'yf_build_id';
+var CHECK_INTERVAL = 5 * 60 * 1000;  // 5 分钟检查一次
+var _currentBuild = null;
+var _checking = false;
+
+/* ===== 1. 拉取服务端 build ===== */
+function fetchBuild(){
+  return fetch('/api/build?t=' + Date.now(), {
+    cache: 'no-store'
+  }).then(function(r){ return r.json(); });
+}
+
+/* ===== 2. 首次加载：对比并处理 ===== */
+fetchBuild().then(function(d){
+  if (!d || !d.ok || !d.build){ return; }
+  _currentBuild = d.build;
+
+  var lastBuild = localStorage.getItem(KEY);
+  if (!lastBuild){
+    /* 首次运行：记录版本 */
+    localStorage.setItem(KEY, _currentBuild);
+    console.log('%c[P23] 首次运行，版本:', 'color:#10b981;font-weight:bold', _currentBuild);
+    return;
+  }
+
+  if (lastBuild !== _currentBuild){
+    console.log('%c[P23] 版本已更新:', 'color:#e11d48;font-weight:bold', lastBuild, '→', _currentBuild);
+    localStorage.setItem(KEY, _currentBuild);
+
+    /* 主动清掉 Service Worker 缓存（如果有） */
+    try {
+      if (window.caches){
+        caches.keys().then(function(ks){
+          ks.forEach(function(k){ caches.delete(k); });
+        });
+      }
+    } catch(e){}
+
+    /* 强制硬刷新 */
+    setTimeout(function(){
+      location.reload(true);
+    }, 200);
+  } else {
+    console.log('%c[P23] 版本已是最新:', 'color:#10b981;font-weight:bold', _currentBuild);
+  }
+}).catch(function(e){
+  console.warn('[P23] 首次版本检查失败:', e);
+});
+
+/* ===== 3. 定时检查（页面开着也生效） ===== */
+function checkBuild(){
+  if (_checking) return;
+  _checking = true;
+
+  fetchBuild().then(function(d){
+    _checking = false;
+    if (!d || !d.ok || !d.build){ return; }
+
+    if (_currentBuild === null){
+      _currentBuild = d.build;
+      localStorage.setItem(KEY, d.build);
+      return;
+    }
+
+    if (d.build !== _currentBuild){
+      console.log('%c[P23] 🔄 服务端已更新:', 'color:#e11d48;font-weight:bold', _currentBuild, '→', d.build);
+      var oldBuild = _currentBuild;
+      _currentBuild = d.build;
+      localStorage.setItem(KEY, d.build);
+
+      /* 如果用户正在输入框，等他打完再刷 */
+      var ae = document.activeElement;
+      var isEditing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
+
+      if (!isEditing && !document.hidden){
+        if (window.toast) window.toast('🔄 检测到新版本，正在刷新…', 'info');
+        setTimeout(function(){ location.reload(true); }, 500);
+      } else {
+        if (window.toast) window.toast('🔄 有新版本，稍后自动刷新', 'info');
+        setTimeout(function(){
+          var ae2 = document.activeElement;
+          if (!ae2 || (ae2.tagName !== 'INPUT' && ae2.tagName !== 'TEXTAREA')){
+            location.reload(true);
+          }
+        }, 30000);
+      }
+    }
+  }).catch(function(){
+    _checking = false;
+  });
+}
+
+/* 每 5 分钟 */
+setInterval(checkBuild, CHECK_INTERVAL);
+
+/* 从后台切回前台立即检查 */
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden){
+    setTimeout(checkBuild, 1000);
+  }
+});
+
+/* ===== 4. 手动工具 ===== */
+window.yfCheckUpdate = function(){
+  console.log('[P23] 手动检查更新，当前版本:', _currentBuild || '(未加载)');
+  checkBuild();
+};
+
+window.yfForceUpdate = function(){
+  localStorage.removeItem(KEY);
+  if (window.caches){
+    caches.keys().then(function(ks){
+      return Promise.all(ks.map(function(k){ return caches.delete(k); }));
+    }).then(function(){
+      location.reload(true);
+    });
+  } else {
+    location.reload(true);
+  }
+};
+
+console.log('%c[P23] 自动版本检测已启用（从 /api/build 读，零手动维护）', 'color:#10b981;font-weight:bold;font-size:13px');
+console.log('%c  手动检查：yfCheckUpdate()  |  强制刷新：yfForceUpdate()', 'color:#6b7280;font-size:11px');
+})();
+</script>
 </body>
 </html>

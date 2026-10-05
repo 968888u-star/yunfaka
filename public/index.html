@@ -5581,5 +5581,151 @@ console.log('%c[P8 修复补丁] 后台设置保存已恢复：表单采集 + �
   'color:#e11d48;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P9-Final · USDT 全局守护（修复重复处理 + 多单并发 + 前后台恢复）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) { console.warn('[P9] 核心未就绪'); return; }
+
+var _toast = function(m,t){ try{ window.toast(m, t||'success'); }catch(e){ console.log('[P9]',m); } };
+var POLL_MS = 30000;
+var MAX_CONCURRENCY = 2;
+var _globalTimer = null;
+var _running = false;
+
+/* 采集所有 pending 的 USDT 目标（过滤 amount_due=0） */
+function collectPending(){
+  var db = window.loadDB();
+  var orders = (db.orders || []).filter(function(o){
+    return o.pay_method === 'usdt'
+        && o.status === 'pending'
+        && (o.amount_due || 0) > 0;
+  });
+  var recharges = (db.recharges || []).filter(function(r){
+    return r.method === 'usdt' && r.status === 'pending';
+  });
+  return orders.map(function(o){ return o.order_no; })
+       .concat(recharges.map(function(r){ return r.id; }));
+}
+
+/* 检测单笔 */
+function checkOne(id){
+  return fetch('/api/usdt-check?order=' + encodeURIComponent(id) + '&t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){ return { id:id, ok:d.ok, status:d.status, auto:!!d.auto, tx:d.tx }; })
+    .catch(function(){ return { id:id, ok:false, error:true }; });
+}
+
+/* ⭐ F1 修复：收到 auto:true 只拉最新 state 刷新 UI，绝不再执行业务逻辑 */
+function refreshFromServer(){
+  return fetch('/api/state?t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d && d.ok && d.db) {
+        try { localStorage.setItem('yunfaka_db_v15', JSON.stringify(d.db)); } catch(e){}
+        window.__DB = d.db;
+      }
+    })
+    .catch(function(){});
+}
+
+function tick(manual){
+  if (_running) return;
+  if (document.hidden && !manual) return;
+
+  var ids = collectPending();
+  if (!ids.length) return;
+
+  _running = true;
+  var queue = ids.slice();
+  var results = [];
+  var pending = 0;
+  var done = false;
+
+  function finish(){
+    _running = false;
+    var paid = results.filter(function(r){ return r && r.ok && r.auto; });
+    if (paid.length){
+      /* 只刷新，不重复处理 */
+      refreshFromServer().then(function(){
+        var n = paid.length;
+        _toast('✅ 检测到 ' + n + ' 笔 USDT 到账，正在同步…', 'success');
+        setTimeout(function(){ if (window.route) window.route(); }, 500);
+      });
+    }
+  }
+
+  function next(){
+    if (done) return;
+    if (!queue.length){
+      if (pending === 0){ done = true; finish(); }
+      return;
+    }
+    var id = queue.shift();
+    pending++;
+    checkOne(id).then(function(res){
+      results.push(res);
+      pending--;
+      if (!queue.length && pending === 0){ done = true; finish(); }
+      else next();
+    });
+  }
+  for (var i = 0; i < MAX_CONCURRENCY; i++) next();
+}
+
+function startGlobal(){
+  if (_globalTimer) clearInterval(_globalTimer);
+  _globalTimer = setInterval(tick, POLL_MS);
+  setTimeout(function(){ tick(); }, 5000);
+}
+
+/* 回到前台 / 网络恢复 → 立即检测 */
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden) setTimeout(function(){ tick(true); }, 800);
+});
+window.addEventListener('online', function(){ setTimeout(function(){ tick(true); }, 800); });
+
+startGlobal();
+
+/* ⭐ F2 修复：接管旧单例，避免覆盖 */
+window.startUsdtPolling = function(orderNo){
+  setTimeout(function(){ tick(true); }, 300);
+};
+
+window.yfCheckUsdtNow = function(){
+  tick(true);
+  _toast('正在检测所有待支付 USDT…','info');
+};
+
+/* ⭐ F4 修复：会员中心顶部提示条 */
+setInterval(function(){
+  try {
+    if (location.hash.indexOf('#/member') !== 0) return;
+    var app = document.getElementById('app');
+    if (!app || app.querySelector('#p9-usdt-bar')) return;
+    var db = window.loadDB();
+    var u = window.getCurrentUsername ? window.getCurrentUsername() : '';
+    var pend = (db.recharges || []).filter(function(r){
+      return r.username === u && r.method === 'usdt' && r.status === 'pending';
+    });
+    if (!pend.length) return;
+    var bar = document.createElement('div');
+    bar.id = 'p9-usdt-bar';
+    bar.className = 'card panel';
+    bar.style.cssText = 'background:#eff6ff;border-color:#93c5fd;margin-bottom:14px;padding:12px 16px';
+    bar.innerHTML = '⏳ 有 <b>' + pend.length + '</b> 笔 USDT 充值等待到账，'
+      + '系统每 30 秒自动检测 '
+      + '<button class="btn sm primary" style="margin-left:8px" onclick="yfCheckUsdtNow()">立即检测</button>';
+    var first = app.querySelector('.card.panel');
+    if (first) app.insertBefore(bar, first);
+  } catch(e){}
+}, 3000);
+
+console.log('%c[P9-Final] USDT 全局守护 · 只刷新不重复处理 · 30s 轮询 · 多单并发 · 前后台恢复',
+  'color:#10b981;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

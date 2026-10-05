@@ -7777,5 +7777,245 @@ console.log('%c[Patch v6] 首页搜索框已移除 · 滚动穿透已修复',
             'color:#ec4899;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     修复补丁 v7 · 支付卡片化 + 客服全屏 + iOS彻底防穿透
+     追加位置：</body> 之前
+     ============================================================ -->
+
+<!-- CSS 部分 -->
+<style>
+/* ---------- 1. 支付方式：卡片化（对应图一） ---------- */
+.pay-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.pay-method {
+  position: relative;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 12px !important;
+  min-height: 60px !important;
+  border-radius: 12px !important;
+  border: 2px solid #e2e8f0 !important;
+  background: #fff !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  cursor: pointer;
+  transition: .2s;
+}
+.pay-method input[type="radio"] {
+  display: none !important; /* 隐藏原生单选框，用CSS画 */
+}
+.pay-method::before {
+  content: "";
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: inline-block;
+  flex-shrink: 0;
+  transition: .2s;
+}
+.pay-method.active::before {
+  border-color: #6366f1;
+  background: #6366f1;
+  box-shadow: inset 0 0 0 3px #fff;
+}
+.pay-method.active {
+  border-color: #6366f1 !important;
+  background: #f5f3ff !important;
+  color: #4f46e5 !important;
+}
+.pay-method .logo {
+  font-size: 20px !important;
+}
+
+/* ---------- 2. 客服面板：全屏化（对应图二/图三） ---------- */
+@media (max-width: 768px) {
+  .cs-panel {
+    position: fixed !important;
+    top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    width: 100vw !important; height: 100vh !important;
+    max-width: 100vw !important; max-height: 100vh !important;
+    border-radius: 0 !important;
+    z-index: 9999 !important; /* 盖住一切 */
+    display: flex !important;
+    flex-direction: column;
+  }
+  .cs-panel.open {
+    display: flex !important; /* 保证展开时全屏 */
+  }
+  .cs-header {
+    padding-top: max(14px, env(safe-area-inset-top)) !important; /* 适配刘海屏 */
+  }
+  .cs-input {
+    padding-bottom: max(10px, env(safe-area-inset-bottom)) !important; /* 适配底部横条 */
+  }
+  .cs-float {
+    /* 移动端全屏时，悬浮按钮尽量不再展示，避免叠加在面板上 */
+    display: none !important;
+  }
+}
+
+/* ---------- 3. iOS 防穿透的辅助样式 ---------- */
+body.yf-scroll-locked {
+  position: fixed !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  -webkit-overflow-scrolling: none !important;
+}
+.cs-msgs {
+  overscroll-behavior-y: contain !important;
+  -webkit-overflow-scrolling: touch;
+}
+</style>
+
+<!-- JS 部分 -->
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   [1] 拦截客服面板渲染，强制全屏/大弹窗逻辑（接管开关）
+   ============================================================ */
+(function(){
+  // 覆盖原有的点击逻辑
+  var floatBtn = document.getElementById('cs-float');
+  var panel = document.getElementById('cs-panel');
+  if (!floatBtn || !panel) return;
+
+  var _origToggle = floatBtn.onclick;
+  
+  // 重写点击事件
+  floatBtn.onclick = function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    
+    var isOpen = panel.classList.contains('open');
+    if (!isOpen) {
+      panel.classList.add('open');
+      // 锁定底层滚动
+      if (window.yfLockScroll) window.yfLockScroll();
+      // 隐藏悬浮球，防止遮挡
+      floatBtn.style.display = 'none';
+      // 如果有拉取消息的方法，执行
+      if (window.csPoll) window.csPoll();
+      // 确保聊天滚动到底部
+      setTimeout(function(){
+        var msgs = document.getElementById('cs-msgs');
+        if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      }, 100);
+    } else {
+      panel.classList.remove('open');
+      floatBtn.style.display = 'flex';
+      if (window.yfUnlockScroll) window.yfUnlockScroll();
+    }
+  };
+
+  // 覆盖原有的 close 按钮
+  var closeBtn = panel.querySelector('.cs-close');
+  if (closeBtn) {
+    closeBtn.onclick = function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      panel.classList.remove('open');
+      floatBtn.style.display = 'flex';
+      if (window.yfUnlockScroll) window.yfUnlockScroll();
+    };
+  }
+})();
+
+/* ============================================================
+   [2] 彻底解决 iOS 上客服对话框滑动穿透
+   ============================================================ */
+(function(){
+  var panel = document.getElementById('cs-panel');
+  if (!panel) return;
+
+  var startY = 0;
+  
+  // 监听消息区的触摸事件
+  panel.addEventListener('touchstart', function(e){
+    if (!panel.classList.contains('open')) return;
+    startY = e.touches[0].pageY;
+  }, { passive: false });
+
+  panel.addEventListener('touchmove', function(e){
+    if (!panel.classList.contains('open')) return;
+    
+    // 如果是输入框区域，放行
+    if (e.target.closest('.cs-input')) return;
+
+    var msgs = document.getElementById('cs-msgs');
+    if (!msgs) return;
+    
+    // 判断当前触点是否在消息列表中
+    if (!e.target.closest('.cs-msgs')) {
+      // 触摸的是头部或者空白区域，坚决阻止
+      e.preventDefault();
+      return;
+    }
+
+    // 处理在消息列表边缘的滑动
+    var deltaY = e.touches[0].pageY - startY;
+    var scrollTop = msgs.scrollTop;
+    var scrollHeight = msgs.scrollHeight;
+    var clientHeight = msgs.clientHeight;
+
+    // 如果滑到底部还继续往上滑，或者在顶部还继续往下滑，阻止默认行为
+    if ((scrollTop + clientHeight >= scrollHeight && deltaY < 0) || 
+        (scrollTop <= 0 && deltaY > 0)) {
+      e.preventDefault();
+    } else {
+      // 正常内部滚动，防止阻止事件后卡顿，但需要保持 preventDefault 来阻断底层
+      // 但为了保持流畅，如果是在正常滚动，不拦截，由浏览器处理。但 IOS 如果在此处不拦截，会穿透。
+      // 完美的方案：阻止默认行为，手动调整 scrollTop。
+      e.preventDefault();
+      msgs.scrollTop = scrollTop - deltaY;
+      startY = e.touches[0].pageY; // 重置起点
+    }
+  }, { passive: false });
+
+  // 监听 body 防止背景穿透
+  document.body.addEventListener('touchmove', function(e){
+    if (document.body.classList.contains('yf-scroll-locked')) {
+      if (!e.target.closest('.cs-panel')) {
+        e.preventDefault(); // 锁定时，除了客服面板内，其他地方不许滑
+      }
+    }
+  }, { passive: false });
+
+})();
+
+/* ============================================================
+   [3] 强制覆盖旧版支付按钮的渲染样式（兼容动态生成）
+   ============================================================ */
+(function(){
+  // 监听 DOM 变化，为动态生成的支付按钮补充属性（为兼容旧结构的 label 包裹）
+  var observer = new MutationObserver(function(mutations){
+    mutations.forEach(function(m){
+      m.addedNodes.forEach(function(node){
+        if (node.nodeType === 1 && node.classList && node.classList.contains('pay-method')){
+          // 如果按钮内没有 input，补一个（兼容）
+          if (!node.querySelector('input[type="radio"]')) {
+            var radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'pay-method-fallback';
+            node.appendChild(radio);
+          }
+        }
+      });
+    });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+})();
+
+console.log('%c[Patch v7] 支付卡片化 + 客服全屏 + iOS防穿透 已加载',
+  'color:#8b5cf6;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

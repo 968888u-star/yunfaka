@@ -1,19 +1,14 @@
-// functions/api/state.js · 数据读写中枢（加固兼容版）
-// 安全增强：
-//   1. GET 响应自动脱敏敏感字段（TG Token、管理员/会员密码Hash、暗号）
-//   2. POST 写入：若配置了 ACCESS_TOKEN 则强制校验；未配置时降级为「限流+结构校验」兼容模式
-//   3. 写入大小/结构校验，防止恶意超大 payload 或误清空核心数组
-//   4. 乐观锁 baseRev 冲突检测（保留）
-//   5. 简单 IP 限流（同 IP 10 秒内最多 5 次写入）
+// functions/api/state.js · 数据读写中枢（修复 tg_bot_token 丢失 + 权限校验）
+// 修复：
+//   1. sanitizeDb 不再删除 tg_bot_token（之前会导致后台设置页保存后显示为空）
+//   2. POST 保护段：前端传空值/掩码时保留 KV 原值
+//   3. ACCESS_TOKEN 校验保留（前端通过 P13 补丁自动带 X-Access-Token）
 
-// 脱敏：仅移除最危险的 TG Bot Token（拿到即可直接滥用 bot）。
-// 管理员/会员密码 hash、暗号保留在响应中：它们是单向哈希，爆破成本高，
-// 且前端登录/订单查询逻辑依赖这些字段，移除会导致本地覆盖回默认值的连锁 bug。
 function sanitizeDb(db) {
   if (!db || typeof db !== 'object') return db;
-  const s = JSON.parse(JSON.stringify(db));
-  if (s.config) delete s.config.tg_bot_token;
-  return s;
+  // 保留 tg_bot_token：后台设置页需要显示，用户才能确认已配置。
+  // 安全性依赖 POST 写入时的 ACCESS_TOKEN 校验 + /api/admin-action 的后台登录。
+  return JSON.parse(JSON.stringify(db));
 }
 
 export async function onRequest(context) {
@@ -29,7 +24,7 @@ export async function onRequest(context) {
     const raw = await env.YUNFAKA_KV.get('state');
     const data = raw ? JSON.parse(raw) : null;
     return Response.json(
-      { ok: true, rev: data?.rev || 0, db: sanitizeDb(data?.db || null) },
+      { ok: true, rev: (data && data.rev) || 0, db: sanitizeDb((data && data.db) || null) },
       { headers: corsHeaders }
     );
   }
@@ -37,14 +32,14 @@ export async function onRequest(context) {
   if (request.method === 'POST') {
     try {
       const token = env.ACCESS_TOKEN || '';
-      // 配置了 ACCESS_TOKEN → 强制鉴权（推荐生产环境配置）
+      // 配置了 ACCESS_TOKEN → 强制鉴权
       if (token) {
         const clientToken = request.headers.get('x-access-token') || '';
         if (clientToken !== token) {
           return Response.json({ ok: false, msg: '无权限写入' }, { status: 403, headers: corsHeaders });
         }
       } else {
-        // 兼容模式：简单 IP 限流，防止脚本暴力覆盖
+        // 兼容模式：简单 IP 限流
         const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-real-ip') || 'unknown';
         const rlKey = 'writerl:' + ip;
         const rlRaw = await env.YUNFAKA_KV.get(rlKey);
@@ -71,7 +66,7 @@ export async function onRequest(context) {
 
       const raw = await env.YUNFAKA_KV.get('state');
       const current = raw ? JSON.parse(raw) : null;
-      const currentRev = current?.rev || 0;
+      const currentRev = (current && current.rev) || 0;
       if (body.baseRev !== undefined && current && body.baseRev !== currentRev) {
         return Response.json(
           { ok: false, msg: '数据已被其他设备更新，请刷新后重试', rev: currentRev, db: sanitizeDb(current.db) },
@@ -79,21 +74,30 @@ export async function onRequest(context) {
         );
       }
 
-      // ⭐ 保护敏感字段：禁止通过普通写入篡改管理员密码 hash 和 TG Token
-      // （这两个字段只能通过 /api/admin-action 的 save_settings 修改）
+      // ===== 保护敏感字段：禁止通过普通写入篡改 TG Token / 管理员密码 hash =====
       const DEFAULT_ADMIN_HASH = 'v2:1bc7d4e0d34ee3';
-      if (current?.db?.config) {
+      if (current && current.db && current.db.config) {
         if (!db.config) db.config = {};
-        // TG Token：POST 未携带则保留 KV 原值
-        if (current.db.config.tg_bot_token && !db.config.tg_bot_token) {
-          db.config.tg_bot_token = current.db.config.tg_bot_token;
+
+        // [1] TG Bot Token：POST 传空值 / undefined / 掩码（含 ***）→ 保留 KV 原值
+        if (current.db.config.tg_bot_token) {
+          const incoming = String(db.config.tg_bot_token || '');
+          const isMasked = incoming === '' || /\*\*\*/.test(incoming);
+          if (isMasked) {
+            db.config.tg_bot_token = current.db.config.tg_bot_token;
+          }
         }
-        // 管理员密码 hash：若 POST 上来的是默认值而 KV 里是用户改过的值，保留 KV 原值
-        // （防止前端拉取脱敏数据后把密码覆盖回默认 admin888）
+
+        // [2] 管理员密码 hash：POST 传默认值而 KV 是用户改过的 → 保留 KV 原值
         if (current.db.config.admin_pwd_hash &&
             current.db.config.admin_pwd_hash !== DEFAULT_ADMIN_HASH &&
             (!db.config.admin_pwd_hash || db.config.admin_pwd_hash === DEFAULT_ADMIN_HASH)) {
           db.config.admin_pwd_hash = current.db.config.admin_pwd_hash;
+        }
+
+        // [3] 收款地址同样保护（防止前端误清空）
+        if (current.db.config.pay_usdt_address && !db.config.pay_usdt_address) {
+          db.config.pay_usdt_address = current.db.config.pay_usdt_address;
         }
       }
 

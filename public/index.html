@@ -4863,5 +4863,258 @@ window.yfExportMembersCsv = function(){
 console.log('%c[云发卡升级 P5] 数据分析 + 备份 + 云端优化 + 安全加固 完成', 'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     安全加固补丁 P6 · 登录/后台操作后端化 + TG代理 + 自动退款 + 操作日志 + 冲突提示
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var ADMIN_TOKEN_KEY = 'yunfaka_admin_token';
+function adminToken(){ return sessionStorage.getItem(ADMIN_TOKEN_KEY) || ''; }
+function setAdminToken(t){ t ? sessionStorage.setItem(ADMIN_TOKEN_KEY, t) : sessionStorage.removeItem(ADMIN_TOKEN_KEY); }
+function tokenExpired(){
+  var t = adminToken(); if(!t) return true;
+  try{ var p = JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); return !p.exp || p.exp < Math.floor(Date.now()/1000); }catch(e){ return true; }
+}
+function apiAdminAction(action, params){
+  return fetch('/api/admin-action', {
+    method:'POST', headers:{'Content-Type':'application/json','X-Admin-Token':adminToken()},
+    body: JSON.stringify(Object.assign({action:action}, params||{}))
+  }).then(function(r){ return r.json(); });
+}
+function tgSend(text, opts){
+  return fetch('/api/tg-send', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({text:text},opts||{}))}).catch(function(){});
+}
+function refreshThen(cb){
+  fetch('/api/state?t='+Date.now()).then(function(r){return r.json();}).then(function(d){
+    if(d && d.ok && d.db){ window.__DB = d.db; try{ localStorage.setItem('yunfaka_db_v15', JSON.stringify(d.db)); }catch(e){} }
+    if(cb) cb(); if(window.route) window.route();
+  }).catch(function(){ if(cb) cb(); });
+}
+function needReLogin(){ if(window.toast) toast('登录已过期，请重新登录','error'); sessionStorage.removeItem('yunfaka_admin'); setAdminToken(''); if(window.route) window.route(); }
+
+/* ===== 1. 管理员登录后端化 ===== */
+window.adminLogin = function(){
+  var input = document.getElementById('adm-pwd'); var pwd = input ? input.value : '';
+  if(!pwd){ if(window.toast) toast('请输入密码','error'); return; }
+  fetch('/api/admin-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok){ setAdminToken(d.token); sessionStorage.setItem('yunfaka_admin','1'); if(window.toast) toast('登录成功','success'); if(window.renderAdminPanel) renderAdminPanel(); }
+      else { if(window.toast) toast(d.msg||'密码错误','error'); }
+    }).catch(function(){ if(window.toast) toast('网络错误','error'); });
+};
+window.adminLogout = function(){ setAdminToken(''); sessionStorage.removeItem('yunfaka_admin'); if(window.toast) toast('已退出登录'); location.hash='#/'; };
+var origRenderAdminPage = window.renderAdminPage;
+window.renderAdminPage = function(){
+  if(sessionStorage.getItem('yunfaka_admin')==='1' && !tokenExpired()){ return window.renderAdminPanel(); }
+  setAdminToken(''); sessionStorage.removeItem('yunfaka_admin'); return origRenderAdminPage();
+};
+
+/* ===== 2. 后台敏感操作后端化 ===== */
+window.approveOrder = function(orderNo){
+  if(tokenExpired()) return needReLogin();
+  apiAdminAction('approve_order',{order_no:orderNo}).then(function(d){
+    if(d.ok){ if(window.toast) toast('已确认发货 ✅','success'); refreshThen(function(){ if(window.renderOrders) renderOrders(); }); }
+    else { if(window.toast) toast(d.msg||'操作失败','error'); }
+  });
+};
+window.rejectOrder = function(orderNo){
+  if(tokenExpired()) return needReLogin();
+  if(!confirm('确定驳回订单 '+orderNo+'？余额将自动退还客户。')) return;
+  apiAdminAction('reject_order',{order_no:orderNo}).then(function(d){
+    if(d.ok){ if(window.toast) toast('订单已驳回，余额已退还','success'); refreshThen(function(){ if(window.renderOrders) renderOrders(); }); }
+    else { if(window.toast) toast(d.msg||'操作失败','error'); }
+  });
+};
+window.deleteOrder = function(orderNo){
+  if(tokenExpired()) return needReLogin();
+  if(!confirm('确定删除订单 '+orderNo+'？此操作不可恢复。')) return;
+  apiAdminAction('delete_order',{order_no:orderNo}).then(function(d){
+    if(d.ok){ if(window.toast) toast('已删除','success'); refreshThen(function(){ if(window.renderOrders) renderOrders(); }); }
+    else { if(window.toast) toast(d.msg||'操作失败','error'); }
+  });
+};
+var origSaveAdjustBalance = window.saveAdjustBalance;
+window.saveAdjustBalance = function(username){
+  if(tokenExpired()) return needReLogin();
+  var amtEl = document.getElementById('adj-amount'), reasonEl = document.getElementById('adj-reason');
+  var yuanVal = parseFloat(amtEl ? amtEl.value : '0');
+  if(isNaN(yuanVal) || yuanVal === 0){ if(window.toast) toast('请输入有效金额','error'); return; }
+  var delta = Math.round(yuanVal * 100);
+  apiAdminAction('adjust_balance',{username:username, delta:delta, reason:(reasonEl?reasonEl.value:'')}).then(function(d){
+    if(d.ok){ if(window.toast) toast('余额已调整 ✅','success'); if(window.closeModal) closeModal(); refreshThen(function(){ if(window.renderMembers) renderMembers(); }); }
+    else { if(window.toast) toast(d.msg||'操作失败','error'); }
+  });
+};
+window.saveResetPwd = function(username){
+  if(tokenExpired()) return needReLogin();
+  var p1 = document.getElementById('rst-pwd'), p2 = document.getElementById('rst-pwd2');
+  var np = p1 ? p1.value : '';
+  if(!np || np.length < 6){ if(window.toast) toast('密码至少6位','error'); return; }
+  if(p2 && p2.value !== np){ if(window.toast) toast('两次输入不一致','error'); return; }
+  apiAdminAction('reset_member_pwd',{username:username, new_password:np}).then(function(d){
+    if(d.ok){ if(window.toast) toast('密码已重置','success'); if(window.closeModal) closeModal(); }
+    else { if(window.toast) toast(d.msg||'操作失败','error'); }
+  });
+};
+window.deleteMember = function(username){
+  if(tokenExpired()) return needReLogin();
+  if(!confirm('确定删除会员 '+username+'？')) return;
+  apiAdminAction('delete_member',{username:username}).then(function(d){
+    if(d.ok){ if(window.toast) toast('已删除','success'); refreshThen(function(){ if(window.renderMembers) renderMembers(); }); }
+    else { if(window.toast) toast(d.msg||'操作失败','error'); }
+  });
+};
+/* 设置保存：敏感字段走后端 */
+var origSaveSettings = window.saveSettings;
+window.saveSettings = function(){
+  if(tokenExpired()) return needReLogin();
+  var db = window.loadDB(); var cfg = db.config || {};
+  var newPwdEl = document.getElementById('set-admin-pwd');
+  var payload = { config: {
+    site_name: cfg.site_name, tg_chat_id: cfg.tg_chat_id, tg_username: cfg.tg_username, tg_btn_color: cfg.tg_btn_color,
+    pay_usdt_address: cfg.pay_usdt_address, pay_usdt_qr: cfg.pay_usdt_qr, pay_usdt_rate: cfg.pay_usdt_rate, pay_usdt_network: cfg.pay_usdt_network, pay_usdt_enabled: cfg.pay_usdt_enabled,
+    pay_alipay_enabled: cfg.pay_alipay_enabled, pay_alipay_mode: cfg.pay_alipay_mode, pay_alipay_qr: cfg.pay_alipay_qr, pay_alipay_note: cfg.pay_alipay_note, pay_alipay_redpacket_prefix: cfg.pay_alipay_redpacket_prefix,
+    recharge_min: cfg.recharge_min, recharge_bonus_pct: cfg.recharge_bonus_pct, recharge_bonus_text: cfg.recharge_bonus_text,
+    tg_bot_token: (document.getElementById('set-tg-token')||{}).value || cfg.tg_bot_token
+  }};
+  if(newPwdEl && newPwdEl.value) payload.new_admin_password = newPwdEl.value;
+  apiAdminAction('save_settings', payload).then(function(d){
+    if(d.ok){ if(window.toast) toast('设置已保存 ✅','success'); refreshThen(); }
+    else { if(window.toast) toast(d.msg||'保存失败','error'); }
+  });
+};
+
+/* ===== 3. 会员登录/找回密码后端化 ===== */
+window.memberLogin = function(){
+  var uEl = document.getElementById('login-username'), pEl = document.getElementById('login-password');
+  var username = uEl ? uEl.value.trim() : '', password = pEl ? pEl.value : '';
+  var errEl = document.getElementById('login-err');
+  if(!username || !password){ if(errEl) errEl.textContent='请输入账号和密码'; if(window.toast) toast('请输入账号和密码','error'); return; }
+  fetch('/api/member-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username,password:password})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok){
+        if(window.setCurrentUsername) setCurrentUsername(username);
+        if(window.toast) toast('登录成功','success'); if(window.route) window.route();
+      } else { if(errEl) errEl.textContent = d.msg||'登录失败'; if(window.toast) toast(d.msg||'登录失败','error'); }
+    }).catch(function(){ if(window.toast) toast('网络错误','error'); });
+};
+window.memberFindPwd = function(){
+  var uEl = document.getElementById('fp-username'), sEl = document.getElementById('fp-secret');
+  var username = uEl ? uEl.value.trim() : '', secret = sEl ? sEl.value.trim() : '';
+  var errEl = document.getElementById('fp-err');
+  if(!username || !secret){ if(errEl) errEl.textContent='请输入账号和暗号'; return; }
+  fetch('/api/member-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'findpwd',username:username,secret:secret})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok){ if(window.openResetPwdByUser) openResetPwdByUser(username); }
+      else { if(errEl) errEl.textContent = d.msg||'验证失败'; if(window.toast) toast(d.msg||'验证失败','error'); }
+    }).catch(function(){ if(window.toast) toast('网络错误','error'); });
+};
+window.saveFindPwd = function(username){
+  var p1 = document.getElementById('fp-newpwd'), p2 = document.getElementById('fp-newpwd2');
+  var np = p1 ? p1.value : '';
+  if(!np || np.length < 6){ if(window.toast) toast('密码至少6位','error'); return; }
+  if(p2 && p2.value !== np){ if(window.toast) toast('两次输入不一致','error'); return; }
+  var sEl = document.getElementById('fp-secret'); var secret = sEl ? sEl.value.trim() : '';
+  fetch('/api/member-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resetpwd',username:username,secret:secret,new_password:np})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok){ if(window.closeModal) closeModal(); if(window.toast) toast('密码已重置，请用新密码登录','success'); window.authTab='login'; if(window.renderAuthPage) renderAuthPage(); }
+      else { if(window.toast) toast(d.msg||'重置失败','error'); }
+    }).catch(function(){ if(window.toast) toast('网络错误','error'); });
+};
+
+/* ===== 4. TG 发送改走后端代理（前端不再持有 Token） ===== */
+window.yfSendTgNow = function(text){ return tgSend(text); };
+window.yfNotifyCustomer = function(orderNo, text){ return tgSend(text, {type:'customer', order_no:orderNo}); };
+
+/* ===== 5. saveDB 409 冲突时明确提示用户（不再静默吞掉） ===== */
+var _origSaveDB = window.saveDB;
+var _conflictWarned = false;
+window.saveDB = function(db){
+  _origSaveDB(db);
+  // 重新绑定 fetch 拦截检测 409 响应
+};
+// 拦截全局 fetch，检测 /api/state 的 409
+var _origFetch = window.fetch;
+window.fetch = function(){
+  var args = arguments;
+  return _origFetch.apply(this, args).then(function(resp){
+    try{
+      var url = String(args[0]);
+      if(url.indexOf('/api/state') >= 0 && resp.status === 409 && !_conflictWarned){
+        _conflictWarned = true;
+        if(window.toast) toast('⚠️ 数据已被其他设备更新，本页修改可能未保存，请刷新页面后重试','error');
+        setTimeout(function(){ _conflictWarned = false; }, 10000);
+      }
+    }catch(e){}
+    return resp;
+  });
+};
+
+/* ===== 6. 订单页：缺货/接码失败自动退款入口 ===== */
+setInterval(function(){
+  try{
+    if(location.hash.indexOf('#/order/') !== 0) return;
+    var app = document.getElementById('app'); if(!app) return;
+    if(app.querySelector('#yf-auto-refund-btn')) return;
+    var db = window.loadDB();
+    var orderNo = location.hash.replace('#/order/','');
+    var o = (db.orders||[]).find(function(x){ return x.order_no === orderNo; });
+    if(!o) return;
+    if((o.status === 'out_of_stock' || o.status === 'luban_error') && (o.balance_used||0) > 0 && !o.refunded_at){
+      var box = app.querySelector('.card.panel');
+      if(!box) return;
+      var div = document.createElement('div');
+      div.className = 'card panel';
+      div.style.cssText = 'margin-top:14px;padding:16px;background:#fef2f2;border:1px dashed #fca5a5;text-align:center';
+      div.innerHTML = '<p style="margin:0 0 10px;color:#b91c1c;font-size:14px">⚠️ 该订单因'+(o.status==='out_of_stock'?'缺货':'接码失败')+'无法发货，已用余额支付部分可自动退回</p>'
+        + '<button class="btn primary" id="yf-auto-refund-btn" style="background:#dc2626">申请自动退款 ¥'+((o.balance_used||0)/100).toFixed(2)+'</button>';
+      box.parentNode.insertBefore(div, box.nextSibling);
+      div.querySelector('#yf-auto-refund-btn').addEventListener('click', function(){
+        this.disabled = true; this.textContent = '处理中…';
+        fetch('/api/auto-refund?order='+encodeURIComponent(orderNo)).then(function(r){return r.json();}).then(function(d){
+          if(d.ok){ if(window.toast) toast('✅ 退款已到账','success'); refreshThen(); }
+          else { if(window.toast) toast(d.msg||'退款失败','error'); }
+        }).catch(function(){ if(window.toast) toast('网络错误','error'); });
+      });
+    }
+  }catch(e){}
+}, 2000);
+
+/* ===== 7. 后台新增「操作日志」tab ===== */
+var origRenderAdminPanel = window.renderAdminPanel;
+window.renderAdminPanel = function(){
+  origRenderAdminPanel();
+  setTimeout(function(){
+    try{
+      var tabs = document.querySelector('.tabs'); if(!tabs) return;
+      if(tabs.querySelector('[data-tab="logs"]')) return;
+      var btn = document.createElement('button');
+      btn.dataset.tab = 'logs'; btn.textContent = '操作日志';
+      btn.addEventListener('click', function(){ window.switchTab('logs'); });
+      tabs.appendChild(btn);
+    }catch(e){}
+  }, 50);
+};
+var origSwitchTab = window.switchTab;
+window.switchTab = function(tab){
+  if(tab === 'logs'){
+    document.querySelectorAll('.tabs button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === 'logs'); });
+    var body = document.getElementById('tab-body'); if(!body) return;
+    var db = window.loadDB();
+    var logs = db.logs || [];
+    var rows = logs.length ? logs.map(function(l){
+      return '<tr><td class="muted" style="font-size:12px;white-space:nowrap">'+(l.time||'')+'</td><td style="font-size:13px">'+String(l.action||'').replace(/</g,'&lt;')+'</td><td style="font-size:13px">'+String(l.detail||'').replace(/</g,'&lt;')+'</td></tr>';
+    }).join('') : '<tr><td colspan="3" class="empty">暂无操作日志（升级后新操作会自动记录）</td></tr>';
+    body.innerHTML = '<h3 style="margin:0 0 12px">📋 操作日志（最近 '+logs.length+' 条）</h3>'
+      + '<div style="overflow-x:auto"><table><thead><tr><th>时间</th><th>操作</th><th>详情</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    return;
+  }
+  return origSwitchTab(tab);
+};
+
+console.log('%c[P6 安全加固补丁] 登录/后台操作已后端化 · TG走代理 · 自动退款 · 操作日志 已加载', 'color:#6366f1;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

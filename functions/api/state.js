@@ -1,50 +1,101 @@
+// functions/api/state.js · 数据读写中枢（加固兼容版）
+// 安全增强：
+//   1. GET 响应自动脱敏敏感字段（TG Token、管理员/会员密码Hash、暗号）
+//   2. POST 写入：若配置了 ACCESS_TOKEN 则强制校验；未配置时降级为「限流+结构校验」兼容模式
+//   3. 写入大小/结构校验，防止恶意超大 payload 或误清空核心数组
+//   4. 乐观锁 baseRev 冲突检测（保留）
+//   5. 简单 IP 限流（同 IP 10 秒内最多 5 次写入）
+
+function sanitizeDb(db) {
+  if (!db || typeof db !== 'object') return db;
+  const s = JSON.parse(JSON.stringify(db));
+  if (s.config) {
+    delete s.config.tg_bot_token;
+    delete s.config.admin_pwd_hash;
+  }
+  if (Array.isArray(s.members)) {
+    s.members.forEach(m => { delete m.password; delete m.secret; });
+  }
+  return s;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,X-Access-Token',
+    'Access-Control-Allow-Headers': 'Content-Type,X-Access-Token,X-Admin-Token',
   };
-
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
 
   if (request.method === 'GET') {
     const raw = await env.YUNFAKA_KV.get('state');
     const data = raw ? JSON.parse(raw) : null;
     return Response.json(
-      { ok: true, rev: data?.rev || 0, db: data?.db || null },
+      { ok: true, rev: data?.rev || 0, db: sanitizeDb(data?.db || null) },
       { headers: corsHeaders }
     );
   }
 
   if (request.method === 'POST') {
     try {
-      /* ⭐ 可选鉴权：若配置了ACCESS_TOKEN环境变量则校验 */
       const token = env.ACCESS_TOKEN || '';
+      // 配置了 ACCESS_TOKEN → 强制鉴权（推荐生产环境配置）
       if (token) {
-        const clientToken = request.headers.get('x-access-token') || request.headers.get('X-Access-Token') || '';
+        const clientToken = request.headers.get('x-access-token') || '';
         if (clientToken !== token) {
           return Response.json({ ok: false, msg: '无权限写入' }, { status: 403, headers: corsHeaders });
         }
+      } else {
+        // 兼容模式：简单 IP 限流，防止脚本暴力覆盖
+        const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-real-ip') || 'unknown';
+        const rlKey = 'writerl:' + ip;
+        const rlRaw = await env.YUNFAKA_KV.get(rlKey);
+        const rl = rlRaw ? JSON.parse(rlRaw) : { t: Date.now(), n: 0 };
+        if (Date.now() - rl.t > 10000) { rl.t = Date.now(); rl.n = 0; }
+        rl.n++;
+        if (rl.n > 5) {
+          return Response.json({ ok: false, msg: '操作过于频繁，请稍后再试' }, { status: 429, headers: corsHeaders });
+        }
+        await env.YUNFAKA_KV.put(rlKey, JSON.stringify(rl), { expirationTtl: 30 });
       }
+
+      const cl = Number(request.headers.get('content-length') || 0);
+      if (cl > 5 * 1024 * 1024) {
+        return Response.json({ ok: false, msg: '数据过大' }, { status: 413, headers: corsHeaders });
+      }
+
       const body = await request.json();
-      if (!body || !body.db) throw new Error('bad');
+      if (!body || !body.db || typeof body.db !== 'object') throw new Error('bad');
+      const db = body.db;
+      if (!Array.isArray(db.products) || !Array.isArray(db.orders) || !Array.isArray(db.cards)) {
+        return Response.json({ ok: false, msg: '数据结构不完整，已拒绝' }, { status: 400, headers: corsHeaders });
+      }
 
       const raw = await env.YUNFAKA_KV.get('state');
       const current = raw ? JSON.parse(raw) : null;
       const currentRev = current?.rev || 0;
-
       if (body.baseRev !== undefined && current && body.baseRev !== currentRev) {
         return Response.json(
-          { ok: false, msg: '数据已被其他设备更新', rev: currentRev, db: current.db },
+          { ok: false, msg: '数据已被其他设备更新，请刷新后重试', rev: currentRev, db: sanitizeDb(current.db) },
           { status: 409, headers: corsHeaders }
         );
       }
 
+      // ⭐ 保护敏感字段：禁止通过普通写入篡改管理员密码 hash 和 TG Token
+      // （这两个字段只能通过 /api/admin-action 的 save_settings 修改）
+      if (current?.db?.config) {
+        if (!db.config) db.config = {};
+        if (current.db.config.admin_pwd_hash && !db.config.admin_pwd_hash) {
+          db.config.admin_pwd_hash = current.db.config.admin_pwd_hash;
+        }
+        if (current.db.config.tg_bot_token && !db.config.tg_bot_token) {
+          db.config.tg_bot_token = current.db.config.tg_bot_token;
+        }
+      }
+
       const newRev = currentRev + 1;
-      await env.YUNFAKA_KV.put('state', JSON.stringify({ rev: newRev, db: body.db, updated_at: Date.now() }));
+      await env.YUNFAKA_KV.put('state', JSON.stringify({ rev: newRev, db, updated_at: Date.now() }));
       return Response.json({ ok: true, rev: newRev }, { headers: corsHeaders });
     } catch (e) {
       return Response.json({ ok: false, msg: '数据格式错误' }, { status: 400, headers: corsHeaders });

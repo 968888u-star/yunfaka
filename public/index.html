@@ -1771,7 +1771,9 @@ function resendTg(orderNo){
     .then(r => r.json()).then(d => { if (d.ok) toast('TG 通知已发送 ✅','success'); else toast(d.msg || '发送失败','error'); }).catch(() => toast('网络错误','error'));
 }function renderProducts(){
   const db = loadDB();
-  const rows = db.products.length ? db.products.map(p => {
+  const smmCount = db.products.filter(p => p.source === 'smm').length;
+  const prods = db.products.filter(p => p.source !== 'smm');
+  const rows = prods.length ? prods.map(p => {
     const stock = stockOf(db, p.id); const cat = db.categories.find(c => String(c.id) === String(p.category_id));
     const skus = getSkus(p); const priceDisplay = skus.length ? usdt(getMinPrice(p)) + ' USDT 起' : usdt(p.price) + ' USDT';
     const srcBadge = p.source === 'luban' ? '<span class="badge src-luban" style="margin-left:4px">接码</span>' : (p.source === 'smm' ? '<span class="badge" style="background:#dbeafe;color:#1d4ed8;margin-left:4px">推广</span>' : '');
@@ -1794,7 +1796,7 @@ function resendTg(orderNo){
       <label class="field"><span>发货说明</span><input id="np-note" placeholder="请在 24 小时内激活"></label>
       <label class="field"><span>规格（可选）</span>${skuEditorHtml([])}</label>
       <button class="btn primary" onclick="createProduct()">创建商品</button></div>
-    <div class="card panel"><h2>商品列表</h2><div style="overflow-x:auto"><table><thead><tr><th>商品</th><th>分类</th><th>价格</th><th>库存</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    <div class="card panel"><h2>商品列表（${prods.length}）${smmCount ? '<span class="muted" style="font-size:13px;font-weight:400;margin-left:8px">另有 ' + smmCount + ' 个推广商品，请在「SMM推广」tab 管理</span>' : ''}</h2><div style="overflow-x:auto"><table><thead><tr><th>商品</th><th>分类</th><th>价格</th><th>库存</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function categoryOptions(db, selectedId){
   const sel = String(selectedId || 0);
@@ -1860,11 +1862,11 @@ function saveProduct(id){
 function deleteProduct(id){
   if (!confirm('确定删除该商品吗？其下所有卡密也会一并删除。')) return;
   const db = loadDB(); db.products = db.products.filter(p => p.id !== id); db.cards = db.cards.filter(c => c.product_id !== id);
-  saveDB(db); toast('已删除','success'); renderProducts();
+  saveDB(db); toast('已删除','success'); if (typeof adminTab !== 'undefined' && adminTab === 'smm') renderSmmTab(); else renderProducts();
 }
 function renderCategories(){
   const db = loadDB(); const cats = db.categories;
-  const rows = cats.length ? cats.map((c, i) => `<tr><td><b>${esc(c.name)}</b></td><td class="muted">${db.products.filter(p => String(p.category_id) === String(c.id)).length} 个商品</td><td style="text-align:right;white-space:nowrap"><button class="btn sm ghost" onclick="moveCategory(${c.id},-1)" ${i===0?'disabled':''}>↑</button><button class="btn sm ghost" onclick="moveCategory(${c.id},1)" ${i===cats.length-1?'disabled':''}>↓</button><button class="btn sm ghost" onclick="editCategory(${c.id})">重命名</button><button class="btn sm danger" onclick="deleteCategory(${c.id})">删除</button></td></tr>`).join('') : '<tr><td colspan="3" class="empty">暂无分类</td></tr>';
+  const rows = cats.length ? cats.map((c, i) => `<tr><td><b>${esc(c.name)}</b></td><td class="muted">${db.products.filter(p => p.source !== 'smm' && String(p.category_id) === String(c.id)).length} 个商品</td><td style="text-align:right;white-space:nowrap"><button class="btn sm ghost" onclick="moveCategory(${c.id},-1)" ${i===0?'disabled':''}>↑</button><button class="btn sm ghost" onclick="moveCategory(${c.id},1)" ${i===cats.length-1?'disabled':''}>↓</button><button class="btn sm ghost" onclick="editCategory(${c.id})">重命名</button><button class="btn sm danger" onclick="deleteCategory(${c.id})">删除</button></td></tr>`).join('') : '<tr><td colspan="3" class="empty">暂无分类</td></tr>';
   $('#tab-body').innerHTML = `<div class="card panel"><h2>新增分类</h2><div class="row"><input id="nc-name" placeholder="如：会员卡券" maxlength="12" style="flex:1"><button class="btn primary" onclick="createCategory()">添加</button></div></div>
     <div class="card panel"><h2>分类列表</h2><div style="overflow-x:auto"><table><thead><tr><th>分类名称</th><th>商品数</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   $('#nc-name').addEventListener('keydown', e => { if (e.key === 'Enter') createCategory(); });
@@ -2367,13 +2369,113 @@ function smmSetCat(c){ smmCatFilter = c; smmLoadedCount = smmPageSize; renderSmm
 function smmDoSearch(v){ smmKeyword = (v||'').trim().toLowerCase(); smmLoadedCount = smmPageSize; renderSmmClient(); }
 function smmClearSearch(){ smmKeyword = ''; smmLoadedCount = smmPageSize; renderSmmClient(); }
 function smmLoadMore(){ smmLoadedCount += smmPageSize; renderSmmClient(); }
+/* ===== SMM 后台状态（全局保留，操作后不丢失搜索/分页） ===== */
+var smmAdminKw = '';
+var smmAdminLimit = 50;
 function renderSmmTab(){
-  const db = loadDB(); const cfg = getConfig(db); const items = db.products.filter(p => p.source === 'smm');
-  const rows = items.length ? items.map(p => `<tr><td><b>${esc(p.smm_service_name || p.name)}</b><div class="muted" style="font-size:11px">ID: ${esc(p.smm_service_id)}</div></td><td>${esc(p.smm_category || '-')}</td><td class="muted">$${esc(p.smm_rate_usd || '0')}</td><td style="font-weight:700;color:#e11d48">${usdt(p.price)} USDT</td><td>${esc(p.smm_min)}~${esc(p.smm_max)}</td><td><span class="badge ${p.active ? 'ok' : 'gray'}">${p.active ? '上架' : '下架'}</span></td><td style="text-align:right"><button class="btn sm ghost" onclick="smmToggle(${p.id})">${p.active ? '下架' : '上架'}</button> <button class="btn sm danger" onclick="deleteProduct(${p.id})">删除</button></td></tr>`).join('') : '<tr><td colspan="7" class="empty">还没有同步推广服务</td></tr>';
-  $('#tab-body').innerHTML = `<div class="card panel"><div class="spread"><h2 style="margin:0">📈 chinayinliu 社媒推广</h2><div class="row" style="gap:8px"><button class="btn primary" onclick="smmSyncCore(false)">🔄 同步服务</button><button class="btn ghost" onclick="smmClear()">清空商品</button></div></div><div class="luban-hint" style="margin-top:12px">点击「同步服务」拉取全部服务，按 USDT 自动加价上架。已上架 <b>${items.length}</b> 个</div></div>
-    <div class="card panel" style="background:#f8fafc"><h3 style="margin:0 0 12px;font-size:14px">⚙️ 加价配置</h3><div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end"><div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数</div><input id="smm-markup" type="number" step="0.05" min="1" value="${cfg.smm_markup || 1.5}"></div><button class="btn primary" onclick="smmSaveCfg()">保存并重算</button></div></div>
-    <div class="card panel"><h2>推广商品列表（${items.length}）</h2><div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本(USD)</th><th>USDT售价</th><th>起订~上限</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  const db = loadDB(); const cfg = getConfig(db);
+  const all = db.products.filter(p => p.source === 'smm');
+  const kw = (smmAdminKw || '').trim().toLowerCase();
+  const items = kw ? all.filter(p => ((p.smm_service_name||'')+' '+(p.name||'')+' '+(p.smm_category||'')+' '+(p.smm_service_id||'')).toLowerCase().indexOf(kw) >= 0) : all;
+  const shown = items.slice(0, smmAdminLimit);
+  const hasMore = items.length > smmAdminLimit;
+  const rows = shown.length ? shown.map(p => {
+    const custom = p.smm_custom_price > 0;
+    return `<tr>
+      <td><b>${esc(p.smm_service_name || p.name)}</b><div class="muted" style="font-size:11px">ID: ${esc(p.smm_service_id)}</div></td>
+      <td>${esc(p.smm_category || '-')}</td>
+      <td class="mono" style="font-size:12px">$${esc(p.smm_rate_usd || '0')}</td>
+      <td style="font-weight:700;color:#e11d48">${usdt(p.price)} USDT${custom?' <span class="badge" style="background:#fef3c7;color:#b45309;font-size:10px">自定义</span>':''}</td>
+      <td>${esc(p.smm_min)}~${esc(p.smm_max)}</td>
+      <td><span class="badge ${p.active ? 'ok' : 'gray'}">${p.active ? '上架' : '下架'}</span></td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn sm ghost" onclick="smmEditPrice(${p.id})">改价</button>
+        <button class="btn sm ghost" onclick="smmToggle(${p.id})">${p.active ? '下架' : '上架'}</button>
+        <button class="btn sm danger" onclick="deleteProduct(${p.id})">删除</button>
+      </td></tr>`;
+  }).join('') : `<tr><td colspan="7" class="empty">${kw ? '没有匹配「'+esc(kw)+'」的服务' : '还没有同步推广服务'}</td></tr>`;
+  $('#tab-body').innerHTML = `
+    <div class="card panel" style="padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-weight:700">💳 上游渠道余额：</span><span id="smm-bal-val" class="mono" style="color:#10b981;font-weight:800">查询中…</span>
+      <button class="btn ghost sm" onclick="smmRefreshBalance()" style="margin-left:auto">🔄 刷新余额</button>
+    </div>
+    <div class="card panel"><div class="spread" style="flex-wrap:wrap;gap:8px"><h2 style="margin:0;font-size:17px">📈 chinayinliu 社媒推广</h2><div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="btn primary sm" onclick="smmSyncCore(false)">🔄 同步服务</button>
+      <button class="btn ghost sm" onclick="smmRefreshCost()">💰 刷新成本价</button>
+      <button class="btn ghost sm" onclick="smmClear()">清空商品</button>
+    </div></div>
+    <div class="luban-hint" style="margin-top:12px">「同步服务」拉取新服务并加价上架；「刷新成本价」仅更新上游成本并重算售价（自定义价商品保持不变）。已上架 <b>${all.length}</b> 个，当前显示 <b>${shown.length}</b>${kw?'（搜索过滤）':''}</div></div>
+    <div class="card panel" style="background:#f8fafc"><h3 style="margin:0 0 12px;font-size:14px">⚙️ 加价配置</h3><div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end"><div style="flex:1;min-width:140px"><div class="muted" style="font-size:12px;margin-bottom:6px">加价倍数（已设自定义价的商品不受影响）</div><input id="smm-markup" type="number" step="0.05" min="1" value="${cfg.smm_markup || 1.5}"></div><button class="btn primary" onclick="smmSaveCfg()">保存并重算</button></div></div>
+    <div class="card panel">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <h2 style="margin:0;font-size:17px;flex-shrink:0">推广商品列表（${items.length}）</h2>
+        <input id="smm-admin-search" placeholder="🔍 关键词搜索：服务名 / 类别 / 服务ID，实时过滤" value="${esc(smmAdminKw||'')}" style="flex:1;min-width:200px" oninput="smmAdminSearch(this.value)">
+        ${kw ? '<button class="btn ghost sm" onclick="smmAdminClearSearch()">清除</button>' : ''}
+      </div>
+      <div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本(USD)</th><th>USDT售价</th><th>起订~上限</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${hasMore ? `<div style="text-align:center;margin-top:14px"><button class="btn ghost" onclick="smmAdminLoadMore()">加载更多（已显示 ${shown.length} / ${items.length}）</button></div>` : ''}
+    </div>`;
+  smmRefreshBalance();
 }
+function smmRefreshBalance(){
+  var el = document.getElementById('smm-bal-val'); if(!el) return;
+  el.textContent = '查询中…'; el.style.color = '#6b7280';
+  if(typeof fetchBalance === 'function'){
+    fetchBalance('smm', function(d){
+      if(!d){ el.textContent = '查询失败（未配置API Key）'; el.style.color = '#ef4444'; return; }
+      var bal = d.balance !== undefined ? d.balance : (d.data && d.data.balance !== undefined ? d.data.balance : JSON.stringify(d).slice(0,30));
+      el.textContent = String(bal); el.style.color = '#10b981';
+    });
+  } else { el.textContent = '—'; }
+}
+function smmAdminSearch(v){ smmAdminKw = v || ''; smmAdminLimit = 50; renderSmmTab(); }
+function smmAdminClearSearch(){ smmAdminKw = ''; smmAdminLimit = 50; renderSmmTab(); }
+function smmAdminLoadMore(){ smmAdminLimit += 100; renderSmmTab(); }
+function smmEditPrice(id){
+  var db = loadDB(); var p = db.products.find(x => x.id === id); if(!p) return;
+  var customUsdt = p.smm_custom_price > 0 ? (p.smm_custom_price/100).toFixed(4) : '';
+  openModal(`<h3>自定义售价 · ${esc(p.smm_service_name || p.name)}</h3>
+    <div class="kv"><span class="k">服务ID</span><span class="v mono">${esc(p.smm_service_id)}</span></div>
+    <div class="kv"><span class="k">上游成本</span><span class="v">$${esc(p.smm_rate_usd||'0')} USD</span></div>
+    <div class="kv"><span class="k">当前售价</span><span class="v" style="color:#e11d48;font-weight:700">${usdt(p.price)} USDT</span></div>
+    <label class="field"><span>自定义售价（USDT，留空=按加价倍数自动计算）</span><input id="smm-custom-price" type="number" step="0.0001" min="0" placeholder="例如 0.5" value="${customUsdt}"></label>
+    <div class="muted" style="font-size:12px;margin:-6px 0 10px">设置后该商品售价固定，不再随加价倍数/上游成本变动。</div>
+    <div class="row" style="justify-content:flex-end;gap:8px"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn ghost" onclick="smmResetCustomPrice(${id})">恢复自动定价</button><button class="btn primary" onclick="smmSaveCustomPrice(${id})">保存</button></div>`, true);
+}
+function smmSaveCustomPrice(id){
+  var v = parseFloat(document.getElementById('smm-custom-price').value);
+  var db = loadDB(); var p = db.products.find(x => x.id === id); if(!p) return;
+  if(isNaN(v) || v <= 0){ p.smm_custom_price = 0; var cfg = getConfig(db); var markup = Number(cfg.smm_markup)||1.5; p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd||0)*markup*100)); }
+  else { p.smm_custom_price = Math.round(v*100); p.price = p.smm_custom_price; }
+  saveDB(db); closeModal(); toast('已保存','success'); renderSmmTab();
+}
+function smmResetCustomPrice(id){
+  var db = loadDB(); var p = db.products.find(x => x.id === id); if(!p) return;
+  p.smm_custom_price = 0; var cfg = getConfig(db); var markup = Number(cfg.smm_markup)||1.5; p.price = Math.max(1, Math.round(parseFloat(p.smm_rate_usd||0)*markup*100));
+  saveDB(db); closeModal(); toast('已恢复自动定价','success'); renderSmmTab();
+}
+function smmRefreshCost(){
+  toast('正在从上游拉取最新成本价…');
+  smmApi('services').then(r => {
+    if(!r.ok){ toast('拉取失败：'+(r.msg||''),'error'); return; }
+    var list = r.data; if(!Array.isArray(list)){ toast('返回格式异常','error'); return; }
+    var db = loadDB(); var cfg = getConfig(db); var markup = Number(cfg.smm_markup)||1.5; var updated = 0;
+    list.forEach(s => {
+      var sid = String(s.service||''); if(!sid) return;
+      var exist = db.products.find(p => p.source==='smm' && String(p.smm_service_id)===sid);
+      if(exist){
+        var newRate = parseFloat(s.rate)||0;
+        exist.smm_rate_usd = newRate.toFixed(4);
+        exist.name = '[推广] ' + (s.name||'');
+        exist.smm_service_name = s.name||'';
+        if(!exist.smm_custom_price){ exist.price = Math.max(1, Math.round(newRate*markup*100)); }
+        updated++;
+      }
+    });
+    saveDB(db); toast('成本价已刷新：更新 '+updated+' 个（自定义价商品保持不变）','success'); renderSmmTab();
+  }).catch(e => { toast('网络错误：'+e.message,'error'); });
+}
+
 function smmSaveCfg(){ var markup = parseFloat($('#smm-markup').value); if (!markup || markup < 1){ toast('加价倍数至少为 1','error'); return; } var db = loadDB(); db.config.smm_markup = markup;
   db.products.forEach(p => { if (p.source === 'smm' && p.smm_rate_usd){ p.price = (p.smm_custom_price > 0) ? p.smm_custom_price : Math.max(1, Math.round(parseFloat(p.smm_rate_usd) * markup * 100)); } });
   saveDB(db); toast('已保存并重算','success'); renderSmmTab(); }
@@ -5174,16 +5276,7 @@ if(typeof _origSmmRefresh === 'function'){
 }
 setInterval(function(){ var el=document.getElementById('smm-amount'); if(el && !el.dataset.p7bound){ el.dataset.p7bound='1'; smmAmountUnit(); } }, 800);
 
-/* ===== 3. 后台tab切换卡顿优化：点击立即显示loading，异步渲染 ===== */
-var _origSwitchTab = window.switchTab;
-if(typeof _origSwitchTab === 'function'){
-  window.switchTab = function(tab){
-    var body = document.getElementById('tab-body');
-    if(body) body.innerHTML = '<div class="loading" style="padding:40px;text-align:center;color:var(--muted)">加载中…</div>';
-    var args = arguments;
-    setTimeout(function(){ try{ _origSwitchTab.apply(window, args); }catch(e){ console.warn(e); } }, 20);
-  };
-}
+/* ===== 3. 已移除：switchTab setTimeout 延迟包装（改为同步渲染 + 分页减载） ===== */
 
 /* ===== 4. 后台会员管理：增加充值记录详情表 ===== */
 var _origRenderMembers = window.renderMembers;
@@ -5243,14 +5336,7 @@ function injectSmmSearch(){
   });
   wrap.querySelector('#p7-smm-clear').addEventListener('click', function(){ input.value=''; input.dispatchEvent(new Event('input')); });
 }
-var _origRenderSmmTab = window.renderSmmTab;
-if(typeof _origRenderSmmTab === 'function'){
-  window.renderSmmTab = function(){
-    _origRenderSmmTab.apply(this, arguments);
-    setTimeout(injectSmmSearch, 120);
-    setTimeout(function(){ injectBalanceBar('smm'); }, 150);
-  };
-}
+/* _origRenderSmmTab 后注入已移除：搜索/余额条已原生集成进 renderSmmTab */
 
 /* ===== 6. Luban / SMM 后台：上游渠道余额实时显示 ===== */
 function fetchBalance(type, cb){

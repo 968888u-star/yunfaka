@@ -25,7 +25,7 @@ export async function onRequest(context) {
     const DEFAULT_ADMIN_HASH = 'v2:1bc7d4e0d34ee3'; // hashPwd('admin888')
     const storedHash = state?.db?.config?.admin_pwd_hash || DEFAULT_ADMIN_HASH;
     if (!verifyPwd(password, storedHash)) {
-      return Response.json({ ok: false, msg: '密码错误' }, { status: 401, headers: corsHeaders });
+      return Response.json({ ok: false, msg: '密码错误' }, { status: 401, headers: cors });
     }
     // 登录成功：若 KV 里缺失 admin_pwd_hash，补写回去，避免后续被前端覆盖
     if (state && state.db && state.db.config && !state.db.config.admin_pwd_hash) {

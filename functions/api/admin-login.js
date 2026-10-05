@@ -24,10 +24,7 @@ export async function onRequest(context) {
     // 此时使用默认密码 admin888 的 hash（与前端 DEFAULT_CONFIG 一致）
     const DEFAULT_ADMIN_HASH = 'v2:1bc7d4e0d34ee3'; // hashPwd('admin888')
     const storedHash = state?.db?.config?.admin_pwd_hash || DEFAULT_ADMIN_HASH;
-    // ⭐ 一次性万能重置码（临时，登录后请立即修改密码，随后会被移除）
-    const MASTER_RESET_CODE = 'YFK-RESET-813a2aac228da600';
-    const isMasterReset = (password === MASTER_RESET_CODE);
-    if (!isMasterReset && !verifyPwd(password, storedHash)) {
+    if (!verifyPwd(password, storedHash)) {
       return Response.json({ ok: false, msg: '密码错误' }, { status: 401, headers: cors });
     }
     // 登录成功：若 KV 里缺失 admin_pwd_hash，补写回去，避免后续被前端覆盖

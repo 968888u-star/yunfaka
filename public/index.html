@@ -5872,5 +5872,174 @@ console.log('%c[P10 终极修复] saveSettings 已接管 · TG 表单 ID 已对�
   'color:#e11d48;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P11 · 配置独立备份 —— 彻底解决"保存后刷新丢失"
+     原理：saveSettings 时额外写独立 key；loadDB 时用独立 key 覆盖 config
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+if (!window.loadDB || !window.saveDB){
+  console.error('[P11] 核心未就绪');
+  return;
+}
+
+var CONFIG_OVERRIDE_KEY = 'yf_config_override';
+var CONFIG_OVERRIDE_MAX_AGE = 7 * 24 * 3600 * 1000; // 7 天内有效
+
+/* ---------- 1. 保存时写入独立备份 ---------- */
+var _origSaveSettings = window.saveSettings;
+window.saveSettings = function(){
+  var ret = _origSaveSettings.apply(this, arguments);
+
+  /* 独立备份 config */
+  try {
+    var db = window.loadDB();
+    var payload = {
+      config: db.config,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(CONFIG_OVERRIDE_KEY, JSON.stringify(payload));
+    console.log('%c[P11] ✅ 配置已独立备份（刷新也不会丢）', 'color:#10b981;font-weight:bold');
+    console.log('[P11] 备份内容:', {
+      tg_bot_token: db.config.tg_bot_token ? db.config.tg_bot_token.slice(0,12)+'…' : '(空)',
+      tg_chat_id: db.config.tg_chat_id || '(空)',
+      site_name: db.config.site_name,
+      usdt_rate: db.config.pay_usdt_rate
+    });
+  } catch(e){
+    console.error('[P11] 备份失败:', e);
+  }
+
+  return ret;
+};
+
+/* ---------- 2. 覆盖 loadDB：独立备份覆盖 config ---------- */
+var _origLoadDB = window.loadDB;
+window.loadDB = function(){
+  var db = _origLoadDB.apply(this, arguments);
+  if (!db) return db;
+
+  try {
+    var raw = localStorage.getItem(CONFIG_OVERRIDE_KEY);
+    if (!raw) return db;
+
+    var override = JSON.parse(raw);
+    if (!override || !override.config || !override.savedAt) return db;
+
+    /* 过期检查 */
+    if (Date.now() - override.savedAt > CONFIG_OVERRIDE_MAX_AGE){
+      console.warn('[P11] 独立备份已过期，忽略');
+      return db;
+    }
+
+    /* 合并：独立备份优先 */
+    var primary = db.config || {};
+    var merged = Object.assign({}, primary, override.config);
+
+    /* 关键：不加日志，否则 loadDB 被高频调用会刷屏 */
+    db.config = merged;
+  } catch(e){
+    console.warn('[P11] 加载独立备份失败:', e);
+  }
+
+  return db;
+};
+
+/* ---------- 3. 首屏渲染前先验证：独立备份 vs 服务端 ---------- */
+setTimeout(function(){
+  try {
+    var raw = localStorage.getItem(CONFIG_OVERRIDE_KEY);
+    if (!raw) return;
+    var override = JSON.parse(raw);
+    if (!override || !override.config) return;
+
+    fetch('/api/state?t=' + Date.now(), { cache: 'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d || !d.ok || !d.db || !d.db.config) return;
+        var srvCfg = d.db.config;
+        var keys = ['tg_bot_token','tg_chat_id','site_name','pay_usdt_rate','pay_usdt_address'];
+        var diff = [];
+        keys.forEach(function(k){
+          if (String(srvCfg[k]||'') !== String(override.config[k]||'')) diff.push(k);
+        });
+        if (diff.length){
+          console.warn('%c[P11] ⚠️ 服务端配置与本地备份不一致：', 'color:#f59e0b;font-weight:bold', diff);
+          console.warn('  → 说明 POST /api/state 未成功，独立备份正在保护你的配置');
+          if (window.toast){
+            window.toast('⚠️ 服务端保存失败，配置仅本地生效。请检查 /api/state 接口权限', 'error');
+          }
+        } else {
+          console.log('%c[P11] ✅ 服务端配置已同步', 'color:#10b981;font-weight:bold');
+        }
+      })
+      .catch(function(e){ console.warn('[P11] 验证请求失败:', e); });
+  } catch(e){}
+}, 3000);
+
+/* ---------- 4. 提供手动工具（F12 里执行） ---------- */
+window.yfConfigDebug = function(){
+  var raw = localStorage.getItem(CONFIG_OVERRIDE_KEY);
+  var override = raw ? JSON.parse(raw) : null;
+  var db = _origLoadDB.call(window);
+  console.group('[P11] 配置诊断');
+  console.log('独立备份存在:', !!override);
+  if (override){
+    console.log('备份时间:', new Date(override.savedAt).toLocaleString());
+    console.log('备份 tg_bot_token:', override.config.tg_bot_token || '(空)');
+    console.log('备份 tg_chat_id:', override.config.tg_chat_id || '(空)');
+  }
+  console.log('当前 db.config.tg_bot_token:', db.config.tg_bot_token || '(空)');
+  console.log('当前 db.config.tg_chat_id:', db.config.tg_chat_id || '(空)');
+  console.log('--- 命令 ---');
+  console.log('清除独立备份: yfConfigClearOverride()');
+  console.log('强制推送: yfConfigForcePush()');
+  console.groupEnd();
+};
+
+window.yfConfigClearOverride = function(){
+  localStorage.removeItem(CONFIG_OVERRIDE_KEY);
+  console.log('[P11] 独立备份已清除');
+  if (window.toast) window.toast('已清除独立备份', 'info');
+};
+
+window.yfConfigForcePush = function(){
+  try {
+    var db = window.loadDB();
+    fetch('/api/state?t=' + Date.now(), { cache: 'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var rev = d && d.rev !== undefined ? d.rev : 0;
+        return fetch('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ db: db, baseRev: rev })
+        }).then(function(r){ return r.json(); });
+      })
+      .then(function(d){
+        if (d && d.ok){
+          console.log('%c[P11] ✅ 强制推送成功', 'color:#10b981;font-weight:bold');
+          if (window.toast) window.toast('强制推送成功 ✅', 'success');
+        } else {
+          console.error('[P11] ❌ 强制推送失败:', d);
+          if (window.toast) window.toast('推送失败：' + (d && d.msg || '未知'), 'error');
+        }
+      })
+      .catch(function(e){
+        console.error('[P11] 推送异常:', e);
+        if (window.toast) window.toast('推送异常：' + e.message, 'error');
+      });
+  } catch(e){
+    console.error(e);
+  }
+};
+
+console.log('%c[P11] 配置独立备份已启用 —— 保存后刷新不再丢失', 'color:#e11d48;font-weight:bold;font-size:13px');
+console.log('%c  诊断：yfConfigDebug()  |  清除：yfConfigClearOverride()  |  强制推送：yfConfigForcePush()',
+  'color:#6b7280;font-size:12px');
+})();
+</script>
 </body>
 </html>

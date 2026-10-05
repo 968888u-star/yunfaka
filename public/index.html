@@ -6752,5 +6752,172 @@ console.log('%c[YunFaKa Patch v3] 客户体验 + 店主运营全面升级完成'
             'color:#8b5cf6;font-weight:bold;font-size:13px');
 })();
 </script>
+<script>
+/* ============================================================
+   性能补丁 v4 · 修复后台/商品页卡顿
+   ============================================================ */
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB){ console.warn('[Perf v4] 核心未就绪'); return; }
+
+/* ---------- 1. 清掉所有现存 interval ---------- */
+/* 主要干掉两个"每 5 秒全 DOM 遍历"的定时器 + 800ms 的 injectTab */
+(function(){
+  for (var i = 1; i < 100000; i++){
+    try { clearInterval(i); } catch(e){}
+  }
+})();
+
+/* ---------- 2. 重建必要定时器 ---------- */
+
+/* 2.1 多设备同步（8s 一次；admin 页不打断；输入中不重渲染） */
+(function(){
+  var API = '/api/state', rev = 0, _busy = false;
+  function pull(){
+    if (_busy) return;
+    _busy = true;
+    fetch(API + '?t=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        _busy = false;
+        if (!d || !d.ok || !d.db || d.rev === rev) return;
+        rev = d.rev;
+        var local = window.loadDB() || {}, srv = d.db;
+        var srvEmpty = (!srv.orders || !srv.orders.length)
+                    && (!srv.members || !srv.members.length)
+                    && (!srv.cards   || !srv.cards.length)
+                    && (!srv.categories || !srv.categories.length);
+        var localHas = (local.orders && local.orders.length > 0)
+                    || (local.members && local.members.length > 0);
+        if (srvEmpty && localHas) return;
+        try { localStorage.setItem('yunfaka_db_v15', JSON.stringify(srv)); } catch(e){}
+        if (window.applySiteConfig) window.applySiteConfig();
+        if (location.hash.indexOf('/admin') >= 0) return;
+        var ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+        if (window.route) window.route();
+      })
+      .catch(function(){ _busy = false; });
+  }
+  setInterval(pull, 8000);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) pull(); });
+  window.addEventListener('online', pull);
+})();
+
+/* 2.2 待支付订单超时取消（2 分钟检查一次） */
+(function(){
+  setInterval(function(){
+    try {
+      var db = window.loadDB(), changed = false, nowTs = Date.now();
+      (db.orders || []).forEach(function(o){
+        if (o.status !== 'pending') return;
+        var ts = Date.parse((o.created_at || '').replace(/-/g, '/'));
+        if (!ts || nowTs - ts <= 30 * 60 * 1000) return;
+        if (o.balance_used > 0 && window.refundOrderBalance){
+          window.refundOrderBalance(o.order_no, '支付超时自动取消');
+          db = window.loadDB();
+          o = db.orders.find(function(x){ return x.order_no === o.order_no; });
+        }
+        o.status = 'rejected';
+        o.luban_error = '支付超时自动取消';
+        changed = true;
+      });
+      if (changed) window.saveDB(db);
+    } catch(e){}
+  }, 120000);
+})();
+
+/* 2.3 SMM 自动同步（30 分钟） */
+(function(){
+  setInterval(function(){
+    try {
+      var cfg = window.loadDB().config || {};
+      if (cfg.smm_auto_sync && window.smmSyncCore) window.smmSyncCore(true);
+    } catch(e){}
+  }, 30 * 60 * 1000);
+})();
+
+/* 2.4 后台 SMM tab 注入（hashchange 立即 + 3s 兜底） */
+(function(){
+  function injectTab(){
+    if (location.hash.indexOf('/admin') < 0) return;
+    var tabs = document.querySelector('.tabs');
+    if (!tabs || tabs.querySelector('[data-tab="smm"]')) return;
+    var btn = document.createElement('button');
+    btn.dataset.tab = 'smm';
+    btn.textContent = 'SMM推广';
+    btn.onclick = function(){ window.switchTab('smm'); };
+    tabs.appendChild(btn);
+  }
+  window.addEventListener('hashchange', function(){ setTimeout(injectTab, 80); });
+  setInterval(injectTab, 3000);
+})();
+
+/* 2.5 在线客服轮询（panel 打开时才跑，每 5s） */
+(function(){
+  var fn = window.csPoll;
+  if (typeof fn !== 'function') return;
+  setInterval(function(){
+    var p = document.getElementById('cs-panel');
+    if (p && p.classList.contains('open')) fn();
+  }, 5000);
+})();
+
+/* ---------- 3. stockOf 优化：缓存库存映射 ---------- */
+(function(){
+  var _cache = null, _t = 0, TTL = 3000;
+  function build(cards){
+    var map = {};
+    for (var i = 0; i < cards.length; i++){
+      var c = cards[i];
+      if (c.status === 'unused') map[c.product_id] = (map[c.product_id] || 0) + 1;
+    }
+    return map;
+  }
+  window.stockOf = function(db, pid){
+    var now = Date.now();
+    if (!_cache || now - _t > TTL){ _cache = build(db.cards || []); _t = now; }
+    var arr = db.products || [], p = null;
+    for (var i = 0; i < arr.length; i++){ if (arr[i].id === pid){ p = arr[i]; break; } }
+    if (p && (p.source === 'luban' || p.source === 'smm')) return 9999;
+    var cnt = _cache[pid] || 0;
+    return cnt > 0 ? cnt : ((p && p.stock) ? p.stock : 1000);
+  };
+  var _orig = window.saveDB;
+  window.saveDB = function(db){ _cache = null; _t = 0; return _orig.apply(this, arguments); };
+})();
+
+/* ---------- 4. productStock 优化 ---------- */
+(function(){
+  var _cache = null, _t = 0, _pid = null, TTL = 3000;
+  function build(cards, pid){
+    var map = { total: 0 };
+    for (var i = 0; i < cards.length; i++){
+      var c = cards[i];
+      if (c.product_id !== pid || c.status !== 'unused') continue;
+      map.total++;
+      var sid = c.sku_id || 0;
+      map[sid] = (map[sid] || 0) + 1;
+    }
+    return map;
+  }
+  window.productStock = function(db, p, skuId){
+    if (!p) return 0;
+    if (p.source === 'luban' || p.source === 'smm') return 9999;
+    var now = Date.now();
+    if (!_cache || _pid !== p.id || now - _t > TTL){
+      _cache = build(db.cards || [], p.id); _pid = p.id; _t = now;
+    }
+    if (_cache.total === 0) return (p.stock || 1000);
+    if (skuId === undefined) return _cache.total;
+    return _cache[skuId] || 0;
+  };
+  var _orig = window.saveDB;
+  window.saveDB = function(db){ _cache = null; _t = 0; _pid = null; return _orig.apply(this, arguments); };
+})();
+
+console.log('%c[Perf v4] 卡顿修复完成', 'color:#10b981;font-weight:bold');
+})();
+</script>
 </body>
 </html>

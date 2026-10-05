@@ -2701,7 +2701,21 @@ function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.or
   window.saveDB = function(db){
     _saveDB(db);
     fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({db:db, baseRev:rev})})
-      .then(function(r){ return r.json(); }).then(function(d){ if (d && d.ok) rev = d.rev; }).catch(function(e){ console.warn('push fail', e); });
+      .then(function(r){ return r.json(); }).then(function(d){
+        if (d && d.ok) { rev = d.rev; return; }
+        // 409 乐观锁冲突：用服务端最新 rev 自动重试一次（修复死锁）
+        if (d && d.rev !== undefined) {
+          rev = d.rev;
+          fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({db:db, baseRev:rev})})
+            .then(function(r2){ return r2.json(); }).then(function(d2){
+              if (d2 && d2.ok) { rev = d2.rev; if (window.toast) toast('已同步保存','success'); }
+              else if (window.toast) toast('保存失败：'+(d2.msg||'请刷新页面重试'),'error');
+            }).catch(function(){ if (window.toast) toast('保存失败：网络错误','error'); });
+          return;
+        }
+        // 403/429 等明确提示，不再静默
+        if (window.toast) toast('保存失败：'+(d && d.msg ? d.msg : '未知错误（检查ACCESS_TOKEN/频繁操作）'),'error');
+      }).catch(function(e){ console.warn('push fail', e); if (window.toast) toast('保存失败：网络错误','error'); });
   };
   function pull(){
     fetch(API + '?t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){

@@ -7599,5 +7599,183 @@ var _yuan = function(f){ return (Number(f||0)/100).toFixed(2); };
 console.log('%c[Patch v5-B] 店主运营补丁加载完成', 'color:#6366f1;font-weight:bold');
 })();
 </script>
+<!-- ============================================================
+     修复补丁 v6 · 移除首页搜索框 + 修复滚动穿透
+     整理版 · 直接追加到文件末尾
+     ============================================================ -->
+
+<!-- CSS 部分：滚动锁定 + 阻止滚动连锁 -->
+<style>
+/* body 硬冻结（iOS 上唯一可靠的方法） */
+body.yf-scroll-locked{
+  position:fixed !important;
+  left:0; right:0;
+  width:100%;
+  overflow:hidden !important;
+}
+/* 客服面板与其消息列表：阻止滚动连锁到底层 */
+.cs-panel{ overscroll-behavior:contain !important; }
+.cs-msgs{  overscroll-behavior:contain !important; -webkit-overflow-scrolling:touch; }
+/* 支付弹窗（原 CSS 只给 .modal 加了，遮罩层也补上） */
+.modal-mask{ overscroll-behavior:contain !important; }
+.modal{      overscroll-behavior:contain !important; }
+</style>
+
+<script>
+/* ============================================================
+   修复补丁 v6 · JS 部分
+   ============================================================ */
+(function(){
+'use strict';
+
+/* ============================================================
+   [1] 移除首页商品搜索框
+   ------------------------------------------------------------
+   原理：v5-A 的 renderHome 会注入搜索框，这里在它之后
+        再包一层 renderHome，注入完成后立即清理。
+   ============================================================ */
+(function(){
+  var orig = window.renderHome;
+  if (typeof orig !== 'function') return;
+  window.renderHome = function(){
+    var r = orig.apply(this, arguments);
+    try {
+      var app = document.getElementById('app');
+      if (!app) return r;
+      // 1. 删除搜索框
+      var box = document.getElementById('yf-home-search');
+      if (box) box.remove();
+      // 2. 恢复被 v5-A 过滤隐藏的商品
+      var grid = app.querySelector('.grid');
+      if (grid){
+        grid.querySelectorAll('.product').forEach(function(c){ c.style.display = ''; });
+        grid.querySelectorAll('.empty').forEach(function(e){
+          if (e.textContent.indexOf('没有找到匹配') >= 0) e.remove();
+        });
+      }
+    } catch(e){}
+    return r;
+  };
+  // 如果用户已经在首页且被过滤，立即重渲染清掉
+  setTimeout(function(){
+    var h = location.hash;
+    if (h === '' || h === '#' || h === '#/'){
+      if (window.renderHome) window.renderHome();
+    }
+  }, 100);
+})();
+
+/* ============================================================
+   [2] 滚动锁核心
+   ============================================================ */
+var _scrollY = 0;
+var _locked = false;
+
+function lockScroll(){
+  if (_locked) return;
+  _scrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.style.top = -_scrollY + 'px';
+  document.body.classList.add('yf-scroll-locked');
+  _locked = true;
+}
+
+function unlockScroll(){
+  if (!_locked) return;
+  document.body.classList.remove('yf-scroll-locked');
+  document.body.style.top = '';
+  window.scrollTo(0, _scrollY);
+  _locked = false;
+}
+
+/* 对外暴露，供后续自定义浮层使用 */
+window.yfLockScroll = lockScroll;
+window.yfUnlockScroll = unlockScroll;
+
+/* 判断当前是否有任意浮层打开 */
+function anyOverlayOpen(){
+  var m = document.getElementById('modal');
+  if (m && !m.classList.contains('hidden')) return true;
+  var c = document.getElementById('cs-panel');
+  if (c && c.classList.contains('open')) return true;
+  return false;
+}
+
+/* ============================================================
+   [3] 包裹 openModal / closeModal —— 弹窗自动加锁
+   ============================================================ */
+(function(){
+  var origOpen = window.openModal;
+  var origClose = window.closeModal;
+
+  if (typeof origOpen === 'function'){
+    window.openModal = function(){
+      var r = origOpen.apply(this, arguments);
+      lockScroll();
+      return r;
+    };
+  }
+  if (typeof origClose === 'function'){
+    window.closeModal = function(){
+      var r = origClose.apply(this, arguments);
+      // 等其它同步逻辑跑完，再判断是否可以解锁
+      setTimeout(function(){
+        if (!anyOverlayOpen()) unlockScroll();
+      }, 30);
+      return r;
+    };
+  }
+})();
+
+/* ============================================================
+   [4] 客服面板开关 —— MutationObserver 自动加锁/解锁
+   ============================================================ */
+(function(){
+  var panel = document.getElementById('cs-panel');
+  if (!panel) return;
+  var mo = new MutationObserver(function(){
+    if (panel.classList.contains('open')) lockScroll();
+    else if (!anyOverlayOpen()) unlockScroll();
+  });
+  mo.observe(panel, { attributes: true, attributeFilter: ['class'] });
+})();
+
+/* ============================================================
+   [5] 全局 touchmove 兜底
+   ------------------------------------------------------------
+   锁定状态下，触摸目标不在可滚动容器内 → 直接 preventDefault
+   ============================================================ */
+document.addEventListener('touchmove', function(e){
+  if (!_locked) return;
+  var el = e.target;
+  while (el && el !== document.body){
+    if (el.nodeType === 1 && el.scrollHeight > el.clientHeight){
+      var cs = window.getComputedStyle(el);
+      var oy = cs.overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && cs.position !== 'fixed'){
+        return; // 内部可滚，放行
+      }
+    }
+    el = el.parentNode;
+  }
+  e.preventDefault();
+}, { passive: false });
+
+/* ============================================================
+   [6] 状态校准（hashchange / 页面恢复可见 / 定时兜底）
+   ============================================================ */
+function reconcile(){
+  if (!anyOverlayOpen() && _locked) unlockScroll();
+  else if (anyOverlayOpen() && !_locked) lockScroll();
+}
+window.addEventListener('hashchange', function(){ setTimeout(reconcile, 60); });
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden) setTimeout(reconcile, 100);
+});
+setInterval(reconcile, 3000);
+
+console.log('%c[Patch v6] 首页搜索框已移除 · 滚动穿透已修复',
+            'color:#ec4899;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

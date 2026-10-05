@@ -6041,5 +6041,128 @@ console.log('%c  诊断：yfConfigDebug()  |  清除：yfConfigClearOverride()  
   'color:#6b7280;font-size:12px');
 })();
 </script>
+<!-- ============================================================
+     P13 · 自动带 X-Access-Token + 权限探测 + 配置同步验证
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* ===== 0. 读取 token ===== */
+const ACCESS_TOKEN = localStorage.getItem('yf_access_token') || '';
+
+/* ===== 1. fetch 拦截器：/api/* 请求自动带头 ===== */
+const _origFetch = window.fetch;
+window.fetch = function(url, opts){
+  opts = opts || {};
+  const u = String(url || '');
+  if (u.indexOf('/api/') >= 0 && ACCESS_TOKEN){
+    opts.headers = Object.assign({}, opts.headers || {}, {
+      'X-Access-Token': ACCESS_TOKEN
+    });
+  }
+  return _origFetch.call(this, url, opts);
+};
+
+console.log(ACCESS_TOKEN
+  ? '%c[P13] ✅ 已加载 ACCESS_TOKEN（' + ACCESS_TOKEN.slice(0,6) + '…）'
+  : '%c[P13] ⚠️ 未配置 ACCESS_TOKEN，若服务端要求鉴权会 403。在 Console 里执行：yfSetToken("你的token")',
+  ACCESS_TOKEN ? 'color:#10b981;font-weight:bold;font-size:12px' : 'color:#f59e0b;font-weight:bold;font-size:12px');
+
+/* ===== 2. 手动设置工具 ===== */
+window.yfSetToken = function(token){
+  if (!token){
+    localStorage.removeItem('yf_access_token');
+    console.log('[P13] 已清除 token，刷新生效');
+  } else {
+    localStorage.setItem('yf_access_token', token);
+    console.log('[P13] token 已保存，刷新页面生效');
+  }
+  location.reload();
+};
+
+/* ===== 3. 启动后自动探测服务端权限 ===== */
+setTimeout(function(){
+  // 3.1 GET 检测
+  fetch('/api/state?t=' + Date.now())
+    .then(function(r){
+      console.log('%c[P13] GET /api/state → ' + r.status,
+        r.status === 200 ? 'color:#10b981' : 'color:#ef4444');
+      return r.json();
+    })
+    .then(function(d){
+      if (d && d.ok){
+        console.log('%c[P13] ✅ 服务端 GET 正常', 'color:#10b981');
+      }
+    })
+    .catch(function(e){ console.warn('[P13] GET 请求失败:', e); });
+
+  // 3.2 POST 权限探测
+  fetch('/api/state', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      db: { products:[], orders:[], cards:[], members:[], recharges:[], categories:[], config:{} },
+      baseRev: 0,
+      __p13_probe: true
+    })
+  })
+  .then(function(r){
+    if (r.status === 403){
+      console.error('%c[P13] ❌ POST 被拒绝 403 —— ACCESS_TOKEN 未配置或不对', 'color:#ef4444;font-weight:bold;font-size:13px');
+      console.error('   → 请从 Cloudflare 环境变量复制 ACCESS_TOKEN，然后执行：');
+      console.error('   → yfSetToken("你的token值")');
+      if (window.toast) window.toast('❌ 服务端拒绝写入：需要 ACCESS_TOKEN', 'error');
+    } else if (r.status === 200){
+      console.log('%c[P13] ✅ POST 权限正常', 'color:#10b981;font-weight:bold');
+    } else {
+      console.warn('[P13] POST 返回状态码: ' + r.status + '（非 200/403，可能被后端结构校验拦截，正常）');
+    }
+  })
+  .catch(function(e){ console.warn('[P13] POST 探测失败:', e); });
+}, 2500);
+
+/* ===== 4. 保存后强制验证：3 秒后检查服务端是否真的保存了 ===== */
+const _origSaveSettings = window.saveSettings;
+if (typeof _origSaveSettings === 'function'){
+  window.saveSettings = function(){
+    const ret = _origSaveSettings.apply(this, arguments);
+    setTimeout(function(){
+      const db = window.loadDB();
+      const localCfg = db.config || {};
+      fetch('/api/state?t=' + Date.now())
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (!d || !d.ok || !d.db || !d.db.config){
+            console.warn('[P13] 无法从服务端读取配置做对比');
+            return;
+          }
+          const srvCfg = d.db.config;
+          const keys = ['tg_bot_token','tg_chat_id','site_name','pay_usdt_rate','pay_usdt_address'];
+          const diff = [];
+          keys.forEach(function(k){
+            if (String(srvCfg[k] || '') !== String(localCfg[k] || '')) diff.push(k);
+          });
+          if (diff.length === 0){
+            console.log('%c[P13] ✅ 服务端已同步：' + keys.join(', '), 'color:#10b981;font-weight:bold');
+          } else {
+            console.warn('%c[P13] ⚠️ 服务端与本地不一致：' + diff.join(', '), 'color:#f59e0b;font-weight:bold');
+            console.warn('  → 若包含 tg_bot_token，检查是否走了 /api/admin-action 而非 /api/state');
+            console.warn('  → 当前服务端值:', {
+              tg_bot_token: srvCfg.tg_bot_token ? srvCfg.tg_bot_token.slice(0,12)+'…' : '(空)',
+              tg_chat_id: srvCfg.tg_chat_id || '(空)',
+              site_name: srvCfg.site_name
+            });
+          }
+        })
+        .catch(function(e){ console.warn('[P13] 校验请求失败:', e); });
+    }, 3000);
+    return ret;
+  };
+}
+
+console.log('%c[P13] fetch 拦截 + 权限探测 + 保存验证 已启用', 'color:#6366f1;font-weight:bold;font-size:12px');
+})();
+</script>
 </body>
 </html>

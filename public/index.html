@@ -2088,8 +2088,9 @@ function saveSettings(){
     pay_usdt_qr: $('#cfg-usdt-qr') ? $('#cfg-usdt-qr').value.trim() : (db.config.pay_usdt_qr || '')
   });
   // ⭐ 汇率/加价变化联动全平台商品价格自动重算
-  const _rc = recalcAllPrices(db);
-  saveDB(db); applySiteConfig(); toast('设置已保存，已重算 '+(_rc.smmN+_rc.lbN)+' 个商品价格','success'); renderSettings();
+  let _rc = {smmN:0, lbN:0};
+  try { _rc = recalcAllPrices(db); } catch(e) { console.error('[recalc fail]', e); }
+  saveDB(db); applySiteConfig(); toast('设置已保存'+((_rc.smmN+_rc.lbN)>0?'，已联动重算 '+(_rc.smmN+_rc.lbN)+' 个商品价格':''),'success'); renderSettings();
 }
 /* ===== 全平台价格重算：汇率/加价变化后联动 SMM + Luban 商品（自定义价保留） ===== */
 function recalcAllPrices(db){

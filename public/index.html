@@ -2426,7 +2426,7 @@ function renderSmmTab(){
         <button class="btn primary sm" onclick="smmAdminSearch(document.getElementById('smm-admin-search').value)">🔍 搜索</button>
         ${kw ? '<button class="btn ghost sm" onclick="smmAdminClearSearch()">清除</button>' : ''}
       </div>
-      <div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本</th><th>售价</th><th>起订~上限</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>服务</th><th>类别</th><th>成本</th><th>USDT售价</th><th>起订~上限</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
       ${hasMore ? `<div style="text-align:center;margin-top:14px"><button class="btn ghost" onclick="smmAdminLoadMore()">加载更多（已显示 ${shown.length} / ${items.length}）</button></div>` : ''}
     </div>`;
   smmRefreshBalance();

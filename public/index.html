@@ -5446,5 +5446,140 @@ if(typeof _origRenderLuban === 'function'){
 console.log('%c[P7 体验升级补丁] 筛选栏移除/金额联动/tab优化/充值详情/SMM搜索/上游余额 已加载', 'color:#f59e0b;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     修复补丁 P8 · 修复后台设置保存无法同步更新问题
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB){ console.warn('[P8] 核心未就绪'); return; }
+
+var _toast = function(m,t){ try{ window.toast(m, t||'success'); }catch(e){ console.log('[toast]', m); } };
+
+/* ---------- 表单读取工具 ---------- */
+function rdVal(id, fallback){
+  var el = document.getElementById(id);
+  if (!el) return fallback === undefined ? '' : fallback;
+  return String(el.value).trim();
+}
+function rdChk(id, fallback){
+  var el = document.getElementById(id);
+  if (!el) return !!fallback;
+  return !!el.checked;
+}
+function rdNum(id, fallback){
+  var el = document.getElementById(id);
+  if (!el) return fallback;
+  var x = parseFloat(el.value);
+  return isNaN(x) ? fallback : x;
+}
+
+/* ---------- 修复后的 saveSettings ---------- */
+window.saveSettings = function(){
+  var db = window.loadDB();
+  if (!db.config) db.config = {};
+  var old = db.config;
+
+  /* 1. 从表单采集 —— 这是之前 P6 漏掉的关键步骤 */
+  var newCfg = Object.assign({}, old, {
+    /* 站点 */
+    site_name: rdVal('cfg-name', old.site_name || '云发卡') || '云发卡',
+    hero_subtitle: rdVal('cfg-hero-sub', old.hero_subtitle || ''),
+    tg_username: rdVal('cfg-tg', old.tg_username || '').replace(/^@/, ''),
+    tg_btn_color: rdVal('cfg-tg-color', old.tg_btn_color || '#0088cc') || '#0088cc',
+
+    /* TG 通知 */
+    tg_notify_enabled: rdChk('cfg-tg-notify', old.tg_notify_enabled !== false),
+    tg_bot_token: rdVal('cfg-tg-bot-token', old.tg_bot_token || ''),
+    tg_chat_id: rdVal('cfg-tg-chat-id', old.tg_chat_id || ''),
+
+    /* 余额 */
+    balance_enabled: rdChk('cfg-balance-enabled', old.balance_enabled !== false),
+    recharge_min: Math.round(rdNum('cfg-recharge-min', (old.recharge_min||1000)/100) * 100) || 1000,
+
+    /* 支付宝 */
+    pay_alipay_enabled: rdChk('cfg-alipay-enabled', old.pay_alipay_enabled !== false),
+    pay_alipay_mode: rdVal('cfg-alipay-mode', old.pay_alipay_mode || 'redpacket') || 'redpacket',
+    pay_alipay_redpacket_prefix: (rdVal('cfg-rp-prefix', old.pay_alipay_redpacket_prefix || 'YFK')
+      .toUpperCase().replace(/[^A-Z0-9]/g, '') || 'YFK').slice(0, 6),
+    pay_alipay_qr: rdVal('cfg-alipay-qr', old.pay_alipay_qr || ''),
+
+    /* USDT */
+    pay_usdt_enabled: rdChk('cfg-usdt-enabled', old.pay_usdt_enabled !== false),
+    pay_usdt_address: rdVal('cfg-usdt-address', old.pay_usdt_address || ''),
+    pay_usdt_network: rdVal('cfg-usdt-network', old.pay_usdt_network || 'TRC20') || 'TRC20',
+    pay_usdt_rate: rdNum('cfg-usdt-rate', old.pay_usdt_rate || 7.2) || 7.2,
+
+    /* Luban */
+    luban_markup: rdNum('cfg-luban-markup', old.luban_markup || 1.3) || 1.3,
+    luban_common_cost: rdNum('cfg-luban-common-cost', old.luban_common_cost || 2) || 2
+  });
+
+  /* 保留表单未展示的字段（比如收款二维码图片 URL） */
+  newCfg.pay_usdt_qr = old.pay_usdt_qr || '';
+
+  db.config = newCfg;
+
+  /* 2. 联动重算汇率/加价影响的商品价格 */
+  var rc = { smmN: 0, lbN: 0 };
+  try {
+    if (typeof window.recalcAllPrices === 'function') {
+      rc = window.recalcAllPrices(db) || rc;
+    }
+  } catch(e){ console.warn('[P8 recalc]', e); }
+
+  /* 3. 保存到本地 + 通过 /api/state 推送到服务器（核心机制） */
+  window.saveDB(db);
+
+  /* 4. 刷新 UI：品牌名、TG 按钮颜色、设置面板 */
+  try { if (typeof window.applySiteConfig === 'function') window.applySiteConfig(); } catch(e){}
+  try { if (typeof window.renderSettings   === 'function') window.renderSettings();   } catch(e){}
+
+  /* 5. 用户反馈 */
+  var extra = (rc.smmN + rc.lbN) > 0
+    ? '，已联动重算 ' + (rc.smmN + rc.lbN) + ' 个商品价格'
+    : '';
+  _toast('设置已保存' + extra, 'success');
+
+  /* 6. 记录操作日志 */
+  try { if (typeof window.yfLog === 'function') window.yfLog('saveSettings', 'ok'); } catch(e){}
+};
+
+/* ---------- 顺手修复 saveAdminPwd（P6 里也依赖后端 token，独立改密按钮会失效） ---------- */
+window.saveAdminPwd = function(){
+  var oldPwd   = (document.getElementById('pwd-old')  || {}).value || '';
+  var newPwd   = (document.getElementById('pwd-new')  || {}).value || '';
+  var newPwd2  = (document.getElementById('pwd-new2') || {}).value || '';
+
+  if (!oldPwd)             { _toast('请输入当前管理密码','error'); return; }
+  if (!newPwd || newPwd.length < 6) { _toast('新密码至少6位','error'); return; }
+  if (newPwd !== newPwd2)  { _toast('两次输入的新密码不一致','error'); return; }
+
+  var db = window.loadDB();
+  var storedHash = (db.config && db.config.admin_pwd_hash) || (window.DEFAULT_CONFIG && window.DEFAULT_CONFIG.admin_pwd_hash) || '';
+
+  var ok = false;
+  if (typeof window.verifyPwd === 'function'){
+    ok = window.verifyPwd(oldPwd, storedHash, function(nh){
+      db.config.admin_pwd_hash = nh;
+    });
+  }
+  if (!ok){ _toast('当前密码错误','error'); return; }
+
+  db.config.admin_pwd_hash = (typeof window.hashPwd === 'function')
+    ? window.hashPwd(newPwd)
+    : storedHash;
+
+  window.saveDB(db);
+  _toast('管理密码已修改 ✅','success');
+  var a = document.getElementById('pwd-old');  if (a) a.value = '';
+  var b = document.getElementById('pwd-new');  if (b) b.value = '';
+  var c = document.getElementById('pwd-new2'); if (c) c.value = '';
+};
+
+console.log('%c[P8 修复补丁] 后台设置保存已恢复：表单采集 + 本地保存 + 服务器推送 + UI 刷新',
+  'color:#e11d48;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

@@ -6919,5 +6919,685 @@ if (!window.loadDB || !window.saveDB){ console.warn('[Perf v4] 核心未就绪')
 console.log('%c[Perf v4] 卡顿修复完成', 'color:#10b981;font-weight:bold');
 })();
 </script>
+<script>
+/* ============================================================
+   体验补丁 v5-A · 顾客视角
+   ============================================================ */
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB){ console.warn('[v5-A] 核心未就绪'); return; }
+
+var _toast = function(m,t){ try{ window.toast(m,t||''); }catch(e){} };
+var _esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+var _now = function(){ var d=new Date(),p=function(n){return String(n).padStart(2,'0');};
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); };
+var _yuan = function(f){ return (Number(f||0)/100).toFixed(2); };
+
+/* ============================================================
+   [C1] 首页搜索框（含实时过滤）
+   ============================================================ */
+var _homeSearchKw = '';
+(function(){
+  var orig = window.renderHome;
+  if (typeof orig !== 'function') return;
+  window.renderHome = function(){
+    orig.apply(this, arguments);
+    try {
+      var app = document.getElementById('app');
+      var cats = app.querySelector('.cats');
+      if (!cats || app.querySelector('#yf-home-search')) return;
+      var box = document.createElement('div');
+      box.id = 'yf-home-search';
+      box.style.cssText = 'margin-bottom:14px;display:flex;gap:8px';
+      box.innerHTML =
+        '<input id="yf-home-search-input" placeholder="🔍 搜索商品名称 / 描述" value="' + _esc(_homeSearchKw) + '" style="flex:1">' +
+        '<button class="btn primary" onclick="yfHomeSearch()" style="flex-shrink:0">搜索</button>' +
+        (_homeSearchKw ? '<button class="btn ghost" onclick="yfHomeSearchClear()" style="flex-shrink:0">清除</button>' : '');
+      cats.parentNode.insertBefore(box, cats);
+      var inp = document.getElementById('yf-home-search-input');
+      if (inp) inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') window.yfHomeSearch(); });
+      if (_homeSearchKw){
+        var grid = app.querySelector('.grid');
+        if (grid){
+          var kw = _homeSearchKw.toLowerCase(), shown = 0;
+          grid.querySelectorAll('.product').forEach(function(c){
+            var ok = c.textContent.toLowerCase().indexOf(kw) >= 0;
+            c.style.display = ok ? '' : 'none';
+            if (ok) shown++;
+          });
+          if (shown === 0){
+            var e2 = document.createElement('div');
+            e2.className = 'empty';
+            e2.style.gridColumn = '1/-1';
+            e2.textContent = '没有找到匹配「' + _homeSearchKw + '」的商品';
+            grid.appendChild(e2);
+          }
+        }
+      }
+    } catch(e){}
+  };
+})();
+window.yfHomeSearch = function(){
+  var el = document.getElementById('yf-home-search-input');
+  _homeSearchKw = el ? el.value.trim() : '';
+  if (window.renderHome) window.renderHome();
+};
+window.yfHomeSearchClear = function(){ _homeSearchKw = ''; if (window.renderHome) window.renderHome(); };
+
+/* ============================================================
+   [C2] 缺货商品 → "到货提醒"
+   ============================================================ */
+window.yfNotifyStock = function(pid){
+  var db = window.loadDB();
+  var p = db.products.find(function(x){ return x.id === pid; });
+  if (!p) return;
+  var contact = prompt('「' + p.name + '」暂时缺货\n\n留下联系方式（邮箱/TG/微信），到货后通知您：');
+  if (!contact || !contact.trim()) return;
+  db.stock_notifies = db.stock_notifies || [];
+  db.stock_notifies.unshift({
+    id: 'N' + Date.now(),
+    product_id: pid,
+    product_name: p.name,
+    contact: contact.trim(),
+    created_at: _now(),
+    notified: false
+  });
+  window.saveDB(db);
+  _toast('已记录，到货后会第一时间通知您 ✅','success');
+  try { if (window.yfTgNotify) window.yfTgNotify({ type:'stock_request', product: p.name, contact: contact.trim() }); } catch(e){}
+};
+/* 渲染缺货按钮为"到货提醒" */
+(function(){
+  var orig = window.openBuy;
+  if (typeof orig !== 'function') return;
+  window.openBuy = function(id){
+    var db = window.loadDB();
+    var p = db.products.find(function(x){ return x.id === id; });
+    if (p){
+      var isLuban = p.source === 'luban', isSmm = p.source === 'smm';
+      var stock = isLuban || isSmm ? 9999 : (window.stockOf ? window.stockOf(db, id) : 0);
+      if (!isLuban && !isSmm && stock <= 0){
+        window.yfNotifyStock(id);
+        return;
+      }
+    }
+    return orig.apply(this, arguments);
+  };
+})();
+
+/* ============================================================
+   [C3] 订单找回增强 · 匿名用户凭"订单号 + 金额"
+   ============================================================ */
+(function(){
+  var orig = window.renderQueryPage;
+  if (typeof orig !== 'function') return;
+  window.renderQueryPage = function(){
+    orig.apply(this, arguments);
+    try {
+      var app = document.getElementById('app');
+      if (!app || app.querySelector('#yf-order-recover')) return;
+      var panel = app.querySelector('.card.panel');
+      if (!panel) return;
+      var box = document.createElement('div');
+      box.id = 'yf-order-recover';
+      box.style.cssText = 'margin-top:20px;padding-top:20px;border-top:1px dashed var(--line)';
+      box.innerHTML =
+        '<div style="font-size:13px;font-weight:700;margin-bottom:8px">🔑 忘记暗号？用订单号 + 金额找回</div>' +
+        '<div class="muted" style="font-size:12px;margin-bottom:10px;line-height:1.7">输入订单号和下单时的<b>实付金额（人民币元）</b>，可重新获取订单访问权。</div>' +
+        '<label class="field"><span>订单号</span><input id="yf-recover-no" placeholder="例如：20250101120000..."></label>' +
+        '<label class="field"><span>实付金额（人民币元，如 9.90）</span><input id="yf-recover-amt" type="number" step="0.01" placeholder="9.90"></label>' +
+        '<button class="btn ghost block" onclick="yfRecoverOrder()">尝试找回</button>';
+      panel.appendChild(box);
+    } catch(e){}
+  };
+})();
+window.yfRecoverOrder = function(){
+  var no = (document.getElementById('yf-recover-no') || {}).value;
+  var amt = parseFloat((document.getElementById('yf-recover-amt') || {}).value || '0');
+  no = (no || '').trim();
+  if (!no || !amt){ _toast('请填写订单号和金额','error'); return; }
+  var db = window.loadDB();
+  var o = db.orders.find(function(x){ return x.order_no === no; });
+  if (!o){ _toast('订单不存在','error'); return; }
+  // 允许误差 ±1 分
+  if (Math.abs(o.amount / 100 - amt) > 0.01){ _toast('金额不匹配','error'); return; }
+  // 找回：写回 my_orders
+  try {
+    var m = JSON.parse(localStorage.getItem('yunfaka_my_orders') || '{}');
+    m[no] = o.secret;
+    localStorage.setItem('yunfaka_my_orders', JSON.stringify(m));
+  } catch(e){}
+  _toast('找回成功，正在跳转…','success');
+  location.hash = '#/order/' + no;
+  if (location.hash === '#/order/' + no && window.route) window.route();
+};
+
+/* ============================================================
+   [C5] 会员余额流水
+   ============================================================ */
+(function(){
+  var orig = window.renderMemberDashboard;
+  if (typeof orig !== 'function') return;
+  window.renderMemberDashboard = function(member){
+    orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var app = document.getElementById('app');
+        if (!app || app.querySelector('#yf-balance-log')) return;
+        var panels = app.querySelectorAll('.card.panel');
+        var rechargePanel = null;
+        panels.forEach(function(p){ if (p.textContent.indexOf('充值记录') >= 0) rechargePanel = p; });
+        if (!rechargePanel) return;
+
+        // 生成流水（充值 + 消费 + 退款）
+        var db = window.loadDB();
+        var logs = [];
+        (db.recharges || []).forEach(function(r){
+          if (r.username !== member.username) return;
+          if (r.status === 'success'){
+            logs.push({ at: r.completed_at || r.created_at, delta: r.amount, type: '充值', note: r.method === 'alipay' ? '支付宝' : 'USDT' });
+            if (r.bonus_amount) logs.push({ at: r.completed_at || r.created_at, delta: r.bonus_amount, type: '赠送', note: '' });
+          }
+        });
+        (db.orders || []).forEach(function(o){
+          if (o.username !== member.username) return;
+          if (o.balance_used > 0){
+            logs.push({ at: o.created_at, delta: -o.balance_used, type: '订单扣款', note: o.order_no.slice(-8) });
+          }
+          if (o.refunded_amount > 0 && o.refunded_at){
+            logs.push({ at: o.refunded_at, delta: o.refunded_amount, type: '退款', note: o.order_no.slice(-8) });
+          }
+        });
+        logs.sort(function(a,b){ return (b.at||'').localeCompare(a.at||''); });
+        if (!logs.length) return;
+        var panel = document.createElement('div');
+        panel.id = 'yf-balance-log';
+        panel.className = 'card panel';
+        var rows = logs.slice(0, 30).map(function(l){
+          var color = l.delta > 0 ? '#059669' : '#dc2626';
+          var sign = l.delta > 0 ? '+' : '';
+          return '<tr><td class="muted" style="font-size:12px">' + _esc(l.at) + '</td>' +
+            '<td>' + _esc(l.type) + '</td>' +
+            '<td class="muted" style="font-size:11px">' + _esc(l.note) + '</td>' +
+            '<td style="text-align:right;font-weight:700;color:' + color + '">' + sign + '¥' + _yuan(Math.abs(l.delta)) + '</td></tr>';
+        }).join('');
+        panel.innerHTML =
+          '<h2>💎 余额流水（近 30 条）</h2>' +
+          '<div style="overflow-x:auto"><table><thead><tr><th>时间</th><th>类型</th><th>备注</th><th style="text-align:right">金额(元)</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table></div>';
+        rechargePanel.parentNode.insertBefore(panel, rechargePanel.nextSibling);
+      } catch(e){}
+    }, 100);
+  };
+})();
+
+/* ============================================================
+   [C6] 充值提交后自动轮询状态
+   ============================================================ */
+var _rcPoll = null;
+(function(){
+  var orig = window.submitRecharge;
+  if (typeof orig !== 'function') return;
+  window.submitRecharge = function(){
+    var r = orig.apply(this, arguments);
+    // 3 秒后开始轮询，最多 10 分钟
+    if (_rcPoll) clearInterval(_rcPoll);
+    var start = Date.now(), lastStatus = '';
+    _rcPoll = setInterval(function(){
+      if (Date.now() - start > 10 * 60 * 1000){ clearInterval(_rcPoll); _rcPoll = null; return; }
+      if (document.hidden) return;
+      var member = window.getCurrentMember && window.getCurrentMember(window.loadDB());
+      if (!member){ clearInterval(_rcPoll); return; }
+      var db = window.loadDB();
+      var rc = (db.recharges || []).filter(function(x){ return x.username === member.username; });
+      if (!rc.length) return;
+      var latest = rc[0];
+      if (lastStatus && lastStatus !== latest.status){
+        if (latest.status === 'success'){ _toast('💰 充值已到账！','success'); if (window.route) window.route(); clearInterval(_rcPoll); }
+      }
+      lastStatus = latest.status;
+    }, 5000);
+    return r;
+  };
+})();
+
+/* ============================================================
+   [C8] 在线客服未读红点（增强版：任意页都能收到）
+   ============================================================ */
+(function(){
+  var CS_KEY = 'yunfaka_chat_session';
+  var csSession = localStorage.getItem(CS_KEY);
+  if (!csSession) return;
+  setInterval(function(){
+    if (document.hidden) return;
+    var panel = document.getElementById('cs-panel');
+    if (panel && panel.classList.contains('open')) return; // 打开时不打扰
+    fetch('/api/chat?session=' + encodeURIComponent(csSession) + '&t=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok || !d.messages) return;
+        var adminCount = d.messages.filter(function(m){ return m.role === 'admin'; }).length;
+        if (adminCount > (window._csLastAdmin || 0)){
+          var f = document.getElementById('cs-float');
+          if (f) f.classList.add('has-msg');
+        }
+        window._csLastAdmin = adminCount;
+      })
+      .catch(function(){});
+  }, 15000);
+})();
+
+/* ============================================================
+   [C9] 接码订单倒计时提醒（< 5 分钟时页面标题闪烁）
+   ============================================================ */
+(function(){
+  var orig = window.renderOrderView;
+  if (typeof orig !== 'function') return;
+  window.renderOrderView = function(orderNo, secret){
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var db = window.loadDB();
+        var o = db.orders.find(function(x){ return x.order_no === orderNo; });
+        if (!o || o.source !== 'luban') return;
+        if (o.status !== 'processing' && o.status !== 'waiting_sms') return;
+        var bar = document.getElementById('yf-luban-timer');
+        if (bar) clearInterval(bar._t);
+        var el = document.createElement('div');
+        el.id = 'yf-luban-timer';
+        el.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;color:#92400e;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.08)';
+        document.body.appendChild(el);
+        function tick(){
+          var remain = Math.max(0, Math.floor((o.luban_deadline - Date.now()) / 1000));
+          if (remain <= 0){ el.textContent = '⏰ 号码已超时释放'; el.style.background = '#fee2e2'; el.style.borderColor = '#fca5a5'; el.style.color = '#b91c1c'; clearInterval(el._t); return; }
+          var m = Math.floor(remain / 60), s = remain % 60;
+          el.textContent = '⏱ 剩余 ' + m + ':' + (s < 10 ? '0' : '') + s + ' · 请尽快完成注册';
+          if (remain < 300){ el.style.background = '#fee2e2'; el.style.borderColor = '#fca5a5'; el.style.color = '#b91c1c'; }
+        }
+        tick();
+        el._t = setInterval(tick, 1000);
+        // 离开页面时清理
+        var clean = function(){ if (el._t) clearInterval(el._t); el.remove(); window.removeEventListener('hashchange', clean); };
+        window.addEventListener('hashchange', clean);
+      } catch(e){}
+    }, 120);
+    return r;
+  };
+})();
+
+console.log('%c[Patch v5-A] 顾客体验补丁加载完成', 'color:#10b981;font-weight:bold');
+})();
+</script>
+<script>
+/* ============================================================
+   体验补丁 v5-B · 店主视角
+   ============================================================ */
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB){ console.warn('[v5-B] 核心未就绪'); return; }
+
+var _toast = function(m,t){ try{ window.toast(m,t||''); }catch(e){} };
+var _esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+var _now = function(){ var d=new Date(),p=function(n){return String(n).padStart(2,'0');};
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); };
+var _yuan = function(f){ return (Number(f||0)/100).toFixed(2); };
+
+/* ============================================================
+   [S1] 商品列表显示类型徽章 + [S5] 缺货一键下架
+   ============================================================ */
+(function(){
+  var orig = window.renderProducts;
+  if (typeof orig !== 'function') return;
+  window.renderProducts = function(){
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var body = document.getElementById('tab-body');
+        if (!body) return;
+        var db = window.loadDB();
+        body.querySelectorAll('tbody tr').forEach(function(tr){
+          var b = tr.querySelector('td b');
+          if (!b || b.dataset.yfTypeBound) return;
+          b.dataset.yfTypeBound = '1';
+          // 找商品
+          var nameTxt = b.textContent.replace(/…$/, '').trim();
+          var p = db.products.find(function(x){
+            return x.name === nameTxt || x.name.indexOf(nameTxt) === 0;
+          });
+          if (!p) return;
+          // 类型徽章
+          var tagMap = {
+            'luban': { text: '接码', color: '#fef3c7', fg: '#b45309' },
+            'smm':   { text: '推广', color: '#dbeafe', fg: '#1d4ed8' },
+            'local': null
+          };
+          var tag = tagMap[p.source];
+          if (tag && !b.nextElementSibling){
+            b.insertAdjacentHTML('afterend',
+              ' <span class="badge" style="background:' + tag.color + ';color:' + tag.fg + ';font-size:10px">' + tag.text + '</span>');
+          }
+          // 缺货一键下架
+          if (p.source === 'local' && p.active){
+            var stock = window.stockOf ? window.stockOf(db, p.id) : 0;
+            if (stock <= 0){
+              var actions = tr.querySelector('td:last-child');
+              if (actions && !actions.querySelector('.yf-offshelf-btn')){
+                var btn = document.createElement('button');
+                btn.className = 'btn sm danger yf-offshelf-btn';
+                btn.textContent = '⚠ 缺货下架';
+                btn.onclick = function(){
+                  if (!confirm('商品「' + p.name + '」已缺货，下架？')) return;
+                  var db2 = window.loadDB();
+                  var p2 = db2.products.find(function(x){ return x.id === p.id; });
+                  p2.active = false;
+                  window.saveDB(db2);
+                  _toast('已下架','success');
+                  window.renderProducts();
+                };
+                actions.insertBefore(btn, actions.firstChild);
+              }
+            }
+          }
+        });
+      } catch(e){}
+    }, 60);
+    return r;
+  };
+})();
+
+/* ============================================================
+   [S2] 待审核订单 · 今日/全部 筛选 + 一键复制订单详情
+   ============================================================ */
+(function(){
+  var orig = window.renderPending;
+  if (typeof orig !== 'function') return;
+  window.renderPending = function(){
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var body = document.getElementById('tab-body');
+        if (!body || body.querySelector('#yf-pending-filter')) return;
+        var panel = body.querySelector('.card.panel');
+        if (!panel) return;
+        var bar = document.createElement('div');
+        bar.id = 'yf-pending-filter';
+        bar.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap';
+        bar.innerHTML =
+          '<button class="btn sm primary" onclick="yfFilterPending(\'today\')">📅 仅今日</button>' +
+          '<button class="btn sm ghost" onclick="yfFilterPending(\'all\')">全部</button>' +
+          '<button class="btn sm ghost" onclick="yfCopyPendingList()">📋 复制清单</button>';
+        var spread = panel.querySelector('.spread');
+        if (spread) spread.parentNode.insertBefore(bar, spread.nextSibling);
+        if (window._yfPendingFilter === 'today') window.yfFilterPending('today');
+        // 每行加复制按钮
+        panel.querySelectorAll('tbody tr').forEach(function(tr){
+          if (tr.querySelector('.yf-copy-row')) return;
+          var cells = tr.querySelectorAll('td');
+          if (!cells.length) return;
+          var no = cells[0].textContent.trim();
+          var actions = tr.querySelector('td:last-child');
+          if (actions && no){
+            var btn = document.createElement('button');
+            btn.className = 'btn sm ghost yf-copy-row';
+            btn.textContent = '📋';
+            btn.title = '复制订单详情';
+            btn.onclick = function(){
+              var t = tr.textContent.replace(/\s+/g, ' ').trim();
+              if (navigator.clipboard) navigator.clipboard.writeText(t);
+              else { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+              _toast('已复制','success');
+            };
+            actions.insertBefore(btn, actions.firstChild);
+          }
+        });
+      } catch(e){}
+    }, 60);
+    return r;
+  };
+  window._yfPendingFilter = 'all';
+  window.yfFilterPending = function(mode){
+    window._yfPendingFilter = mode;
+    var body = document.getElementById('tab-body');
+    if (!body) return;
+    var today = new Date().toISOString().slice(0, 10);
+    body.querySelectorAll('tbody tr').forEach(function(tr){
+      if (tr.querySelector('.empty')) return;
+      if (mode === 'all'){ tr.style.display = ''; return; }
+      var t = tr.textContent;
+      tr.style.display = t.indexOf(today) >= 0 ? '' : 'none';
+    });
+  };
+  window.yfCopyPendingList = function(){
+    var body = document.getElementById('tab-body');
+    if (!body) return;
+    var lines = [];
+    body.querySelectorAll('tbody tr').forEach(function(tr){
+      if (tr.style.display === 'none') return;
+      if (tr.querySelector('.empty')) return;
+      lines.push(tr.textContent.replace(/\s+/g, ' ').trim());
+    });
+    if (!lines.length){ _toast('没有可复制的订单','error'); return; }
+    var txt = lines.join('\n');
+    if (navigator.clipboard) navigator.clipboard.writeText(txt);
+    else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    _toast('已复制 ' + lines.length + ' 条订单','success');
+  };
+})();
+
+/* ============================================================
+   [S3] 数据看板 · 商品销售排行 + 客户消费排行
+   ============================================================ */
+(function(){
+  var orig = window.renderStats;
+  if (typeof orig !== 'function') return;
+  window.renderStats = function(){
+    orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var body = document.getElementById('tab-body');
+        if (!body || body.querySelector('#yf-rank-panel')) return;
+        var db = window.loadDB();
+
+        // 商品排行
+        var byProduct = {};
+        (db.orders || []).forEach(function(o){
+          if (o.status !== 'delivered') return;
+          var k = o.product_id || o.product_name;
+          if (!byProduct[k]) byProduct[k] = { name: o.product_name, count: 0, revenue: 0 };
+          byProduct[k].count += o.quantity;
+          byProduct[k].revenue += (o.amount - (o.refunded_amount || 0));
+        });
+        var prodRank = Object.keys(byProduct).map(function(k){ return byProduct[k]; })
+          .sort(function(a,b){ return b.revenue - a.revenue; }).slice(0, 10);
+
+        // 客户排行
+        var byUser = {};
+        (db.orders || []).forEach(function(o){
+          if (o.status !== 'delivered') return;
+          if (!o.username) return;
+          if (!byUser[o.username]) byUser[o.username] = { name: o.username, count: 0, revenue: 0 };
+          byUser[o.username].count += o.quantity;
+          byUser[o.username].revenue += (o.amount - (o.refunded_amount || 0));
+        });
+        var userRank = Object.keys(byUser).map(function(k){ return byUser[k]; })
+          .sort(function(a,b){ return b.revenue - a.revenue; }).slice(0, 10);
+
+        if (!prodRank.length && !userRank.length) return;
+
+        var panel = document.createElement('div');
+        panel.id = 'yf-rank-panel';
+        panel.className = 'card panel';
+        panel.style.marginTop = '14px';
+        panel.innerHTML =
+          '<h2>🏆 运营看板</h2>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">' +
+            '<div>' +
+              '<div class="section-title" style="margin-top:0">🔥 商品销售排行（Top 10）</div>' +
+              '<table><thead><tr><th>#</th><th>商品</th><th style="text-align:right">件数</th><th style="text-align:right">营收(USDT)</th></tr></thead><tbody>' +
+              (prodRank.length ? prodRank.map(function(x, i){
+                return '<tr><td>' + (i+1) + '</td><td>' + _esc(x.name) + '</td>' +
+                  '<td style="text-align:right">' + x.count + '</td>' +
+                  '<td style="text-align:right;font-weight:700;color:#e11d48">' + window.usdt(x.revenue) + '</td></tr>';
+              }).join('') : '<tr><td colspan="4" class="empty">暂无数据</td></tr>') +
+              '</tbody></table>' +
+            '</div>' +
+            '<div>' +
+              '<div class="section-title" style="margin-top:0">💎 客户消费排行（Top 10）</div>' +
+              '<table><thead><tr><th>#</th><th>会员</th><th style="text-align:right">件数</th><th style="text-align:right">消费(USDT)</th></tr></thead><tbody>' +
+              (userRank.length ? userRank.map(function(x, i){
+                return '<tr><td>' + (i+1) + '</td><td>' + _esc(x.name) + '</td>' +
+                  '<td style="text-align:right">' + x.count + '</td>' +
+                  '<td style="text-align:right;font-weight:700;color:#e11d48">' + window.usdt(x.revenue) + '</td></tr>';
+              }).join('') : '<tr><td colspan="4" class="empty">暂无数据</td></tr>') +
+              '</tbody></table>' +
+            '</div>' +
+          '</div>';
+        body.appendChild(panel);
+      } catch(e){}
+    }, 200);
+    return r;
+  };
+})();
+
+/* ============================================================
+   [S4] 订单列表显示备注 + 快速添加备注
+   ============================================================ */
+(function(){
+  var orig = window.renderOrders;
+  if (typeof orig !== 'function') return;
+  window.renderOrders = function(){
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var body = document.getElementById('tab-body');
+        if (!body) return;
+        var db = window.loadDB();
+        body.querySelectorAll('tbody tr').forEach(function(tr){
+          if (tr.querySelector('.yf-order-note') || tr.querySelector('.empty')) return;
+          var firstCell = tr.querySelector('td.mono');
+          if (!firstCell) return;
+          var no = firstCell.textContent.trim();
+          var o = db.orders.find(function(x){ return x.order_no === no; });
+          if (!o) return;
+          var lastCell = tr.querySelector('td:last-child');
+          if (!lastCell) return;
+          var btn = document.createElement('button');
+          btn.className = 'btn sm ghost yf-order-note';
+          btn.title = o.admin_note || '添加备注';
+          btn.textContent = o.admin_note ? '📝' : '＋📝';
+          if (o.admin_note) btn.style.background = '#fef3c7';
+          btn.onclick = function(){
+            var note = prompt('订单备注（仅店主可见）：', o.admin_note || '');
+            if (note === null) return;
+            var db2 = window.loadDB();
+            var o2 = db2.orders.find(function(x){ return x.order_no === no; });
+            o2.admin_note = note.trim();
+            window.saveDB(db2);
+            _toast('备注已保存','success');
+            window.renderOrders();
+          };
+          lastCell.insertBefore(btn, lastCell.firstChild);
+        });
+      } catch(e){}
+    }, 60);
+    return r;
+  };
+})();
+
+/* ============================================================
+   [S6] 到货提醒列表（在后台商品页顶部显示）
+   ============================================================ */
+(function(){
+  var orig = window.renderProducts;
+  if (typeof orig !== 'function') return;
+  window.renderProducts = function(){
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var body = document.getElementById('tab-body');
+        if (!body || body.querySelector('#yf-stock-notifies')) return;
+        var db = window.loadDB();
+        var notifies = (db.stock_notifies || []).filter(function(n){ return !n.notified; });
+        if (!notifies.length) return;
+        var panel = document.createElement('div');
+        panel.id = 'yf-stock-notifies';
+        panel.className = 'card panel';
+        panel.style.cssText = 'border-color:#93c5fd;background:#eff6ff;margin-bottom:14px';
+        panel.innerHTML =
+          '<div class="spread" style="margin-bottom:10px">' +
+            '<h2 style="margin:0;color:#1d4ed8">🔔 到货提醒（' + notifies.length + '）</h2>' +
+            '<button class="btn sm ghost" onclick="yfClearStockNotifies()">全部标记已通知</button>' +
+          '</div>' +
+          '<div style="overflow-x:auto"><table><thead><tr><th>时间</th><th>商品</th><th>联系方式</th><th></th></tr></thead><tbody>' +
+          notifies.slice(0, 30).map(function(n){
+            return '<tr><td class="muted" style="font-size:12px">' + _esc(n.created_at) + '</td>' +
+              '<td>' + _esc(n.product_name) + '</td>' +
+              '<td class="mono">' + _esc(n.contact) + '</td>' +
+              '<td style="text-align:right"><button class="btn sm primary" onclick="yfMarkStockNotified(\'' + n.id + '\')">已通知</button></td></tr>';
+          }).join('') +
+          '</tbody></table></div>';
+        body.insertBefore(panel, body.firstChild);
+      } catch(e){}
+    }, 80);
+    return r;
+  };
+  window.yfMarkStockNotified = function(id){
+    var db = window.loadDB();
+    db.stock_notifies = db.stock_notifies || [];
+    var n = db.stock_notifies.find(function(x){ return x.id === id; });
+    if (n){ n.notified = true; n.notified_at = _now(); }
+    window.saveDB(db);
+    _toast('已标记','success');
+    window.renderProducts();
+  };
+  window.yfClearStockNotifies = function(){
+    if (!confirm('把所有到货提醒标记为已通知？')) return;
+    var db = window.loadDB();
+    (db.stock_notifies || []).forEach(function(n){ n.notified = true; n.notified_at = _now(); });
+    window.saveDB(db);
+    _toast('已全部标记','success');
+    window.renderProducts();
+  };
+})();
+
+/* ============================================================
+   [S7] 会员详情卡片（点击会员名 → 已存在，这里增强消费统计）
+   ============================================================ */
+/* v3 已有 yfViewMemberOrders，此处不重复。 */
+
+/* ============================================================
+   [S8] 卡密批量导入 · 格式校验与报告
+   ============================================================ */
+(function(){
+  var orig = window.importCards;
+  if (typeof orig !== 'function') return;
+  window.importCards = function(){
+    var txt = document.getElementById('ic-text');
+    if (!txt){ return orig.apply(this, arguments); }
+    var lines = (txt.value || '').split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+    // 校验：单行最长 200，禁止空行、重复（重复由原逻辑处理）
+    var bad = [];
+    lines.forEach(function(l, i){
+      if (l.length > 200) bad.push({ line: i+1, reason: '过长(' + l.length + '字符)' });
+      if (l.indexOf('\t') >= 0) bad.push({ line: i+1, reason: '含Tab字符' });
+    });
+    if (bad.length){
+      var msg = '发现 ' + bad.length + ' 条异常：\n' +
+        bad.slice(0, 5).map(function(b){ return '第 ' + b.line + ' 行：' + b.reason; }).join('\n') +
+        (bad.length > 5 ? '\n...' : '') +
+        '\n\n是否忽略异常继续导入？';
+      if (!confirm(msg)) return;
+    }
+    var r = orig.apply(this, arguments);
+    // 导入完成后 toast 会由原函数处理
+    return r;
+  };
+})();
+
+console.log('%c[Patch v5-B] 店主运营补丁加载完成', 'color:#6366f1;font-weight:bold');
+})();
+</script>
 </body>
 </html>

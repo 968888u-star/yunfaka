@@ -7183,5 +7183,142 @@ console.log('%c[P21] 首页已隐藏接码/SMM · P11 假红条已静默', 'colo
 console.log('%c  诊断同步：yfDiagSync()  |  手动推送：yfDiagPush()', 'color:#6b7280;font-size:12px');
 })();
 </script>
+<!-- ============================================================
+     P22 · 实时同步加速
+     1. 轮询 8s → 3s
+     2. 保存后 300ms 立即 pull（不等轮询）
+     3. BroadcastChannel 跨 tab 立即同步
+     4. 清除 P11 旧备份 key（它会覆盖 P18 新配置）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB) { console.warn('[P22] 核心未就绪'); return; }
+
+/* ===== 1. BroadcastChannel 跨 tab 通信 ===== */
+var _bc = null;
+try { _bc = new BroadcastChannel('yf_sync'); } catch(e){}
+
+/* ===== 2. 保存后：清 P11 旧备份 + 广播 + 300ms 立即 pull ===== */
+var _origSaveDB = window.saveDB;
+window.saveDB = function(db){
+  var r = _origSaveDB.apply(this, arguments);
+
+  /* ⭐ 清除 P11 独立备份（否则 loadDB 会用旧值覆盖 P18 的新配置） */
+  try { localStorage.removeItem('yf_config_override'); } catch(e){}
+
+  /* 广播给同设备其他 tab */
+  if (_bc){ try { _bc.postMessage({ type:'db_changed', ts:Date.now() }); } catch(e){} }
+
+  /* 300ms 后立即 pull（不等 3 秒轮询） */
+  setTimeout(yfPullNow, 300);
+
+  return r;
+};
+
+/* ===== 3. 快速 pull（3 秒间隔） ===== */
+var _yfRev = null;
+var _yfPulling = false;
+
+function yfPullNow(){
+  if (_yfPulling) return;
+  _yfPulling = true;
+
+  fetch('/api/state?t=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      _yfPulling = false;
+      if (!d || !d.ok || !d.db) return;
+
+      /* 首次：只记录 rev，不覆盖（避免刷新页面后闪一下） */
+      if (_yfRev === null){
+        _yfRev = d.rev;
+        return;
+      }
+
+      if (d.rev === _yfRev) return;
+
+      console.log('%c[P22] 服务端 rev 变化: ' + _yfRev + ' → ' + d.rev, 'color:#6366f1;font-size:12px');
+      _yfRev = d.rev;
+
+      /* 用服务端数据覆盖本地 */
+      try {
+        localStorage.setItem('yunfaka_db_v15', JSON.stringify(d.db));
+        /* 清 P11 备份，让服务端数据生效 */
+        localStorage.removeItem('yf_config_override');
+      } catch(e){}
+
+      if (window.applySiteConfig) { try { window.applySiteConfig(); } catch(e){} }
+
+      /* 用户在输入框中 → 跳过重绘（避免打断输入） */
+      var ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')){
+        console.log('[P22] 用户正在输入，跳过重绘（下次自动补）');
+        /* 3 秒后自动重试一次 */
+        setTimeout(yfPullNow, 3000);
+        return;
+      }
+
+      /* 重绘页面 */
+      if (window.route) { try { window.route(); } catch(e){} }
+
+      /* 轻提示 */
+      if (window.toast){
+        try { window.toast('🔄 数据已同步', 'info'); } catch(e){}
+      }
+    })
+    .catch(function(){ _yfPulling = false; });
+}
+window.yfPullNow = yfPullNow;
+
+/* ===== 4. 启动：初始化 rev + 启动 3 秒轮询 ===== */
+fetch('/api/state?t=' + Date.now(), { cache:'no-store' })
+  .then(function(r){ return r.json(); })
+  .then(function(d){ if (d && d.ok) _yfRev = d.rev; })
+  .catch(function(){});
+
+/* 3 秒轮询 */
+setInterval(yfPullNow, 3000);
+
+/* 页面回到前台立即拉 */
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden) setTimeout(yfPullNow, 300);
+});
+window.addEventListener('online', function(){ setTimeout(yfPullNow, 300); });
+
+/* ===== 5. 收到其他 tab 广播 → 立即 pull ===== */
+if (_bc){
+  _bc.onmessage = function(e){
+    if (e.data && e.data.type === 'db_changed'){
+      console.log('[P22] 收到其他 tab 变更广播，立即同步');
+      setTimeout(yfPullNow, 300);
+    }
+  };
+}
+
+/* ===== 6. localStorage 变化监听（跨 tab 兜底） ===== */
+window.addEventListener('storage', function(e){
+  if (e.key === 'yunfaka_db_v15' && e.newValue){
+    setTimeout(yfPullNow, 500);
+  }
+});
+
+/* ===== 7. 诊断工具 ===== */
+window.yfSyncStatus = function(){
+  console.group('[P22] 同步状态');
+  console.log('当前本地 rev 缓存:', _yfRev);
+  console.log('正在同步中:', _yfPulling);
+  console.log('轮询间隔: 3000ms');
+  console.log('BroadcastChannel:', _bc ? '已启用' : '未启用（浏览器不支持）');
+  console.log('P11 旧备份存在:', !!localStorage.getItem('yf_config_override'));
+  console.log('P18 新备份存在:', !!localStorage.getItem('yf_cfg_v1'));
+  console.groupEnd();
+};
+
+console.log('%c[P22] 实时同步已启用：3s 轮询 + 保存后立即刷 + 跨 tab 广播',
+  'color:#10b981;font-weight:bold;font-size:13px');
+console.log('%c  诊断：yfSyncStatus()', 'color:#6b7280;font-size:11px');
+})();
+</script>
 </body>
 </html>

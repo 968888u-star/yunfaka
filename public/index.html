@@ -5727,5 +5727,150 @@ console.log('%c[P9-Final] USDT 全局守护 · 只刷新不重复处理 · 30s �
   'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P10 · 后台设置保存终极修复（覆盖所有历史 saveSettings）
+     修复：表单 ID 全对齐 + 本地保存 + 云端推送 + UI 刷新
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB){
+  console.error('[P10] 核心未就绪');
+  return;
+}
+
+console.log('[P10] 正在接管 saveSettings…');
+
+/* ---------- 表单读取工具（找不到就回退） ---------- */
+function V(id, fb){
+  var el = document.getElementById(id);
+  if (!el) { console.warn('[P10] 缺少字段 #' + id); return fb === undefined ? '' : fb; }
+  return String(el.value).trim();
+}
+function C(id, fb){
+  var el = document.getElementById(id);
+  return el ? !!el.checked : !!fb;
+}
+function N(id, fb){
+  var el = document.getElementById(id);
+  if (!el) return fb;
+  var v = parseFloat(el.value);
+  return isNaN(v) ? fb : v;
+}
+
+/* ---------- 终极 saveSettings ---------- */
+window.saveSettings = function(){
+  console.log('[P10] saveSettings() 被调用，开始采集表单…');
+  var db = window.loadDB();
+  if (!db.config) db.config = {};
+  var old = db.config;
+
+  /* 采集：所有字段都从真实表单 ID 读，读不到才回退旧值 */
+  var next = Object.assign({}, old, {
+    /* 站点 */
+    site_name: V('cfg-name', old.site_name || '云发卡') || '云发卡',
+    hero_subtitle: V('cfg-hero-sub', old.hero_subtitle || ''),
+    tg_username: V('cfg-tg', old.tg_username || '').replace(/^@/, ''),
+    tg_btn_color: V('cfg-tg-color', old.tg_btn_color || '#0088cc') || '#0088cc',
+
+    /* ⭐ TG 通知：这两个 ID 就是之前错的 */
+    tg_notify_enabled: C('cfg-tg-notify', old.tg_notify_enabled !== false),
+    tg_bot_token: V('cfg-tg-bot-token', old.tg_bot_token || ''),
+    tg_chat_id: V('cfg-tg-chat-id', old.tg_chat_id || ''),
+
+    /* 余额 */
+    balance_enabled: C('cfg-balance-enabled', old.balance_enabled !== false),
+    recharge_min: Math.round(N('cfg-recharge-min', (old.recharge_min || 1000) / 100) * 100) || 1000,
+
+    /* 支付宝 */
+    pay_alipay_enabled: C('cfg-alipay-enabled', old.pay_alipay_enabled !== false),
+    pay_alipay_mode: V('cfg-alipay-mode', old.pay_alipay_mode || 'redpacket') || 'redpacket',
+    pay_alipay_redpacket_prefix:
+      (V('cfg-rp-prefix', old.pay_alipay_redpacket_prefix || 'YFK')
+        .toUpperCase().replace(/[^A-Z0-9]/g, '') || 'YFK').slice(0, 6),
+    pay_alipay_qr: V('cfg-alipay-qr', old.pay_alipay_qr || ''),
+
+    /* USDT */
+    pay_usdt_enabled: C('cfg-usdt-enabled', old.pay_usdt_enabled !== false),
+    pay_usdt_address: V('cfg-usdt-address', old.pay_usdt_address || ''),
+    pay_usdt_network: V('cfg-usdt-network', old.pay_usdt_network || 'TRC20') || 'TRC20',
+    pay_usdt_rate: N('cfg-usdt-rate', old.pay_usdt_rate || 7.2) || 7.2,
+
+    /* Luban */
+    luban_markup: N('cfg-luban-markup', old.luban_markup || 1.3) || 1.3,
+    luban_common_cost: N('cfg-luban-common-cost', old.luban_common_cost || 2) || 2
+  });
+
+  /* 未在表单暴露的字段：原样保留 */
+  ['pay_usdt_qr','smm_markup','smm_cost_currency','smm_categories','smm_hero_title',
+   'smm_hero_subtitle','smm_usage_text','yf_announcement','recharge_bonus_pct',
+   'recharge_bonus_text','luban_usage_text','home_entry_member_title',
+   'home_entry_member_sub','home_entry_luban_title','home_entry_luban_sub',
+   'home_entry_smm_title','home_entry_smm_sub','member_card_title','pay_alipay_note',
+   'pay_usdt_note','admin_pwd_hash','tg_notify_enabled'].forEach(function(k){
+    if (next[k] === undefined && old[k] !== undefined) next[k] = old[k];
+  });
+
+  /* 打印关键字段，方便你在 F12 里核对 */
+  console.log('[P10] 采集结果:', {
+    site_name: next.site_name,
+    tg_bot_token: next.tg_bot_token ? next.tg_bot_token.slice(0, 12) + '…' : '(空)',
+    tg_chat_id: next.tg_chat_id || '(空)',
+    usdt_rate: next.pay_usdt_rate,
+    usdt_address: next.pay_usdt_address ? next.pay_usdt_address.slice(0, 8) + '…' : '(空)'
+  });
+
+  /* 写入本地 + 触发 saveDB（自动 POST /api/state 到 KV） */
+  db.config = next;
+
+  /* 联动重算价格（汇率/加价变了） */
+  try {
+    if (typeof window.recalcAllPrices === 'function') {
+      var rc = window.recalcAllPrices(db) || {};
+      var n = (rc.smmN || 0) + (rc.lbN || 0);
+      if (n > 0) console.log('[P10] 联动重算 ' + n + ' 个商品价格');
+    }
+  } catch(e){ console.warn('[P10] recalc fail', e); }
+
+  window.saveDB(db);
+  console.log('[P10] 已写入 localStorage 并推送 /api/state');
+
+  /* 刷新 UI */
+  try { if (window.applySiteConfig) window.applySiteConfig(); } catch(e){}
+  try { if (window.renderSettings) window.renderSettings(); } catch(e){}
+
+  try { if (window.toast) window.toast('设置已保存 ✅', 'success'); } catch(e){}
+};
+
+/* ---------- 顺手把「发送测试消息」也接上正确的 ID ---------- */
+window.testTgNotify = function(){
+  var token  = V('cfg-tg-bot-token', '');
+  var chatId = V('cfg-tg-chat-id', '');
+  console.log('[P10] 测试 TG：token=' + (token ? token.slice(0,12) + '…' : '(空)') + ', chat_id=' + (chatId || '(空)'));
+  if (!token || !chatId){
+    if (window.toast) window.toast('请先填写 Bot Token 和 Chat ID', 'error');
+    return;
+  }
+  if (window.toast) window.toast('正在发送测试…');
+  fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ chat_id: chatId, text: '✅ 云发卡 TG 通知测试成功！' })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok) { if (window.toast) window.toast('测试消息已发送 ✅ 请查看 TG', 'success'); }
+    else { if (window.toast) window.toast('发送失败：' + (d.description || '未知错误'), 'error'); console.error(d); }
+  })
+  .catch(function(e){
+    if (window.toast) window.toast('网络错误：' + e.message, 'error');
+    console.error(e);
+  });
+};
+
+console.log('%c[P10 终极修复] saveSettings 已接管 · TG 表单 ID 已对齐 · 保存→本地+KV 双写',
+  'color:#e11d48;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

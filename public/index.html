@@ -5132,5 +5132,169 @@ window.switchTab = function(tab){
 console.log('%c[P6 安全加固补丁] 登录/后台操作已后端化 · TG走代理 · 自动退款 · 操作日志 已加载', 'color:#6366f1;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     体验升级补丁 P7 · 移除筛选栏/金额联动/卡顿优化/会员充值详情/SMM搜索/上游余额
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* ===== 1. 移除首页排序/价格筛选栏 ===== */
+var st = document.createElement('style');
+st.textContent = '#yf-home-sort-bar{display:none !important}';
+document.head.appendChild(st);
+
+/* ===== 2. SMM下单弹窗：支付方式切换时金额单位联动（支付宝=¥，USDT=USDT） ===== */
+function smmAmountUnit(){
+  var el = document.getElementById('smm-amount');
+  if(!el) return;
+  var radio = document.querySelector('input[name="smm-pay"]:checked');
+  var method = radio ? radio.value : 'usdt';
+  var usdtVal = parseFloat(el.dataset.usdtVal || '0');
+  if(!usdtVal){ var m = el.textContent.match(/([\d.]+)/); if(m){ usdtVal = parseFloat(m[1]); el.dataset.usdtVal = m[1]; } }
+  if(!usdtVal) return;
+  var rate = window.usdtRate ? window.usdtRate() : 7.2;
+  if(method === 'alipay'){ el.textContent = '¥' + (usdtVal * rate).toFixed(2); }
+  else { el.textContent = usdtVal + ' USDT'; }
+}
+document.addEventListener('change', function(e){
+  if(e.target && e.target.name === 'smm-pay'){ setTimeout(smmAmountUnit, 30); }
+});
+document.addEventListener('click', function(e){
+  if(e.target.closest && e.target.closest('#smm-pay-methods .pay-method')){ setTimeout(smmAmountUnit, 50); }
+});
+var _origSmmRefresh = window.smmRefreshAmount;
+if(typeof _origSmmRefresh === 'function'){
+  window.smmRefreshAmount = function(){
+    _origSmmRefresh.apply(this, arguments);
+    var el = document.getElementById('smm-amount');
+    if(el){ var m = el.textContent.match(/([\d.]+)/); if(m) el.dataset.usdtVal = m[1]; }
+    smmAmountUnit();
+  };
+}
+setInterval(function(){ var el=document.getElementById('smm-amount'); if(el && !el.dataset.p7bound){ el.dataset.p7bound='1'; smmAmountUnit(); } }, 800);
+
+/* ===== 3. 后台tab切换卡顿优化：点击立即显示loading，异步渲染 ===== */
+var _origSwitchTab = window.switchTab;
+if(typeof _origSwitchTab === 'function'){
+  window.switchTab = function(tab){
+    var body = document.getElementById('tab-body');
+    if(body) body.innerHTML = '<div class="loading" style="padding:40px;text-align:center;color:var(--muted)">加载中…</div>';
+    var args = arguments;
+    setTimeout(function(){ try{ _origSwitchTab.apply(window, args); }catch(e){ console.warn(e); } }, 20);
+  };
+}
+
+/* ===== 4. 后台会员管理：增加充值记录详情表 ===== */
+var _origRenderMembers = window.renderMembers;
+if(typeof _origRenderMembers === 'function'){
+  window.renderMembers = function(){
+    _origRenderMembers.apply(this, arguments);
+    setTimeout(function(){
+      try{
+        var body = document.getElementById('tab-body');
+        if(!body || body.querySelector('#p7-recharge-panel')) return;
+        var db = window.loadDB();
+        var recharges = (db.recharges || []).slice(0, 50);
+        var RTEXT = {pending:'待支付', pending_review:'待审核', success:'已到账'};
+        var RCLS = {pending:'gray', pending_review:'warn', success:'ok'};
+        var rows = recharges.length ? recharges.map(function(r){
+          return '<tr><td class="mono" style="font-size:12px">'+String(r.id||'').replace(/</g,'&lt;')+'</td>'
+            + '<td>'+String(r.username||'').replace(/</g,'&lt;')+'</td>'
+            + '<td>¥'+(Number(r.amount||0)/100).toFixed(2)+'<br><span class="muted" style="font-size:11px">≈'+(Number(r.amount||0)/100/(r.usdt_rate||7.2)).toFixed(2)+' USDT</span></td>'
+            + '<td>'+(r.method==='alipay'?'支付宝':'USDT')+'</td>'
+            + '<td><span class="badge '+(RCLS[r.status]||'gray')+'">'+(RTEXT[r.status]||r.status)+'</span>'+(r.pay_tx?'<br><span class="muted mono" style="font-size:10px">tx:'+String(r.pay_tx).slice(0,12)+'…</span>':'')+'</td>'
+            + '<td class="muted" style="font-size:12px">'+String(r.created_at||'').replace(/</g,'&lt;')+'</td>'
+            + '<td style="text-align:right">'+(r.status==='pending_review'?'<button class="btn sm primary" onclick="approveRecharge(\''+String(r.id).replace(/'/g,'')+'\')">确认到账</button>':'')+'</td></tr>';
+        }).join('') : '<tr><td colspan="7" class="empty">暂无充值记录</td></tr>';
+        var panel = document.createElement('div');
+        panel.id = 'p7-recharge-panel';
+        panel.className = 'card panel';
+        panel.style.marginTop = '16px';
+        panel.innerHTML = '<h3 style="margin:0 0 12px">💰 充值记录（最近 '+recharges.length+' 条）</h3>'
+          + '<div style="overflow-x:auto"><table><thead><tr><th>充值单号</th><th>会员</th><th>金额</th><th>方式</th><th>状态</th><th>时间</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+        body.appendChild(panel);
+      }catch(e){ console.warn('[P7 recharge]', e); }
+    }, 80);
+  };
+}
+
+/* ===== 5. SMM后台：商品关键词搜索框 ===== */
+function injectSmmSearch(){
+  var body = document.getElementById('tab-body');
+  if(!body) return;
+  var listTitle = null;
+  body.querySelectorAll('h3').forEach(function(h){ if(h.textContent.indexOf('推广商品列表') >= 0) listTitle = h; });
+  if(!listTitle || listTitle.parentNode.querySelector('#p7-smm-search')) return;
+  var wrap = document.createElement('div');
+  wrap.id = 'p7-smm-search';
+  wrap.style.cssText = 'margin:10px 0;display:flex;gap:8px;align-items:center';
+  wrap.innerHTML = '<input id="p7-smm-kw" placeholder="🔍 输入关键词搜索商品（服务名/类别），实时过滤" style="flex:1">'
+    + '<button class="btn ghost sm" id="p7-smm-clear">清除</button>';
+  listTitle.parentNode.insertBefore(wrap, listTitle.nextSibling);
+  var input = wrap.querySelector('#p7-smm-kw');
+  input.addEventListener('input', function(){
+    var kw = input.value.trim().toLowerCase();
+    var rows = body.querySelectorAll('#tab-body table tbody tr');
+    rows.forEach(function(tr){
+      if(!kw){ tr.style.display = ''; return; }
+      tr.style.display = tr.textContent.toLowerCase().indexOf(kw) >= 0 ? '' : 'none';
+    });
+  });
+  wrap.querySelector('#p7-smm-clear').addEventListener('click', function(){ input.value=''; input.dispatchEvent(new Event('input')); });
+}
+var _origRenderSmmTab = window.renderSmmTab;
+if(typeof _origRenderSmmTab === 'function'){
+  window.renderSmmTab = function(){
+    _origRenderSmmTab.apply(this, arguments);
+    setTimeout(injectSmmSearch, 120);
+    setTimeout(function(){ injectBalanceBar('smm'); }, 150);
+  };
+}
+
+/* ===== 6. Luban / SMM 后台：上游渠道余额实时显示 ===== */
+function fetchBalance(type, cb){
+  if(type === 'luban'){
+    fetch('/api/luban?action=balance').then(function(r){return r.json();}).then(function(d){ cb(d); }).catch(function(){ cb(null); });
+  } else {
+    fetch('/api/smm', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'balance'})})
+      .then(function(r){return r.json();}).then(function(d){ cb(d && d.ok ? d.data : null); }).catch(function(){ cb(null); });
+  }
+}
+function injectBalanceBar(type){
+  var body = document.getElementById('tab-body');
+  if(!body) return;
+  var id = 'p7-balance-' + type;
+  if(body.querySelector('#' + id)) return;
+  var firstCard = body.querySelector('.card');
+  if(!firstCard) return;
+  var bar = document.createElement('div');
+  bar.id = id;
+  bar.className = 'card panel';
+  bar.style.cssText = 'margin-bottom:14px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap';
+  bar.innerHTML = '<span style="font-weight:700">💳 上游渠道余额：</span><span id="'+id+'-val" class="mono" style="color:#10b981;font-weight:800">查询中…</span>'
+    + '<button class="btn ghost sm" id="'+id+'-refresh" style="margin-left:auto">🔄 刷新</button>';
+  firstCard.parentNode.insertBefore(bar, firstCard);
+  var valEl = bar.querySelector('#'+id+'-val');
+  var doFetch = function(){
+    valEl.textContent = '查询中…'; valEl.style.color = '#6b7280';
+    fetchBalance(type, function(d){
+      if(!d){ valEl.textContent = '查询失败（未配置API Key）'; valEl.style.color = '#ef4444'; return; }
+      var bal = d.balance !== undefined ? d.balance : (d.data && d.data.balance !== undefined ? d.data.balance : JSON.stringify(d).slice(0,30));
+      valEl.textContent = String(bal) + (type==='luban' ? ' USD' : '');
+      valEl.style.color = '#10b981';
+    });
+  };
+  bar.querySelector('#'+id+'-refresh').addEventListener('click', doFetch);
+  doFetch();
+}
+var _origRenderLuban = window.renderLuban;
+if(typeof _origRenderLuban === 'function'){
+  window.renderLuban = function(){ _origRenderLuban.apply(this, arguments); setTimeout(function(){ injectBalanceBar('luban'); }, 120); };
+}
+
+console.log('%c[P7 体验升级补丁] 筛选栏移除/金额联动/tab优化/充值详情/SMM搜索/上游余额 已加载', 'color:#f59e0b;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

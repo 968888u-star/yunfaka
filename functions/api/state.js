@@ -101,7 +101,7 @@ export async function onRequest(context) {
       await env.YUNFAKA_KV.put('state', JSON.stringify({ rev: newRev, db, updated_at: Date.now() }));
       return Response.json({ ok: true, rev: newRev }, { headers: corsHeaders });
     } catch (e) {
-      return Response.json({ ok: false, msg: '数据格式错误' }, { status: 400, headers: corsHeaders });
+      return Response.json({ ok: false, msg: '保存失败: ' + String((e && e.message) || e) }, { status: 400, headers: corsHeaders });
     }
   }
 

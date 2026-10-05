@@ -66,14 +66,40 @@ label.field > span{display:block;font-size:13px;font-weight:600;color:var(--mute
 .badge.src{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
 .badge.src-luban{background:#fef3c7;color:#b45309;border:1px solid #fcd34d}
 
-/* ====== 图3：支付方式卡片化样式 ====== */
-.pay-methods{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.pay-method{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 12px;border:2px solid var(--line);border-radius:12px;cursor:pointer;transition:.2s;background:#fff;font-weight:600;font-size:14px;user-select:none;-webkit-user-select:none;text-align:center;min-height:60px;}
-.pay-method input[type="radio"]{display:none;} /* 隐藏原生单选框 */
-.pay-method::before{content:"";width:16px;height:16px;border-radius:50%;border:2px solid #cbd5e1;display:inline-block;flex-shrink:0;transition:.2s;}
+/* ====== 修复支付方式太宽问题：限制最大宽度，居中排列 ====== */
+.pay-methods{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));
+  gap:10px;
+  max-width:320px; /* ⭐ 限制最大宽度，避免太宽 */
+  margin:0 auto;
+}
+.pay-method{
+  position:relative;display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:12px 10px;border:2px solid var(--line);border-radius:12px;cursor:pointer;
+  transition:.2s;background:#fff;font-weight:600;font-size:14px;
+  user-select:none;-webkit-user-select:none;text-align:center;min-height:56px;
+}
+.pay-method input[type="radio"]{display:none;}
+.pay-method::before{
+  content:"";width:16px;height:16px;border-radius:50%;border:2px solid #cbd5e1;
+  display:inline-block;flex-shrink:0;transition:.2s;
+}
 .pay-method.active::before{border-color:var(--primary);background:var(--primary);box-shadow:inset 0 0 0 3px #fff;}
 .pay-method.active{border-color:var(--primary);background:#f5f3ff;color:var(--primary);}
 .pay-method .logo{font-size:20px;}
+
+/* ====== 修复规格不显眼问题：名称字体加大，价格红色高亮 ====== */
+.sku-options{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.sku-option{
+  padding:12px 16px;border:2px solid var(--line);border-radius:12px;cursor:pointer;
+  transition:.15s;background:#fff;font-size:14px;font-weight:700;
+  user-select:none;-webkit-user-select:none;font-family:inherit;min-width:100px;text-align:center;
+}
+.sku-option:hover{border-color:#c7cbe0;}
+.sku-option.active{border-color:var(--primary);background:#f5f3ff;color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.1);}
+.sku-option small{display:block;font-size:13px;color:#e11d48;margin-top:4px;font-weight:800;}
+.sku-option.active small{color:var(--primary);}
 
 .balance-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#fef9e7;border:1px dashed #fcd34d;border-radius:10px;margin-bottom:14px;font-size:14px}
 .balance-row .lbl{display:flex;align-items:center;gap:8px;font-weight:600;color:#92400e}
@@ -162,7 +188,7 @@ tbody tr:hover{background:#fafbfe}
 .color-swatch{width:34px;height:34px;border-radius:9px;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;transition:.15s}
 .color-swatch:hover{transform:scale(1.1)}
 
-/* ====== 客服系统样式（全屏适配） ====== */
+/* ====== 客服系统样式 ====== */
 .cs-float{position:fixed;right:20px;bottom:88px;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 28px -6px rgba(16,185,129,.6);z-index:140;cursor:pointer;transition:.2s;border:0;font-size:24px}
 .cs-float:hover{transform:scale(1.08) translateY(-2px)}
 .cs-float::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid #10b981;opacity:.35;animation:pulse 2.2s infinite}
@@ -191,7 +217,7 @@ tbody tr:hover{background:#fafbfe}
 @media (max-width:600px){
   .nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}
   .hero h1{font-size:21px}.tg-float{right:16px;bottom:16px;width:48px;height:48px}
-  /* 恢复手机端客服悬浮按钮 */
+  /* 手机端恢复客服悬浮按钮 */
   .cs-float{display:flex!important;right:16px;bottom:80px;width:48px;height:48px;font-size:22px;z-index:9998}
   .pay-method{min-width:80px;padding:10px 12px;font-size:13px}
   .member-card .amt{font-size:28px}.redpacket-box .code{font-size:26px;letter-spacing:2px}
@@ -243,10 +269,7 @@ body.yf-scroll-locked{position:fixed!important;width:100%!important;height:100%!
 <div id="modal" class="modal-mask hidden"><div class="modal" id="modal-box"></div></div>
 <div id="toast" class="toast"></div>
 
-<script>/* ==================================================================
-   云发卡 v17 · 精简重构版
-   ================================================================== */
-'use strict';
+<script>'use strict';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -310,8 +333,6 @@ function hexToRgba(hex, alpha){
   const r = parseInt(full.slice(0,2),16)||0, g = parseInt(full.slice(2,4),16)||0, b = parseInt(full.slice(4,6),16)||0;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
-
-/* ---------------- 密码与安全 ---------------- */
 function hashPwd(pwd){
   const salt = 'yfk2024salt::v2::';
   let str = salt + pwd + salt;
@@ -346,7 +367,6 @@ function verifyPwd(input, storedHash, upgradeCallback){
   return false;
 }
 
-/* ---------------- 数据层 ---------------- */
 const STORE_KEY = 'yunfaka_db_v15';
 const MY_KEY = 'yunfaka_my_orders';
 const MEMBER_KEY = 'yunfaka_member_user';
@@ -576,7 +596,6 @@ function usdtQrUrl(address, amount){
   return 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=' + encodeURIComponent(q);
 }
 
-/* ---------------- 路由 ---------------- */
 let _lastLubanRenderAt = 0, _lastLubanRenderTab = '';
 function route(){
   const hash = location.hash.replace(/^#/, '') || '/';
@@ -591,8 +610,7 @@ function route(){
   if (hash.indexOf('/smm') === 0) return renderSmmClient();
   return renderHome();
 }
-window.addEventListener('hashchange', route);/* ---------------- 首页 ---------------- */
-let homeCategory = 'all';
+window.addEventListener('hashchange', route);let homeCategory = 'all';
 function setHomeCategory(id){ homeCategory = id; renderHome(); window.scrollTo({top:0,behavior:'smooth'}); }
 
 function renderHome(){
@@ -686,7 +704,6 @@ function yfNotifyStock(pid){
   yfSendTgNow(`🔔 到货提醒请求\n商品：${p.name}\n联系方式：${contact.trim()}`);
 }
 
-/* ---------------- 购买弹窗 (支付样式已优化) ---------------- */
 let __buySkuId = 0;
 function openBuy(id){
   const db = loadDB();
@@ -724,7 +741,10 @@ function openBuy(id){
     const dis = st <= 0;
     const cls = String(s.id)===String(defaultSkuId) ? 'active' : '';
     const disAttr = dis ? 'disabled style="opacity:.4;cursor:not-allowed"' : '';
-    return `<button class="sku-option ${cls}" data-sku="${s.id}" ${disAttr}>${esc(s.name)}<small>${usdt(s.price)} USDT${dis?' · 缺货':''}</small></button>`;
+    return `<button class="sku-option ${cls}" data-sku="${s.id}" ${disAttr}>
+      <div style="font-size:15px;margin-bottom:2px">${esc(s.name)}</div>
+      <small>${usdt(s.price)} USDT${dis?' · 缺货':''}</small>
+    </button>`;
   }).join('')}</div></label>` : '';
 
   const catKv = cat ? `<div class="kv"><span class="k">分类</span><span class="v">${esc(cat.name)}</span></div>` : '';
@@ -914,8 +934,7 @@ function submitBuy(id){
     if (location.hash === '#/order/' + orderNo) route();
     else location.hash = '#/order/' + orderNo;
   } else showPayModal('order', orderNo);
-}/* ---------------- 支付弹窗 ---------------- */
-function showPayModal(type, id){
+}function showPayModal(type, id){
   const db = loadDB();
   const cfg = getConfig(db);
   let amount, orderNo, payMethod, extra = '', rpCode = '', usdtRateSnapshot = null;
@@ -1233,7 +1252,6 @@ function forceCheckUsdt(orderNo){
     }).catch(() => toast('网络错误','error'));
 }
 
-/* ---------------- 管理后台审核 ---------------- */
 function approveOrder(orderNo){
   const db = loadDB();
   const o = db.orders.find(x => x.order_no === orderNo);
@@ -1282,7 +1300,6 @@ function cancelOrderRefund(orderNo){
   saveDB(db); toast('订单已取消，余额已退还','success'); route();
 }
 
-/* ---------------- 会员页面 ---------------- */
 let authTab = 'login';
 function renderMemberPage(){
   const member = getCurrentMember(loadDB());
@@ -1497,8 +1514,7 @@ function submitRecharge(){
   if (radio.value === 'alipay') rc.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
   db.recharges.unshift(rc); saveDB(db);
   showPayModal('recharge', id);
-}/* ---------------- 订单查询与详情 ---------------- */
-function renderOrderPage(orderNo){
+}function renderOrderPage(orderNo){
   const secret = getMyOrder(orderNo);
   if (!secret){
     $('#app').innerHTML = `<div class="card panel" style="max-width:460px;margin:40px auto">
@@ -1645,7 +1661,6 @@ function yfRecoverOrder(){
   location.hash = '#/order/' + no; if (location.hash === '#/order/' + no && window.route) route();
 }
 
-/* ---------------- 管理后台 ---------------- */
 let adminTab = 'stats';
 function renderAdminPage(){
   if (sessionStorage.getItem(SS_ADMIN) !== '1'){
@@ -1754,10 +1769,7 @@ function resendTg(orderNo){
   toast('正在发送…');
   fetch('/api/tg-notify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({order_no: orderNo}) })
     .then(r => r.json()).then(d => { if (d.ok) toast('TG 通知已发送 ✅','success'); else toast(d.msg || '发送失败','error'); }).catch(() => toast('网络错误','error'));
-}
-
-/* ---------------- 商品 / 分类 / 卡密管理 ---------------- */
-function renderProducts(){
+}function renderProducts(){
   const db = loadDB();
   const rows = db.products.length ? db.products.map(p => {
     const stock = stockOf(db, p.id); const cat = db.categories.find(c => String(c.id) === String(p.category_id));
@@ -1932,7 +1944,6 @@ function deleteCard(id){
   const db = loadDB(); db.cards = db.cards.filter(c => c.id !== id); saveDB(db); toast('已删除','success'); loadCards();
 }
 
-/* ---------------- 订单管理 ---------------- */
 function renderOrders(){
   const db = loadDB(); const orders = db.orders;
   const doneCount = orders.filter(o => o.status === 'delivered' || o.status === 'rejected').length;
@@ -1972,7 +1983,6 @@ function viewOrderCards(orderNo){
   openModal(`<h3>订单卡密</h3><p class="muted mono" style="font-size:12px;margin-top:-10px">${esc(orderNo)}</p>${o.cards.map(c => `<div class="codebox"><span class="mono">${esc(c)}</span><button onclick="copyText('${esc(c)}',this)">复制</button></div>`).join('')}<div class="row" style="justify-content:flex-end;margin-top:16px"><button class="btn ghost" onclick="closeModal()">关闭</button></div>`);
 }
 
-/* ---------------- 会员管理 ---------------- */
 function renderMembers(){
   const db = loadDB(); const members = db.members.slice().sort((a, b) => (b.balance || 0) - (a.balance || 0));
   const rows = members.length ? members.map(m => `<tr><td><b>${esc(m.username)}</b></td><td class="muted" style="font-size:12px">${esc(m.secret || '-')}</td><td style="font-weight:700;color:#b45309">¥${yuan(m.balance)}<br><span class="muted" style="font-size:11px;font-weight:400">≈${usdt(m.balance)} USDT</span></td><td class="muted" style="font-size:12px">${esc(m.created_at)}</td><td style="text-align:right;white-space:nowrap"><button class="btn sm ghost" onclick="adjustBalance('${esc(m.username)}',100)">+1元</button><button class="btn sm ghost" onclick="adjustBalance('${esc(m.username)}',-100)">-1元</button><button class="btn sm ghost" onclick="openAdjustBalance('${esc(m.username)}')">调整</button><button class="btn sm ghost" onclick="openResetPwd('${esc(m.username)}')">改密</button><button class="btn sm danger" onclick="deleteMember('${esc(m.username)}')">删除</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">暂无会员</td></tr>';
@@ -2008,7 +2018,6 @@ function deleteMember(username){
   saveDB(db); toast('会员已删除','success'); renderMembers();
 }
 
-/* ---------------- 设置 ---------------- */
 function renderSettings(){
   const db = loadDB(); const cfg = getConfig(db); const alipayMode = cfg.pay_alipay_mode || 'redpacket';
   const rpStyle = alipayMode === 'redpacket' ? '' : 'display:none'; const qrStyle = alipayMode === 'qr' ? '' : 'display:none';
@@ -2075,8 +2084,7 @@ function saveSettings(){
     pay_usdt_qr: $('#cfg-usdt-qr') ? $('#cfg-usdt-qr').value.trim() : (db.config.pay_usdt_qr || '')
   });
   saveDB(db); applySiteConfig(); toast('设置已保存','success'); renderSettings();
-}/* ---------------- Luban 接码（后台管理） ---------------- */
-function renderLuban(){
+}function renderLuban(){
   const db = loadDB(); const lubanProducts = db.products.filter(p => p.source === 'luban');
   $('#tab-body').innerHTML = `<div class="card panel"><h2>📱 LubanSms 接码</h2>
       <div class="luban-hint"><b>💡 用法：</b>输入国家 + 服务关键词，点击「按筛选同步」拉取。系统自动加价 30% 后生成商品。<br><b>已上架：</b>${lubanProducts.length} 个</div>
@@ -2125,7 +2133,6 @@ function lubanSyncServices(){
 }
 function lubanToggleProduct(id){ const db = loadDB(); const p = db.products.find(x => x.id === id); if (!p) return; p.active = !p.active; saveDB(db); toast(p.active ? '已上架' : '已下架','success'); renderLuban(); }
 
-/* ---------------- Luban 接码（客户端） ---------------- */
 const LUBAN_COUNTRIES = [['中国','CN'],['美国','US'],['英国','GB'],['俄罗斯','RU'],['印度','IN'],['印度尼西亚','ID'],['菲律宾','PH'],['越南','VN'],['泰国','TH'],['马来西亚','MY'],['新加坡','SG'],['日本','JP'],['韩国','KR'],['中国香港','HK'],['中国台湾','TW'],['中国澳门','MO'],['德国','DE'],['法国','FR'],['意大利','IT'],['西班牙','ES'],['荷兰','NL'],['波兰','PL'],['乌克兰','UA'],['罗马尼亚','RO'],['捷克','CZ'],['土耳其','TR'],['以色列','IL'],['沙特阿拉伯','SA'],['阿联酋','AE'],['哈萨克斯坦','KZ'],['加拿大','CA'],['墨西哥','MX'],['巴西','BR'],['阿根廷','AR'],['智利','CL'],['澳大利亚','AU'],['新西兰','NZ'],['南非','ZA'],['埃及','EG'],['尼日利亚','NG'],['肯尼亚','KE'],['摩洛哥','MA']];
 const LUBAN_SERVICE_ALIAS = {'豆包':'doubao','微信':'weixin','拼多多':'pinduoduo','淘宝':'taobao','支付宝':'alipay','抖音':'douyin','小红书':'xiaohongshu','哔哩哔哩':'bilibili','b站':'bilibili','快手':'kuaishou','知乎':'zhihu','微博':'weibo','百度':'baidu','京东':'jd','美团':'meituan','滴滴':'didi','腾讯':'tencent','网易':'netease','小米':'xiaomi','华为':'huawei','抖音国际版':'tiktok','油管':'youtube','脸书':'facebook','推特':'twitter','电报':'telegram','飞机':'telegram'};
 let _lubanResults = [];
@@ -2348,10 +2355,7 @@ function lubanCommonSubmit2(){
   db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret); closeModal();
   if (due === 0){ payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
   else showPayModal('order', orderNo);
-}
-
-/* ---------------- SMM 推广 ---------------- */
-function smmApi(action, payload){ return fetch('/api/smm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: action }, payload || {})) }).then(r => r.json()); }
+}function smmApi(action, payload){ return fetch('/api/smm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: action }, payload || {})) }).then(r => r.json()); }
 function smmIsPackage(p){ if (p.smm_type === 'Package') return true; var mn = parseInt(p.smm_min), mx = parseInt(p.smm_max); return (mn === 1 && mx === 1); }
 function smmMarkup(){ try { return Number((loadDB().config || {}).smm_markup) || 1.5; } catch(e){ return 1.5; } }
 function smmUsdtOf(p){ return (parseFloat(p && p.smm_rate_usd || 0) * smmMarkup()).toFixed(2); }
@@ -2451,10 +2455,7 @@ function startPoll(orderNo){
 }
 function smmManualCheck(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; smmApi('status', { order: o.smm_order_id }).then(r => { if (r.ok && r.data){ var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); o2.smm_state = r.data.status || ''; saveDB(db2); toast('状态：' + o2.smm_state, 'success'); if (location.hash === '#/order/' + orderNo) route(); } }); }
 function smmRefill(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定补单？')) return; smmApi('refill', { order: o.smm_order_id }).then(r => { if (r.ok && r.data && r.data.refill){ var db2 = loadDB(); db2.orders.find(x => x.order_no === orderNo).smm_refill_id = String(r.data.refill); saveDB(db2); toast('补单已提交','success'); } else toast('补单失败','error'); }); }
-function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定取消？')) return; smmApi('cancel', { orders: o.smm_order_id }).then(r => { toast('取消请求已提交','success'); setTimeout(() => smmManualCheck(orderNo), 3000); }); }
-
-/* ---------------- 客服系统（修复点击失效） ---------------- */
-(function(){
+function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定取消？')) return; smmApi('cancel', { orders: o.smm_order_id }).then(r => { toast('取消请求已提交','success'); setTimeout(() => smmManualCheck(orderNo), 3000); }); }(function(){
   var CS_KEY = 'yunfaka_chat_session';
   var csSession = localStorage.getItem(CS_KEY);
   if (!csSession){ csSession = 'C' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); localStorage.setItem(CS_KEY, csSession); }
@@ -2474,14 +2475,52 @@ function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.or
     fetch('/api/chat?session=' + encodeURIComponent(csSession) + '&t=' + Date.now()).then(function(r){ return r.json(); }).then(function(d){ if (d.ok && d.messages){ csRender(d.messages); } }).catch(function(){});
   };
   window.csSend = function(){
-    var input = document.getElementById('cs-input'); var text = input.value.trim(); if (!text) return;
-    var btn = document.getElementById('cs-send'); btn.disabled = true; btn.textContent = '…';
-    fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ session: csSession, text: text }) }).then(function(r){ return r.json(); }).then(function(d){
-      input.value = ''; btn.disabled = false; btn.textContent = '发送';
-      if (d.ok){ csPoll(); } else { alert('发送失败：' + (d.msg||'未知错误')); }
-    }).catch(function(){ btn.disabled = false; btn.textContent = '发送'; alert('网络错误'); });
+    var input = document.getElementById('cs-input');
+    if (!input) return;
+    var text = input.value.trim();
+    if (!text) return;
+    var btn = document.getElementById('cs-send');
+    var msgsBox = document.getElementById('cs-msgs');
+
+    if (msgsBox) {
+      var emptyDiv = msgsBox.querySelector('.cs-empty');
+      if (emptyDiv) emptyDiv.remove();
+      var now = new Date();
+      var p = function(n){ return String(n).padStart(2,'0'); };
+      var timeStr = now.getFullYear()+'-'+p(now.getMonth()+1)+'-'+p(now.getDate())+' '+p(now.getHours())+':'+p(now.getMinutes())+':'+p(now.getSeconds());
+      var msgDiv = document.createElement('div');
+      msgDiv.className = 'cs-msg customer';
+      msgDiv.innerHTML = text.replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }) + '<span class="cs-time">' + timeStr + '</span>';
+      msgsBox.appendChild(msgDiv);
+      msgsBox.scrollTop = msgsBox.scrollHeight;
+    }
+
+    input.value = '';
+    if (btn) { btn.disabled = true; btn.textContent = '发送中'; }
+
+    fetch('/api/chat', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session: csSession, text: text })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (btn) { btn.disabled = false; btn.textContent = '发送'; }
+      if (d.ok) {
+        if (window.csPoll) window.csPoll();
+      } else {
+        alert('发送失败：' + (d.msg||'未知错误'));
+      }
+    }).catch(function(){
+      if (btn) { btn.disabled = false; btn.textContent = '发送'; }
+      alert('网络错误，请检查网络后重试');
+    });
   };
-  // 事件绑定：采用委托方式，防止覆盖
+
+  var sendBtn = document.getElementById('cs-send');
+  if (sendBtn) {
+    sendBtn.onclick = window.csSend;
+  }
+  var inputEl = document.getElementById('cs-input');
+  if (inputEl) inputEl.addEventListener('keydown', function(e){ if (e.key==='Enter') window.csSend(); });
+
   document.addEventListener('click', function(e){
     var floatBtn = e.target.closest('#cs-float');
     var closeBtn = e.target.closest('#cs-close');
@@ -2489,8 +2528,8 @@ function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.or
     if (floatBtn && panel){
       e.preventDefault(); panel.classList.add('open');
       if (window.yfLockScroll) window.yfLockScroll();
-      csPoll(); setTimeout(function(){ document.getElementById('cs-input').focus(); }, 100);
-      if (!csPollTimer){ csPollTimer = setInterval(csPoll, 5000); }
+      window.csPoll(); setTimeout(function(){ document.getElementById('cs-input').focus(); }, 100);
+      if (!csPollTimer){ csPollTimer = setInterval(window.csPoll, 5000); }
     }
     if (closeBtn && panel){
       e.preventDefault(); panel.classList.remove('open');
@@ -2498,12 +2537,9 @@ function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.or
       if (csPollTimer){ clearInterval(csPollTimer); csPollTimer = null; }
     }
   });
-  var inputEl = document.getElementById('cs-input');
-  if (inputEl) inputEl.addEventListener('keydown', function(e){ if (e.key==='Enter') csSend(); });
   setTimeout(function(){ if (window.csPoll) window.csPoll(); }, 2000);
 })();
 
-/* ---------------- 初始化与多设备同步 ---------------- */
 (function(){
   var API = '/api/state'; var rev = 0;
   var _saveDB = window.saveDB; var _loadDB = window.loadDB;
@@ -2536,7 +2572,6 @@ function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.or
   window.addEventListener('online', pull);
 })();
 
-/* ---------------- 口令红包 scheme 跳转 ---------------- */
 var __yfJumping = false;
 function yfOpenAlipayRedpacket(code, amount){
   if (__yfJumping){ if (window.toast) toast('已在跳转中，请勿重复点击','info'); return; }
@@ -2549,7 +2584,6 @@ function yfOpenAlipayRedpacket(code, amount){
   setTimeout(() => { if (!document.hidden && window.toast) toast(`若未打开支付宝，请手动进入：支付宝→发红包→口令红包`,'info'); }, 2500);
 }
 
-/* 暴露全局函数供 onclick 使用 */
 Object.assign(window, {
   setHomeCategory, openBuy, submitBuy, doQuery, yfRecoverOrder, showPayModal, confirmPay, forceCheckUsdt, approveOrder, rejectOrder, resendTg,
   switchAuthTab, memberRegister, memberLogin, memberFindPwd, memberLogout, submitRecharge, saveFindPwd, approveRecharge, cancelOrderRefund,

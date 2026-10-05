@@ -6164,5 +6164,41 @@ if (typeof _origSaveSettings === 'function'){
 console.log('%c[P13] fetch 拦截 + 权限探测 + 保存验证 已启用', 'color:#6366f1;font-weight:bold;font-size:12px');
 })();
 </script>
+<!-- ============================================================
+     P14 · 静默 409 乐观锁假警报（数据实际会自动重试成功）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* ===== 静默 P6 里那条误导性的"数据已被其他设备更新"红条 ===== */
+var _origToast = window.toast;
+window.toast = function(msg, type){
+  var m = String(msg || '');
+  if (m.indexOf('数据已被其他设备更新') >= 0){
+    console.log('%c[P14] 静默 409 假警报（主流程会自动重试并成功）',
+      'color:#6b7280;font-size:12px', m);
+    return;
+  }
+  return _origToast.apply(this, arguments);
+};
+
+/* ===== 附：提供手动诊断工具 ===== */
+window.yfCheckRev = function(){
+  fetch('/api/state?t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d && d.ok){
+        console.log('%c[P14] 服务端当前 rev = ' + d.rev, 'color:#10b981;font-weight:bold');
+      } else {
+        console.warn('[P14] 读取失败:', d);
+      }
+    });
+};
+
+console.log('%c[P14] 409 假警报已静默 · 数据会自动重试保存 ✅',
+  'color:#10b981;font-weight:bold;font-size:12px');
+})();
+</script>
 </body>
 </html>

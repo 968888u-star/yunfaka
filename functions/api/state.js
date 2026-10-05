@@ -54,7 +54,7 @@ export async function onRequest(context) {
         if (rl.n > 5) {
           return Response.json({ ok: false, msg: '操作过于频繁，请稍后再试' }, { status: 429, headers: corsHeaders });
         }
-        await env.YUNFAKA_KV.put(rlKey, JSON.stringify(rl), { expirationTtl: 30 });
+        await env.YUNFAKA_KV.put(rlKey, JSON.stringify(rl), { expirationTtl: 120 });
       }
 
       const cl = Number(request.headers.get('content-length') || 0);

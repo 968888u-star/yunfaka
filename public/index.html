@@ -6327,5 +6327,128 @@ console.log('%c[P15] 客服对话框闪烁修复已启用（只在内容变化�
   'color:#10b981;font-weight:bold;font-size:12px');
 })();
 </script>
+<!-- ============================================================
+     P18 · 独立本地配置持久化（不依赖服务端，保存永不丢失）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+var CFG_KEY = 'yf_cfg_v1';
+
+function getMyCfg(){
+  try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch(e){ return null; }
+}
+function setMyCfg(cfg){
+  try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch(e){}
+}
+function V(id, fb){ var e = document.getElementById(id); return e ? String(e.value).trim() : (fb || ''); }
+function C(id, fb){ var e = document.getElementById(id); return e ? !!e.checked : !!fb; }
+function N(id, fb){ var e = document.getElementById(id); if (!e) return fb; var v = parseFloat(e.value); return isNaN(v) ? fb : v; }
+
+/* ===== 终极 saveSettings（不依赖任何历史补丁） ===== */
+window.saveSettings = function(){
+  var db = window.__yfRawLoadDB ? window.__yfRawLoadDB() : (window.loadDB() || {});
+  var old = db.config || {};
+  var myOld = getMyCfg() || {};
+  var base = Object.assign({}, old, myOld);
+
+  var next = {
+    site_name: V('cfg-name', base.site_name || '云发卡') || '云发卡',
+    hero_subtitle: V('cfg-hero-sub', base.hero_subtitle || ''),
+    tg_username: V('cfg-tg', base.tg_username || '').replace(/^@/, ''),
+    tg_btn_color: V('cfg-tg-color', base.tg_btn_color || '#0088cc') || '#0088cc',
+    tg_notify_enabled: C('cfg-tg-notify', base.tg_notify_enabled !== false),
+    tg_bot_token: V('cfg-tg-bot-token', base.tg_bot_token || ''),
+    tg_chat_id: V('cfg-tg-chat-id', base.tg_chat_id || ''),
+    balance_enabled: C('cfg-balance-enabled', base.balance_enabled !== false),
+    recharge_min: Math.round(N('cfg-recharge-min', (base.recharge_min || 1000) / 100) * 100) || 1000,
+    pay_alipay_enabled: C('cfg-alipay-enabled', base.pay_alipay_enabled !== false),
+    pay_alipay_mode: V('cfg-alipay-mode', base.pay_alipay_mode || 'redpacket') || 'redpacket',
+    pay_alipay_redpacket_prefix: (V('cfg-rp-prefix', base.pay_alipay_redpacket_prefix || 'YFK').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'YFK').slice(0, 6),
+    pay_alipay_qr: V('cfg-alipay-qr', base.pay_alipay_qr || ''),
+    pay_usdt_enabled: C('cfg-usdt-enabled', base.pay_usdt_enabled !== false),
+    pay_usdt_address: V('cfg-usdt-address', base.pay_usdt_address || ''),
+    pay_usdt_network: V('cfg-usdt-network', base.pay_usdt_network || 'TRC20') || 'TRC20',
+    pay_usdt_rate: N('cfg-usdt-rate', base.pay_usdt_rate || 7.2) || 7.2,
+    luban_markup: N('cfg-luban-markup', base.luban_markup || 1.3) || 1.3,
+    luban_common_cost: N('cfg-luban-common-cost', base.luban_common_cost || 2) || 2
+  };
+
+  /* 保留未编辑字段 */
+  Object.keys(base).forEach(function(k){ if (next[k] === undefined) next[k] = base[k]; });
+
+  /* ⭐ 1. 存独立 key（最重要，永不丢失） */
+  setMyCfg(next);
+
+  /* ⭐ 2. 写进主 db */
+  db.config = next;
+  try { localStorage.setItem('yunfaka_db_v15', JSON.stringify(db)); } catch(e){}
+
+  /* 3. 尝试推服务端（失败也无所谓，不影响本地） */
+  try {
+    fetch('/api/state?t=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var rev = d && d.rev !== undefined ? d.rev : 0;
+        return fetch('/api/state', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ db: db, baseRev: rev })
+        });
+      })
+      .then(function(r){
+        console.log('[P18] 服务端同步状态码:', r.status);
+      })
+      .catch(function(e){ console.warn('[P18] 服务端同步失败（本地已保存）', e); });
+  } catch(e){}
+
+  /* 刷新 UI */
+  try { if (window.applySiteConfig) window.applySiteConfig(); } catch(e){}
+  try { if (window.renderSettings) window.renderSettings(); } catch(e){}
+
+  if (window.toast) window.toast('设置已保存 ✅', 'success');
+  console.log('[P18] 已保存到独立 key:', {
+    site_name: next.site_name,
+    tg_bot_token: next.tg_bot_token ? next.tg_bot_token.slice(0, 12) + '…' : '(空)',
+    tg_chat_id: next.tg_chat_id || '(空)'
+  });
+};
+
+/* ===== 覆盖 loadDB：独立配置永远优先 ===== */
+var _ldb = window.loadDB;
+window.__yfRawLoadDB = _ldb;
+window.loadDB = function(){
+  var db = _ldb.apply(this, arguments);
+  var myCfg = getMyCfg();
+  if (db && myCfg){
+    db.config = Object.assign({}, db.config || {}, myCfg);
+  }
+  return db;
+};
+
+/* ===== 工具（在浏览器地址栏没法执行时用控制台） ===== */
+window.yfShowCfg = function(){
+  var c = getMyCfg();
+  alert(c ? '当前已保存的配置：\n\n' + JSON.stringify({
+    site_name: c.site_name,
+    tg_bot_token: c.tg_bot_token ? c.tg_bot_token.slice(0, 12) + '…' : '(空)',
+    tg_chat_id: c.tg_chat_id || '(空)',
+    pay_usdt_rate: c.pay_usdt_rate,
+    pay_usdt_address: c.pay_usdt_address ? c.pay_usdt_address.slice(0, 8) + '…' : '(空)'
+  }, null, 2) : '未保存过任何配置');
+};
+window.yfClearCfg = function(){
+  if (!confirm('确定清空所有本地配置？')) return;
+  localStorage.removeItem(CFG_KEY);
+  localStorage.removeItem('yf_config_override');
+  localStorage.removeItem('yunfaka_db_v15');
+  alert('已清空，请刷新页面');
+};
+
+console.log('%c[P18] 独立配置持久化已启用（保存永不丢失）', 'color:#10b981;font-weight:bold;font-size:13px');
+console.log('查看已存配置：yfShowCfg()  |  清空：yfClearCfg()');
+})();
+</script>
 </body>
 </html>

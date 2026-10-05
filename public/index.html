@@ -191,16 +191,16 @@ tbody tr:hover{background:#fafbfe}
 @media (max-width:600px){
   .nav nav a:not(.tg-btn){padding:8px 9px;font-size:13px}#nav-tg{display:none!important}
   .hero h1{font-size:21px}.tg-float{right:16px;bottom:16px;width:48px;height:48px}
-  .cs-float{right:16px;bottom:80px;width:48px;height:48px;font-size:22px}
+  /* 恢复手机端客服悬浮按钮 */
+  .cs-float{display:flex!important;right:16px;bottom:80px;width:48px;height:48px;font-size:22px;z-index:9998}
   .pay-method{min-width:80px;padding:10px 12px;font-size:13px}
   .member-card .amt{font-size:28px}.redpacket-box .code{font-size:26px;letter-spacing:2px}
   .session-box .num{font-size:20px}.modal.wide{max-width:100%}
-  /* 移动端客服全屏 */
+  /* 移动端客服面板全屏 */
   .cs-panel{position:fixed!important;top:0!important;left:0!important;right:0!important;bottom:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;border-radius:0!important;z-index:9999!important;display:none!important;}
   .cs-panel.open{display:flex!important;}
   .cs-header{padding-top:max(14px,env(safe-area-inset-top))!important;}
   .cs-input{padding-bottom:max(10px,env(safe-area-inset-bottom))!important;}
-  .cs-float{display:none!important;}
 }
 body.yf-scroll-locked{position:fixed!important;width:100%!important;height:100%!important;overflow:hidden!important;-webkit-overflow-scrolling:none!important;}
 </style>
@@ -244,11 +244,10 @@ body.yf-scroll-locked{position:fixed!important;width:100%!important;height:100%!
 <div id="toast" class="toast"></div>
 
 <script>/* ==================================================================
-   云发卡 v17 · 精简重构版（合并所有补丁，删除垃圾代码）
+   云发卡 v17 · 精简重构版
    ================================================================== */
 'use strict';
 
-/* ---------------- 基础工具函数 ---------------- */
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const yuan = fen => (Number(fen||0)/100).toFixed(2);
@@ -594,14 +593,7 @@ function route(){
 }
 window.addEventListener('hashchange', route);/* ---------------- 首页 ---------------- */
 let homeCategory = 'all';
-let _homeSearchKw = '';
 function setHomeCategory(id){ homeCategory = id; renderHome(); window.scrollTo({top:0,behavior:'smooth'}); }
-function yfHomeSearch(){
-  const el = document.getElementById('yf-home-search-input');
-  _homeSearchKw = el ? el.value.trim().toLowerCase() : '';
-  renderHome();
-}
-function yfHomeSearchClear(){ _homeSearchKw = ''; renderHome(); }
 
 function renderHome(){
   const db = loadDB();
@@ -609,10 +601,7 @@ function renderHome(){
   const cats = db.categories;
   const allActive = db.products.filter(p => p.active && p.source !== 'smm');
   if (homeCategory !== 'all' && !cats.some(c => String(c.id) === String(homeCategory))) homeCategory = 'all';
-  let filtered = homeCategory === 'all' ? allActive : allActive.filter(p => String(p.category_id) === String(homeCategory));
-  if (_homeSearchKw) {
-    filtered = filtered.filter(p => (p.name + (p.description||'')).toLowerCase().indexOf(_homeSearchKw) >= 0);
-  }
+  const filtered = homeCategory === 'all' ? allActive : allActive.filter(p => String(p.category_id) === String(homeCategory));
   const countOf = cid => allActive.filter(p => String(p.category_id) === String(cid)).length;
   const catTabs = `<button class="cat-tab ${homeCategory==='all'?'active':''}" onclick="setHomeCategory('all')">全部<span class="n">${allActive.length}</span></button>` +
     cats.map(c => `<button class="cat-tab ${String(homeCategory)===String(c.id)?'active':''}" onclick="setHomeCategory(${c.id})">${esc(c.name)}<span class="n">${countOf(c.id)}</span></button>`).join('');
@@ -643,7 +632,7 @@ function renderHome(){
       </div>
       <button class="btn primary" ${btnDisabled} onclick="${totalStock<=0 && p.source!=='luban' ? `yfNotifyStock(${p.id})` : `openBuy(${p.id})`}">${btnText}</button>
     </div>`;
-  }).join('') : '<div class="empty" style="grid-column:1/-1">没有找到匹配的商品</div>';
+  }).join('') : '<div class="empty" style="grid-column:1/-1">暂无商品</div>';
   
   const member = getCurrentMember(db);
   let memberBar = '';
@@ -680,11 +669,6 @@ function renderHome(){
   $('#app').innerHTML = `<div class="hero"><div class="blob"></div><h1>付款即发货，无需等待</h1><p>${esc(cfg.hero_subtitle || '7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额')}</p></div>
     ${announceHtml}
     ${memberBar}
-    <div style="margin-bottom:14px;display:flex;gap:8px">
-      <input id="yf-home-search-input" placeholder="🔍 搜索商品名称 / 描述" value="${esc(_homeSearchKw)}" style="flex:1" onkeydown="if(event.key==='Enter')yfHomeSearch()">
-      <button class="btn primary" onclick="yfHomeSearch()" style="flex-shrink:0">搜索</button>
-      ${_homeSearchKw ? '<button class="btn ghost" onclick="yfHomeSearchClear()" style="flex-shrink:0">清除</button>' : ''}
-    </div>
     <div class="cats">${catTabs}</div>
     <div class="grid">${cards}</div>`;
 }
@@ -702,7 +686,7 @@ function yfNotifyStock(pid){
   yfSendTgNow(`🔔 到货提醒请求\n商品：${p.name}\n联系方式：${contact.trim()}`);
 }
 
-/* ---------------- 购买弹窗 (修复支付样式) ---------------- */
+/* ---------------- 购买弹窗 (支付样式已优化) ---------------- */
 let __buySkuId = 0;
 function openBuy(id){
   const db = loadDB();
@@ -744,8 +728,7 @@ function openBuy(id){
   }).join('')}</div></label>` : '';
 
   const catKv = cat ? `<div class="kv"><span class="k">分类</span><span class="v">${esc(cat.name)}</span></div>` : '';
-  const lubanKv = isLuban ? `<div class="kv"><span class="k">接码类型</span><span class="v" style="color:#b45309">${p.luban_type==='common'?'通用短信接收':'验证码接收'}</span></div>
-    <div class="kv"><span class="k">国家</span><span class="v">${esc(p.luban_country || '-')}</span></div>` : '';
+  const lubanKv = isLuban ? `<div class="kv"><span class="k">接码类型</span><span class="v" style="color:#b45309">${p.luban_type==='common'?'通用短信接收':'验证码接收'}</span></div><div class="kv"><span class="k">国家</span><span class="v">${esc(p.luban_country || '-')}</span></div>` : '';
   const lubanTip = isLuban ? '<div style="background:#fef3c7;border:1px dashed #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">⚠️ 接码服务：付款后系统会立即分配号码，请在 20 分钟内完成目标平台注册，超时号码将自动释放。</div>' : '';
   const qtyHtml = isLuban ? '' : `<label class="field"><span>购买数量（库存 <span id="buy-stock-label">${initialStock}</span>）</span><input id="buy-qty" type="number" min="1" max="${maxQty}" value="1"></label>`;
 
@@ -931,9 +914,7 @@ function submitBuy(id){
     if (location.hash === '#/order/' + orderNo) route();
     else location.hash = '#/order/' + orderNo;
   } else showPayModal('order', orderNo);
-}
-
-/* ---------------- 支付弹窗 ---------------- */
+}/* ---------------- 支付弹窗 ---------------- */
 function showPayModal(type, id){
   const db = loadDB();
   const cfg = getConfig(db);
@@ -1144,7 +1125,8 @@ function submitWithPayerName(type, id){
     location.hash = '#/member';
     if (location.hash === '#/member') route();
   }
-}/* ---------------- 订单处理与发货 ---------------- */
+}
+
 function processRecharge(id){
   const db = loadDB();
   const r = db.recharges.find(x => x.id === id);
@@ -2093,7 +2075,7 @@ function saveSettings(){
     pay_usdt_qr: $('#cfg-usdt-qr') ? $('#cfg-usdt-qr').value.trim() : (db.config.pay_usdt_qr || '')
   });
   saveDB(db); applySiteConfig(); toast('设置已保存','success'); renderSettings();
-}/* ---------------- Luban 接码 ---------------- */
+}/* ---------------- Luban 接码（后台管理） ---------------- */
 function renderLuban(){
   const db = loadDB(); const lubanProducts = db.products.filter(p => p.source === 'luban');
   $('#tab-body').innerHTML = `<div class="card panel"><h2>📱 LubanSms 接码</h2>
@@ -2143,73 +2125,229 @@ function lubanSyncServices(){
 }
 function lubanToggleProduct(id){ const db = loadDB(); const p = db.products.find(x => x.id === id); if (!p) return; p.active = !p.active; saveDB(db); toast(p.active ? '已上架' : '已下架','success'); renderLuban(); }
 
-function lubanStartSession(orderNo){
-  const db = loadDB(); const o = db.orders.find(x => x.order_no === orderNo); if (!o) return;
-  o.status = 'waiting_sms'; o.luban_started_at = Date.now(); o.luban_deadline = Date.now() + 20 * 60 * 1000; saveDB(db);
-  fetch(`/api/luban?action=request_number&service_id=${encodeURIComponent(o.luban_service_id)}`).then(r => r.json()).then(d => {
-    const db2 = loadDB(); const o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return;
-    if (d.code === 0 && d.number){ o2.luban_number = d.number; o2.luban_request_id = String(d.request_id); o2.luban_stage = 'waiting'; saveDB(db2); toast(`号码已分配：${d.number}`,'success'); lubanPollSms(orderNo, 0); }
-    else { o2.status = 'luban_error'; o2.luban_error = d.msg || '请求号码失败'; saveDB(db2); toast('请求号码失败：' + (d.msg || ''),'error'); }
-    if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
-  }).catch(e => { const db2 = loadDB(); const o2 = db2.orders.find(x => x.order_no === orderNo); if (o2){ o2.status = 'luban_error'; o2.luban_error = '网络错误：' + e.message; saveDB(db2); } });
+/* ---------------- Luban 接码（客户端） ---------------- */
+const LUBAN_COUNTRIES = [['中国','CN'],['美国','US'],['英国','GB'],['俄罗斯','RU'],['印度','IN'],['印度尼西亚','ID'],['菲律宾','PH'],['越南','VN'],['泰国','TH'],['马来西亚','MY'],['新加坡','SG'],['日本','JP'],['韩国','KR'],['中国香港','HK'],['中国台湾','TW'],['中国澳门','MO'],['德国','DE'],['法国','FR'],['意大利','IT'],['西班牙','ES'],['荷兰','NL'],['波兰','PL'],['乌克兰','UA'],['罗马尼亚','RO'],['捷克','CZ'],['土耳其','TR'],['以色列','IL'],['沙特阿拉伯','SA'],['阿联酋','AE'],['哈萨克斯坦','KZ'],['加拿大','CA'],['墨西哥','MX'],['巴西','BR'],['阿根廷','AR'],['智利','CL'],['澳大利亚','AU'],['新西兰','NZ'],['南非','ZA'],['埃及','EG'],['尼日利亚','NG'],['肯尼亚','KE'],['摩洛哥','MA']];
+const LUBAN_SERVICE_ALIAS = {'豆包':'doubao','微信':'weixin','拼多多':'pinduoduo','淘宝':'taobao','支付宝':'alipay','抖音':'douyin','小红书':'xiaohongshu','哔哩哔哩':'bilibili','b站':'bilibili','快手':'kuaishou','知乎':'zhihu','微博':'weibo','百度':'baidu','京东':'jd','美团':'meituan','滴滴':'didi','腾讯':'tencent','网易':'netease','小米':'xiaomi','华为':'huawei','抖音国际版':'tiktok','油管':'youtube','脸书':'facebook','推特':'twitter','电报':'telegram','飞机':'telegram'};
+let _lubanResults = [];
+function buildCountryOptions(defaultChina){ return LUBAN_COUNTRIES.map(([name, code]) => `<option value="${name}"${defaultChina && name === '中国' ? ' selected' : ''}>${name}（${code}）</option>`).join(''); }
+
+function renderLubanClient(){
+  const now = Date.now(); const tab = window.__lubanTab || 'sms';
+  if (now - _lastLubanRenderAt < 200 && tab === _lastLubanRenderTab) return;
+  _lastLubanRenderAt = now; _lastLubanRenderTab = tab;
+  const cfg = getConfig(loadDB()); const commonPriceFen = cfg.luban_common_price || 200;
+  const tabBar = `<div class="card panel" style="padding:14px 20px">
+    <div class="tabs" style="margin:0">
+      <button class="${tab === 'sms' ? 'active' : ''}" onclick="lubanSwitchTab('sms')">🎯 指定服务接码</button>
+      <button class="${tab === 'common' ? 'active' : ''}" onclick="lubanSwitchTab('common')">📨 通用短信接收</button>
+    </div>
+  </div>`;
+  const hero = `<div class="hero" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)"><div class="blob"></div><h1>🌍 全球接码</h1><p>选择国家和平台，实时接码 · 全自动发货</p></div>`;
+  if (tab === 'common'){
+    $('#app').innerHTML = hero + tabBar + `<div class="card panel">
+      <h2>📨 通用短信接收</h2>
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#075985;line-height:1.7">
+        <b>💡 说明：</b>通用短信可以接收任意平台的验证码，填写发送短信的平台名称作为关键词。<br>例：注册拼多多 → 关键词填「拼多多」；注册微信 → 关键词填「微信」。
+      </div>
+      <label class="field"><span>选择国家</span><select id="luban-common-country"><option value="">🌍 全部国家/地区</option>${buildCountryOptions(false)}</select></label>
+      <label class="field"><span>短信关键词（必填）</span><input id="luban-common-keyword" placeholder="如：拼多多 / 微信 / 百度 / 抖音"></label>
+      <label class="field"><span>指定号码（可选，只能填已获取过的号码）</span><input id="luban-common-phone" placeholder="留空 = 随机分配新号码"></label>
+      <div class="row" style="gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px"><label class="field" style="margin:0"><span>类型</span><select id="luban-common-cardtype"><option value="全部">全部</option><option value="实卡">实卡</option><option value="虚卡">虚卡</option></select></label></div>
+        <div style="flex:1;min-width:140px"><label class="field" style="margin:0"><span>过滤重复号码</span><select id="luban-common-filter"><option value="否">否</option><option value="是">是</option></select></label></div>
+      </div>
+      <div class="spread" style="margin:18px 0;padding-top:14px;border-top:1px dashed var(--line)"><span class="muted" style="font-size:13px">接码价格</span><span style="font-size:22px;font-weight:800;color:#e11d48">${usdt(commonPriceFen)} USDT</span></div>
+      <button class="btn primary block" onclick="lubanCommonBuy()">📱 立即接码</button>
+    </div>`;
+    return;
+  }
+  $('#app').innerHTML = hero + tabBar + (cfg.luban_usage_text ? `<div class="card panel" style="padding:14px 20px;margin-top:16px;background:#f0f9ff;border-color:#bae6fd"><div style="font-weight:700;margin-bottom:6px;color:#0369a1">📖 接码使用说明</div><div class="muted" style="font-size:13px;line-height:1.8">${cfg.luban_usage_text}</div></div>` : '') + `<div class="card panel">
+      <h2>🔍 搜索服务</h2>
+      <div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="flex:1;min-width:160px"><label class="field" style="margin:0"><span>国家 / 地区</span><select id="luban-c-country"><option value="">🌍 全部国家/地区</option>${buildCountryOptions(true)}</select></label></div>
+        <div style="flex:2;min-width:200px"><label class="field" style="margin:0"><span>服务关键词</span><input id="luban-c-service" placeholder="如：Apple / 微信 / Tinder"></label></div>
+      </div>
+      <button class="btn primary block" onclick="lubanClientSearch(1)">🔍 搜索服务</button>
+      <p class="muted" style="font-size:12px;margin:12px 0 0">💡 中文搜不到试试拼音或英文，如「拼多多」搜 pinduoduo。</p>
+    </div>
+    <div class="card panel">
+      <div class="spread" style="margin-bottom:14px"><h2 style="margin:0">搜索结果</h2><span class="muted" id="luban-c-count" style="font-size:13px"></span></div>
+      <div id="luban-c-results"><div class="empty">选择国家和关键词后点击搜索</div></div>
+      <div id="luban-c-loadmore" style="text-align:center;margin-top:14px"></div>
+    </div>`;
 }
-function lubanPollSms(orderNo, attempt){
-  const db = loadDB(); const o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.luban_request_id || o.status !== 'waiting_sms') return;
-  if (o.luban_deadline && Date.now() > o.luban_deadline){ lubanRelease(orderNo); return; }
-  if (attempt > 240) return;
-  fetch(`/api/luban?action=get_sms&request_id=${encodeURIComponent(o.luban_request_id)}`).then(r => r.json()).then(d => {
-    if (d.code === 0 && d.msg === 'success' && d.sms_code){
-      const db2 = loadDB(); const o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return;
-      o2.luban_code = d.sms_code; o2.luban_stage = 'received'; o2.status = 'delivered'; o2.delivered_at = now(); saveDB(db2);
-      toast(`🎉 收到验证码：${d.sms_code}`,'success'); if (location.hash.indexOf('/order/' + orderNo) >= 0) route(); return;
-    }
-    setTimeout(() => lubanPollSms(orderNo, attempt + 1), 5000);
-  }).catch(() => setTimeout(() => lubanPollSms(orderNo, attempt + 1), 5000));
+function lubanSwitchTab(tab){ window.__lubanTab = tab; window.scrollTo(0, 0); renderLubanClient(); }
+function lubanClientSearch(page){
+  const country = ($('#luban-c-country') && $('#luban-c-country').value) || '';
+  const serviceRaw = ($('#luban-c-service') && $('#luban-c-service').value.trim()) || '';
+  if (page !== 1){ loadLubanPage(country, serviceRaw, page); return; }
+  _lubanResults = []; $('#luban-c-results').innerHTML = '<div class="loading">正在搜索…</div>'; $('#luban-c-loadmore').innerHTML = ''; $('#luban-c-count').textContent = '';
+  const tryList = [serviceRaw]; const lower = serviceRaw.toLowerCase();
+  if (LUBAN_SERVICE_ALIAS[lower]) tryList.push(LUBAN_SERVICE_ALIAS[lower]);
+  else if (LUBAN_SERVICE_ALIAS[serviceRaw]) tryList.push(LUBAN_SERVICE_ALIAS[serviceRaw]);
+  const seen = {}; const finalTry = [];
+  tryList.forEach(w => { if (w && !seen[w]){ seen[w] = true; finalTry.push(w); } });
+  function tryNext(idx){
+    if (idx >= finalTry.length){ finishSearch(serviceRaw, finalTry); return; }
+    const kw = finalTry[idx];
+    let url = `/api/luban?action=client_services&language=zh&page=1`;
+    if (country) url += '&countryName=' + encodeURIComponent(country);
+    if (kw) url += '&service=' + encodeURIComponent(kw);
+    fetch(url).then(r => r.json()).then(d => {
+      if (d.code === 0 && Array.isArray(d.msg) && d.msg.length > 0){
+        const existSet = {}; _lubanResults.forEach(x => { existSet[String(x.service_id)] = true; });
+        d.msg.forEach(x => { const sid = String(x.service_id); if (!existSet[sid]){ existSet[sid] = true; _lubanResults.push(x); } });
+      }
+      tryNext(idx + 1);
+    }).catch(() => tryNext(idx + 1));
+  }
+  tryNext(0);
 }
-function lubanStartCommon(orderNo, params){
-  const db = loadDB(); const o = db.orders.find(x => x.order_no === orderNo); if (!o) return;
-  o.status = 'waiting_sms'; o.luban_type = 'common'; o.luban_started_at = Date.now(); o.luban_deadline = Date.now() + 20 * 60 * 1000; saveDB(db);
-  let url = '/api/luban?action=common_request';
-  if (params) Object.keys(params).forEach(k => { if (params[k]) url += `&${k}=${encodeURIComponent(params[k])}`; });
+function loadLubanPage(country, service, page){
+  $('#luban-c-loadmore').innerHTML = '<div class="loading">加载中…</div>';
+  let url = `/api/luban?action=client_services&language=zh&page=${page}`;
+  if (country) url += '&countryName=' + encodeURIComponent(country);
+  if (service) url += '&service=' + encodeURIComponent(service);
   fetch(url).then(r => r.json()).then(d => {
-    const db2 = loadDB(); const o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return;
-    if (d.code === 0 && d.phone){ o2.luban_number = d.phone; saveDB(db2); toast(`号码已分配：${d.phone}`,'success'); lubanCommonPoll(orderNo, 0); }
-    else { o2.status = 'luban_error'; o2.luban_error = d.msg || '请求号码失败'; saveDB(db2); toast('请求号码失败：' + (d.msg || ''),'error'); }
-  }).catch(e => toast('网络错误：' + e.message,'error'));
+    if (d.code !== 0){ $('#luban-c-loadmore').innerHTML = ''; return; }
+    const list = Array.isArray(d.msg) ? d.msg : [];
+    if (list.length === 0){ $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px">已显示全部结果</div>'; return; }
+    const existSet = {}; _lubanResults.forEach(x => { existSet[String(x.service_id)] = true; });
+    list.forEach(x => { const sid = String(x.service_id); if (!existSet[sid]){ existSet[sid] = true; _lubanResults.push(x); } });
+    renderLubanResults(); $('#luban-c-count').textContent = `共 ${_lubanResults.length} 个`;
+    if (list.length >= 15){ $('#luban-c-loadmore').innerHTML = `<button class="btn ghost" onclick="loadLubanPage('${esc(country)}','${esc(service)}',${page + 1})">加载更多</button>`; }
+    else $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px">已显示全部结果</div>';
+  }).catch(() => { $('#luban-c-loadmore').innerHTML = ''; });
 }
-function lubanCommonPoll(orderNo, attempt){
-  const db = loadDB(); const o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.luban_number || o.status !== 'waiting_sms') return;
-  if (o.luban_deadline && Date.now() > o.luban_deadline){ lubanRelease(orderNo); return; }
-  if (attempt > 240) return;
-  fetch(`/api/luban?action=common_get_sms&phone=${encodeURIComponent(o.luban_number)}&keyword=${encodeURIComponent(o.luban_keyword || '')}`).then(r => r.json()).then(d => {
-    if (d.code === 0 && d.msg && String(d.msg).length > 5 && d.msg !== 'wait'){
-      const db2 = loadDB(); const o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return;
-      o2.luban_code = String(d.msg); o2.status = 'delivered'; o2.delivered_at = now(); saveDB(db2);
-      toast('🎉 收到短信！','success'); if (location.hash.indexOf('/order/' + orderNo) >= 0) route(); return;
-    }
-    setTimeout(() => lubanCommonPoll(orderNo, attempt + 1), 5000);
-  }).catch(() => setTimeout(() => lubanCommonPoll(orderNo, attempt + 1), 5000));
+function finishSearch(serviceRaw, tryList){
+  if (_lubanResults.length === 0){
+    const hint = (serviceRaw && tryList.length > 1) ? `（已尝试用「${tryList.join('」「')}」搜索）` : '';
+    $('#luban-c-results').innerHTML = `<div class="empty">没有找到匹配的服务 ${hint}</div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return;
+  }
+  renderLubanResults(); $('#luban-c-count').textContent = `共 ${_lubanResults.length} 个`;
+  if (_lubanResults.length >= 15 && tryList.length === 1 && tryList[0]){
+    const country = ($('#luban-c-country') && $('#luban-c-country').value) || '';
+    $('#luban-c-loadmore').innerHTML = `<button class="btn ghost" onclick="loadLubanPage('${esc(country)}','${esc(tryList[0])}',2)">加载更多</button>`;
+  } else { $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px">已显示全部结果</div>'; }
 }
-function lubanRelease(orderNo){
-  const db = loadDB(); const o = db.orders.find(x => x.order_no === orderNo); if (!o) return;
-  if (!confirm('确定释放号码？释放后无法再接收短信。')) return;
-  const url = o.luban_type === 'common' ? `/api/luban?action=common_release&phone=${encodeURIComponent(o.luban_number)}` : `/api/luban?action=change_status&request_id=${encodeURIComponent(o.luban_request_id)}&status=reject`;
-  fetch(url).then(r => r.json()).then(() => {
-    const db2 = loadDB(); const o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return;
-    o2.status = 'rejected'; o2.luban_released_at = now(); o2.luban_error = '客户主动释放'; saveDB(db2);
-    toast('号码已释放','success'); if (location.hash.indexOf('/order/' + orderNo) >= 0) route();
-  }).catch(e => toast('网络错误：' + e.message,'error'));
+function renderLubanResults(){
+  if (!_lubanResults.length){ $('#luban-c-results').innerHTML = '<div class="empty">无结果</div>'; return; }
+  const rate = usdtRate();
+  $('#luban-c-results').innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${_lubanResults.map(s => { const priceFen = s.price_cny || 0; return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px"><div style="font-weight:700;font-size:15px;line-height:1.4">${esc(s.service_name)}</div><div class="row" style="gap:6px;flex-wrap:wrap"><span class="badge cat">${esc(s.country_name_zh || s.country_name_en || '')}</span>${s.provider ? `<span class="badge gray" style="font-size:11px">${esc(s.provider)}</span>` : ''}</div><div class="p-price" style="font-size:20px;color:#e11d48"><small>USDT </small>${(priceFen / 100 / rate).toFixed(2)}</div><button class="btn primary" onclick="lubanClientBuy('${esc(s.service_id)}')">立即接码</button></div>`; }).join('')}</div>`;
 }
-function lubanManualCheck(orderNo){
-  const db = loadDB(); const o = db.orders.find(x => x.order_no === orderNo); if (!o) return;
-  toast('正在检查…');
-  const url = o.luban_type === 'common' ? `/api/luban?action=common_get_sms&phone=${encodeURIComponent(o.luban_number)}&keyword=${encodeURIComponent(o.luban_keyword || '')}` : `/api/luban?action=get_sms&request_id=${encodeURIComponent(o.luban_request_id)}`;
-  fetch(url).then(r => r.json()).then(d => {
-    const db2 = loadDB(); const o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return;
-    if (d.code === 0 && d.msg === 'success' && d.sms_code){ o2.luban_code = d.sms_code; o2.status = 'delivered'; o2.delivered_at = now(); saveDB(db2); toast(`🎉 收到验证码：${d.sms_code}`,'success'); }
-    else if (o2.luban_type === 'common' && d.code === 0 && d.msg && String(d.msg).length > 5 && d.msg !== 'wait'){ o2.luban_code = String(d.msg); o2.status = 'delivered'; o2.delivered_at = now(); saveDB(db2); toast('🎉 收到短信！','success'); }
-    else toast('暂未收到短信，请稍后重试','error');
-  }).catch(e => toast('网络错误：' + e.message,'error'));
+function lubanClientBuy(serviceId){
+  const svc = _lubanResults.find(x => String(x.service_id) === String(serviceId)); if (!svc){ toast('服务不存在','error'); return; }
+  const priceFen = svc.price_cny || 0; const member = getCurrentMember(loadDB());
+  openModal(`<h3>确认接码</h3>
+    <div class="kv"><span class="k">服务</span><span class="v">${esc(svc.service_name)}</span></div>
+    <div class="kv"><span class="k">国家</span><span class="v">${esc(svc.country_name_zh || svc.country_name_en || '')}</span></div>
+    <div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px">${(priceFen / 100 / usdtRate()).toFixed(2)} USDT</span></div>
+    <label class="field"><span>暗号（用于查询订单 / 找回密码）</span><input id="luban-buy-secret" type="text" placeholder="自定义内容，请务必牢记" maxlength="60" value="${esc(member ? (member.secret || '') : '')}"></label>
+    <div id="luban-pay-box"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn primary" onclick="lubanSubmitClientBuy('${esc(svc.service_id)}')">确认付款并接码</button></div>`);
+  renderLubanPayBox(priceFen);
+}
+function renderLubanPayBox(priceFen){
+  const cfg = getConfig(loadDB()); const rate = usdtRate(); const member = getCurrentMember(loadDB()); const balance = member ? (member.balance || 0) : 0;
+  const alipayEnabled = cfg.pay_alipay_enabled !== false; const usdtEnabled = cfg.pay_usdt_enabled !== false; const balanceEnabled = cfg.balance_enabled !== false;
+  const _cbPrev = $('#luban-use-balance'); const balanceChecked = _cbPrev ? _cbPrev.checked : true;
+  const useBalance = !!(member && balanceEnabled && balance > 0 && balanceChecked);
+  const deduct = useBalance ? Math.min(balance, priceFen) : 0; const due = priceFen - deduct;
+  const _radio = document.querySelector('input[name="luban-pay"]:checked'); const _pay = _radio ? _radio.value : 'usdt';
+  const fmt = fen => _pay === 'alipay' ? '¥' + (fen/100).toFixed(2) : (fen / 100 / rate).toFixed(2) + ' USDT';
+  let html = '';
+  if (balanceEnabled){
+    if (member){ if (balance > 0){ html += `<div class="balance-row"><div class="lbl">💎 会员「${esc(member.username)}」余额 ${usdt(balance)} USDT</div><label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px"><input type="checkbox" id="luban-use-balance" ${useBalance?'checked':''}> 使用余额抵扣（-${fmt(deduct)}）</label></div>`; }
+      else { html += '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 会员余额为 0，充值后可用余额支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去充值 →</a></div>'; }
+    } else { html += '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 登录会员可用余额抵扣，享便捷支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去登录 / 注册 →</a></div>'; }
+  }
+  html += `<div class="spread" style="margin:12px 0"><span class="muted" style="font-size:13px">还需支付</span><span style="font-size:20px;font-weight:800;color:#e11d48">${fmt(due)}</span></div>`;
+  if (due > 0){
+    const _isAlipay = _pay === 'alipay'; const usdtClass = 'pay-method' + (!_isAlipay ? ' active' : ''); const usdtChecked = !_isAlipay ? ' checked' : ''; const alipayClass = 'pay-method' + (_isAlipay ? ' active' : ''); const alipayChecked = _isAlipay ? ' checked' : '';
+    html += `<label class="field"><span>支付方式</span><div class="pay-methods" id="luban-pay-methods">${usdtEnabled ? '<label class="' + usdtClass + '" data-method="usdt"><input type="radio" name="luban-pay" value="usdt"' + usdtChecked + '><span class="logo">🪙</span> USDT</label>' : ''}${alipayEnabled ? `<label class="${alipayClass}" data-method="alipay"><input type="radio" name="luban-pay" value="alipay"${alipayChecked}><span class="logo">💰</span> 支付宝</label>` : ''}${(member && (member.balance||0) > 0) ? '<label class="pay-method" data-method="balance"><input type="radio" name="luban-pay" value="balance"><span class="logo">💎</span> 余额支付(' + usdt(member.balance) + ')</label>' : ''}</div></label>`;
+  } else { html += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;font-size:13px;color:#15803d">✅ 余额充足，无需额外支付</div>'; }
+  const box = $('#luban-pay-box'); if (!box) return; box.innerHTML = html;
+  document.querySelectorAll('#luban-pay-methods .pay-method').forEach(el => { el.addEventListener('click', () => { document.querySelectorAll('#luban-pay-methods .pay-method').forEach(x => x.classList.remove('active')); el.classList.add('active'); const r = el.querySelector('input[type=radio]'); if (r) r.checked = true; renderLubanPayBox(priceFen); }); });
+  const cb = $('#luban-use-balance'); if (cb) cb.addEventListener('change', () => renderLubanPayBox(priceFen));
+}
+function lubanSubmitClientBuy(serviceId){
+  if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; } window._submitting = true; setTimeout(function(){window._submitting=false;}, 5000);
+  const svc = _lubanResults.find(x => String(x.service_id) === String(serviceId)); if (!svc){ toast('服务不存在','error'); window._submitting=false; return; }
+  const priceFen = svc.price_cny || 0; const secret = $('#luban-buy-secret').value.trim();
+  if (!secret){ toast('请输入暗号','error'); return; }
+  const db = loadDB(); const cfg = getConfig(db); const member = getCurrentMember(db); const balanceEnabled = cfg.balance_enabled !== false;
+  const cb = $('#luban-use-balance'); const useBalance = cb && cb.checked && balanceEnabled && member;
+  let deduct = useBalance ? Math.min(member ? (member.balance || 0) : 0, priceFen) : 0;
+  var _payRadio = document.querySelector('input[name="luban-pay"]:checked');
+  if (_payRadio && _payRadio.value === 'balance'){ if (!member){ toast('请先登录会员','error'); return; } if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); return; } deduct = priceFen; }
+  const due = priceFen - deduct; let payMethod = 'balance';
+  if (due > 0){ const radio = document.querySelector('input[name="luban-pay"]:checked'); if (!radio){ toast('请选择支付方式','error'); return; } payMethod = radio.value; }
+  if (deduct > 0){ if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); return; } }
+  const orderNo = genOrderNo();
+  const order = { order_no: orderNo, product_id: 0, product_name: `[接码] ${svc.service_name} · ${svc.country_name_zh || svc.country_name_en || ''}`, sku_id: 0, sku_name: '', category_id: 0, quantity: 1, amount: priceFen, balance_used: deduct, amount_due: due, secret, username: member ? member.username : '', status: 'pending', pay_method: payMethod, cards: [], note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放', created_at: now(), delivered_at: '', source: 'luban', luban_type: 'sms', luban_service_id: String(svc.service_id), luban_service_name: svc.service_name, luban_country: svc.country_name_zh || svc.country_name_en || '', usdt_rate: usdtRate() };
+  if (payMethod === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
+  db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret); closeModal();
+  if (due === 0){ payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
+  else showPayModal('order', orderNo);
+}
+function lubanCommonBuy(){
+  const keyword = $('#luban-common-keyword').value.trim(); if (!keyword){ toast('请填写关键词','error'); $('#luban-common-keyword').focus(); return; }
+  const country = $('#luban-common-country').value || ''; const phone = $('#luban-common-phone').value.trim() || ''; const cardType = $('#luban-common-cardtype').value || '全部'; const filter = $('#luban-common-filter').value || '否';
+  const db = loadDB(); const cfg = getConfig(db); const priceFen = cfg.luban_common_price || 200; const member = getCurrentMember(db);
+  let extraRows = ''; if (country) extraRows += `<div class="kv"><span class="k">国家</span><span class="v">${esc(country)}</span></div>`; if (phone) extraRows += `<div class="kv"><span class="k">指定号码</span><span class="v mono">${esc(phone)}</span></div>`;
+  extraRows += `<div class="kv"><span class="k">类型</span><span class="v">${esc(cardType)}</span></div><div class="kv"><span class="k">过滤重复</span><span class="v">${esc(filter)}</span></div>`;
+  openModal(`<h3>确认接码</h3>
+    <div class="kv"><span class="k">类型</span><span class="v">通用短信接收</span></div>
+    <div class="kv"><span class="k">关键词</span><span class="v">${esc(keyword)}</span></div>
+    ${extraRows}
+    <div class="kv" style="margin-bottom:14px"><span class="k">价格</span><span class="v" style="color:#e11d48;font-size:20px">${usdt(priceFen)} USDT</span></div>
+    <label class="field"><span>暗号（用于查询订单 / 找回密码）</span><input id="luban-common-secret" type="text" placeholder="自定义内容" maxlength="60" value="${esc(member ? (member.secret || '') : '')}"></label>
+    <div id="luban-common-pay-box"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn primary" onclick="lubanCommonSubmit2()">确认付款并接码</button></div>`);
+  renderLubanCommonPayBox(priceFen);
+}
+function renderLubanCommonPayBox(priceFen){
+  const cfg = getConfig(loadDB()); const rate = usdtRate(); const member = getCurrentMember(loadDB()); const balance = member ? (member.balance || 0) : 0;
+  const alipayEnabled = cfg.pay_alipay_enabled !== false; const usdtEnabled = cfg.pay_usdt_enabled !== false; const balanceEnabled = cfg.balance_enabled !== false;
+  const _cbPrev = $('#luban-common-use-balance'); const balanceChecked = _cbPrev ? _cbPrev.checked : true;
+  const useBalance = !!(member && balanceEnabled && balance > 0 && balanceChecked);
+  const deduct = useBalance ? Math.min(balance, priceFen) : 0; const due = priceFen - deduct;
+  const _radio = document.querySelector('input[name="luban-common-pay"]:checked'); const _pay = _radio ? _radio.value : 'usdt';
+  const fmt = fen => _pay === 'alipay' ? '¥' + (fen/100).toFixed(2) : (fen / 100 / rate).toFixed(2) + ' USDT';
+  let html = '';
+  if (balanceEnabled){
+    if (member){ if (balance > 0){ html += `<div class="balance-row"><div class="lbl">💎 会员「${esc(member.username)}」余额 ${usdt(balance)} USDT</div><label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px"><input type="checkbox" id="luban-common-use-balance" ${useBalance?'checked':''}> 使用余额抵扣（-${fmt(deduct)}）</label></div>`; }
+      else { html += '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 会员余额为 0，充值后可用余额支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去充值 →</a></div>'; }
+    } else { html += '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 登录会员可用余额抵扣，享便捷支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去登录 / 注册 →</a></div>'; }
+  }
+  html += `<div class="spread" style="margin:12px 0"><span class="muted" style="font-size:13px">还需支付</span><span style="font-size:20px;font-weight:800;color:#e11d48">${fmt(due)}</span></div>`;
+  if (due > 0){
+    const _isAlipay = _pay === 'alipay'; const usdtClass = 'pay-method' + (!_isAlipay ? ' active' : ''); const usdtChecked = !_isAlipay ? ' checked' : ''; const alipayClass = 'pay-method' + (_isAlipay ? ' active' : ''); const alipayChecked = _isAlipay ? ' checked' : '';
+    html += `<label class="field"><span>支付方式</span><div class="pay-methods" id="luban-common-pay-methods">${usdtEnabled ? '<label class="' + usdtClass + '" data-method="usdt"><input type="radio" name="luban-common-pay" value="usdt"' + usdtChecked + '><span class="logo">🪙</span> USDT</label>' : ''}${alipayEnabled ? `<label class="${alipayClass}" data-method="alipay"><input type="radio" name="luban-common-pay" value="alipay"${alipayChecked}><span class="logo">💰</span> 支付宝</label>` : ''}${(member && (member.balance||0) > 0) ? '<label class="pay-method" data-method="balance"><input type="radio" name="luban-common-pay" value="balance"><span class="logo">💎</span> 余额支付(' + usdt(member.balance) + ')</label>' : ''}</div></label>`;
+  } else { html += '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;font-size:13px;color:#15803d">✅ 余额充足，无需额外支付</div>'; }
+  const box = $('#luban-common-pay-box'); if (!box) return; box.innerHTML = html;
+  document.querySelectorAll('#luban-common-pay-methods .pay-method').forEach(el => { el.addEventListener('click', () => { document.querySelectorAll('#luban-common-pay-methods .pay-method').forEach(x => x.classList.remove('active')); el.classList.add('active'); const r = el.querySelector('input[type=radio]'); if (r) r.checked = true; renderLubanCommonPayBox(priceFen); }); });
+  const cb = $('#luban-common-use-balance'); if (cb) cb.addEventListener('change', () => renderLubanCommonPayBox(priceFen));
+}
+function lubanCommonSubmit2(){
+  if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; } window._submitting = true; setTimeout(function(){window._submitting=false;}, 5000);
+  const keyword = $('#luban-common-keyword').value.trim(); if (!keyword){ toast('请填写关键词','error'); window._submitting=false; return; }
+  const country = $('#luban-common-country').value || ''; const phone = $('#luban-common-phone').value.trim() || ''; const cardType = $('#luban-common-cardtype').value || '全部'; const filter = $('#luban-common-filter').value || '否';
+  const db = loadDB(); const cfg = getConfig(db); const priceFen = cfg.luban_common_price || 200; const member = getCurrentMember(db);
+  const secret = $('#luban-common-secret').value.trim(); if (!secret){ toast('请输入暗号','error'); return; }
+  const balanceEnabled = cfg.balance_enabled !== false; const cb = $('#luban-common-use-balance'); const useBalance = cb && cb.checked && balanceEnabled && member;
+  let deduct = useBalance ? Math.min(member ? (member.balance || 0) : 0, priceFen) : 0;
+  var _payRadio = document.querySelector('input[name="luban-common-pay"]:checked');
+  if (_payRadio && _payRadio.value === 'balance'){ if (!member){ toast('请先登录会员','error'); return; } if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); return; } deduct = priceFen; }
+  const due = priceFen - deduct; let payMethod = 'balance';
+  if (due > 0){ const radio = document.querySelector('input[name="luban-common-pay"]:checked'); if (!radio){ toast('请选择支付方式','error'); return; } payMethod = radio.value; }
+  if (deduct > 0){ if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); return; } }
+  const orderNo = genOrderNo();
+  const order = { order_no: orderNo, product_id: 0, product_name: `[通用接码] ${keyword}`, sku_id: 0, sku_name: '', category_id: 0, quantity: 1, amount: priceFen, balance_used: deduct, amount_due: due, secret, username: member ? member.username : '', status: 'pending', pay_method: payMethod, cards: [], note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放', created_at: now(), delivered_at: '', source: 'luban', luban_type: 'common', luban_keyword: keyword, luban_country: country, luban_cardtype: cardType, luban_filter: filter, luban_phone: phone, usdt_rate: usdtRate() };
+  if (payMethod === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
+  db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret); closeModal();
+  if (due === 0){ payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
+  else showPayModal('order', orderNo);
 }
 
 /* ---------------- SMM 推广 ---------------- */
@@ -2219,19 +2357,12 @@ function smmMarkup(){ try { return Number((loadDB().config || {}).smm_markup) ||
 function smmUsdtOf(p){ return (parseFloat(p && p.smm_rate_usd || 0) * smmMarkup()).toFixed(2); }
 function smmCalcAmount(p, qty){ if (smmIsPackage(p)) return Math.round(p.price); return Math.round(p.price * qty / 1000); }
 function smmCatOf(name, p){ if (p && p.smm_platform) return p.smm_platform; var n = String(name||'').toLowerCase();
-  if (/telegram|tg|纸飞机|电报/.test(n)) return 'Telegram'; if (/instagram|ins|ig/.test(n)) return 'Instagram'; if (/youtube|油管/.test(n)) return 'YouTube';
-  if (/tiktok|抖音国际/.test(n)) return 'TikTok'; if (/facebook|fb|脸书/.test(n)) return 'Facebook'; if (/twitter|推特|tweet|x\.com/.test(n)) return 'Twitter/X';
-  if (/chatgpt|gpt|openai|claude|gemini/.test(n)) return 'AI/ChatGPT'; if (/netflix|奈飞/.test(n)) return 'Netflix'; if (/spotify|声田/.test(n)) return 'Spotify';
-  if (/discord/.test(n)) return 'Discord'; if (/google|谷歌|gmail/.test(n)) return 'Google'; if (/apple|苹果|icloud/.test(n)) return 'Apple';
-  if (/tencent|腾讯|qq|微信|wechat/.test(n)) return '腾讯/微信'; if (/bilibili|b站|哔哩/.test(n)) return 'B站'; if (/xiaohongshu|小红书|xhs/.test(n)) return '小红书';
-  if (/douyin|抖音/.test(n)) return '抖音'; if (/weibo|微博/.test(n)) return '微博'; if (/kuaishou|快手/.test(n)) return '快手'; return '其他'; }
-
+  if (/telegram|tg|纸飞机|电报/.test(n)) return 'Telegram'; if (/instagram|ins|ig/.test(n)) return 'Instagram'; if (/youtube|油管/.test(n)) return 'YouTube'; if (/tiktok|抖音国际/.test(n)) return 'TikTok'; if (/facebook|fb|脸书/.test(n)) return 'Facebook'; if (/twitter|推特|tweet|x\.com/.test(n)) return 'Twitter/X'; if (/chatgpt|gpt|openai|claude|gemini/.test(n)) return 'AI/ChatGPT'; if (/netflix|奈飞/.test(n)) return 'Netflix'; if (/spotify|声田/.test(n)) return 'Spotify'; if (/discord/.test(n)) return 'Discord'; if (/google|谷歌|gmail/.test(n)) return 'Google'; if (/apple|苹果|icloud/.test(n)) return 'Apple'; if (/tencent|腾讯|qq|微信|wechat/.test(n)) return '腾讯/微信'; if (/bilibili|b站|哔哩/.test(n)) return 'B站'; if (/xiaohongshu|小红书|xhs/.test(n)) return '小红书'; if (/douyin|抖音/.test(n)) return '抖音'; if (/weibo|微博/.test(n)) return '微博'; if (/kuaishou|快手/.test(n)) return '快手'; return '其他'; }
 let smmCatFilter = 'all', smmKeyword = '', smmPageSize = 30, smmLoadedCount = 30;
 function smmSetCat(c){ smmCatFilter = c; smmLoadedCount = smmPageSize; renderSmmClient(); window.scrollTo({top:0,behavior:'smooth'}); }
 function smmDoSearch(v){ smmKeyword = (v||'').trim().toLowerCase(); smmLoadedCount = smmPageSize; renderSmmClient(); }
 function smmClearSearch(){ smmKeyword = ''; smmLoadedCount = smmPageSize; renderSmmClient(); }
 function smmLoadMore(){ smmLoadedCount += smmPageSize; renderSmmClient(); }
-
 function renderSmmTab(){
   const db = loadDB(); const cfg = getConfig(db); const items = db.products.filter(p => p.source === 'smm');
   const rows = items.length ? items.map(p => `<tr><td><b>${esc(p.smm_service_name || p.name)}</b><div class="muted" style="font-size:11px">ID: ${esc(p.smm_service_id)}</div></td><td>${esc(p.smm_category || '-')}</td><td class="muted">$${esc(p.smm_rate_usd || '0')}</td><td style="font-weight:700;color:#e11d48">${usdt(p.price)} USDT</td><td>${esc(p.smm_min)}~${esc(p.smm_max)}</td><td><span class="badge ${p.active ? 'ok' : 'gray'}">${p.active ? '上架' : '下架'}</span></td><td style="text-align:right"><button class="btn sm ghost" onclick="smmToggle(${p.id})">${p.active ? '下架' : '上架'}</button> <button class="btn sm danger" onclick="deleteProduct(${p.id})">删除</button></td></tr>`).join('') : '<tr><td colspan="7" class="empty">还没有同步推广服务</td></tr>';
@@ -2258,7 +2389,6 @@ function smmSyncCore(silent){
     saveDB(db); if (!silent) toast('同步完成：新增 ' + added + '，更新 ' + updated, 'success'); renderSmmTab();
   }).catch(e => { if (!silent) toast('网络错误：' + e.message, 'error'); });
 }
-
 function renderSmmClient(){
   var db = loadDB(); var cfg = getConfig(db);
   var items = db.products.filter(p => p.source === 'smm' && p.active);
@@ -2427,8 +2557,9 @@ Object.assign(window, {
   importCards, loadCards, deleteCard, onCardProductChange, addSkuRow, removeSkuRow, redeliver, viewOrderCards, deleteOrder, clearCompletedOrders,
   adjustBalance, openAdjustBalance, saveAdjustBalance, openResetPwd, saveResetPwd, deleteMember, saveSettings, saveAdminPwd, testTgNotify,
   renderLuban, lubanSyncServices, lubanToggleProduct, lubanStartSession, lubanStartCommon, lubanPollSms, lubanCommonPoll, lubanRelease, lubanManualCheck,
+  renderLubanClient, lubanSwitchTab, lubanClientSearch, loadLubanPage, finishSearch, renderLubanResults, lubanClientBuy, renderLubanPayBox, lubanSubmitClientBuy, lubanCommonBuy, renderLubanCommonPayBox, lubanCommonSubmit2,
   renderSmmClient, renderSmmTab, smmSetCat, smmDoSearch, smmClearSearch, smmLoadMore, smmBuy, smmSubmit, smmManualCheck, smmRefill, smmCancel, smmToggle, smmClear, smmSyncCore, smmSaveCfg,
-  yfOpenAlipayRedpacket, yfHomeSearch, yfHomeSearchClear, yfNotifyStock, startPoll, processRecharge, payOrder, saveDB, loadDB, route, applySiteConfig, orderUsdt
+  yfOpenAlipayRedpacket, yfNotifyStock, startPoll, processRecharge, payOrder, saveDB, loadDB, route, applySiteConfig, orderUsdt
 });
 </script>
 </body>

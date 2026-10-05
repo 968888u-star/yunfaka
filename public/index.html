@@ -8017,5 +8017,125 @@ console.log('%c[Patch v7] 支付卡片化 + 客服全屏 + iOS防穿透 已加�
   'color:#8b5cf6;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     修复补丁 v8 · 修复客服面板无法关闭 + 优化防穿透逻辑
+     ============================================================ -->
+
+<!-- CSS 部分 -->
+<style>
+/* 修复 v7 导致面板无法隐藏的 bug */
+@media (max-width: 768px) {
+  .cs-panel {
+    display: none !important; /* 默认隐藏 */
+  }
+  .cs-panel.open {
+    display: flex !important; /* 只有加上 open 类才显示 */
+  }
+  .cs-float {
+    display: flex !important; /* 强制恢复悬浮按钮的可见性 */
+  }
+  /* 关闭按钮增加点击区域，防止太靠边或太小点不到 */
+  .cs-close {
+    padding: 8px 16px !important;
+    font-size: 20px !important;
+    touch-action: manipulation !important; /* 防止 iOS 300ms 点击延迟 */
+    z-index: 10000 !important;
+  }
+}
+</style>
+
+<!-- JS 部分 -->
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   [1] 重构客服面板的开关逻辑，彻底修复无法关闭的问题
+   ============================================================ */
+(function(){
+  var panel = document.getElementById('cs-panel');
+  var floatBtn = document.getElementById('cs-float');
+  if (!panel || !floatBtn) return;
+
+  // 清除 v7 遗留的错误绑定，改用全局事件委托（保证一定能触发）
+  document.removeEventListener('click', window._yfCsToggleHandler);
+  
+  window._yfCsToggleHandler = function(e){
+    // 1. 点击悬浮球打开
+    if (e.target.closest('#cs-float')) {
+      e.preventDefault();
+      e.stopPropagation();
+      panel.classList.add('open');
+      if (window.yfLockScroll) window.yfLockScroll();
+      // 拉取消息并滚动到底部
+      if (window.csPoll) window.csPoll();
+      setTimeout(function(){
+        var msgs = document.getElementById('cs-msgs');
+        if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      }, 100);
+      return;
+    }
+
+    // 2. 点击关闭按钮或背景关闭
+    if (e.target.closest('.cs-close') || e.target === panel) {
+      e.preventDefault();
+      e.stopPropagation();
+      panel.classList.remove('open');
+      if (window.yfUnlockScroll) window.yfUnlockScroll();
+      return;
+    }
+  };
+
+  document.addEventListener('click', window._yfCsToggleHandler);
+})();
+
+/* ============================================================
+   [2] 修复 iOS 防穿透逻辑（精准拦截，不误伤按钮）
+   ============================================================ */
+(function(){
+  var panel = document.getElementById('cs-panel');
+  if (!panel) return;
+  
+  var startY = 0;
+  
+  panel.addEventListener('touchstart', function(e){
+    if (!panel.classList.contains('open')) return;
+    startY = e.touches[0].pageY;
+  }, { passive: true });
+
+  panel.addEventListener('touchmove', function(e){
+    if (!panel.classList.contains('open')) return;
+    
+    // 如果触摸的是输入框或头部，放行（不能阻止点击）
+    if (e.target.closest('.cs-input') || e.target.closest('.cs-header')) return;
+
+    var msgs = document.getElementById('cs-msgs');
+    if (!msgs) return;
+    
+    // 如果触摸的不是消息列表，坚决阻止（防止底层网页滑动）
+    if (!e.target.closest('.cs-msgs')) {
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
+
+    // 处理消息列表边缘的滑动穿透
+    var deltaY = e.touches[0].pageY - startY;
+    var scrollTop = msgs.scrollTop;
+    var scrollHeight = msgs.scrollHeight;
+    var clientHeight = msgs.clientHeight;
+
+    // 如果滑到底部还继续往上滑，或者在顶部还继续往下滑
+    if ((scrollTop + clientHeight >= scrollHeight && deltaY < 0) || 
+        (scrollTop <= 0 && deltaY > 0)) {
+      if (e.cancelable) e.preventDefault(); // 阻止穿透，但不影响点击事件
+    }
+    
+    startY = e.touches[0].pageY; // 重置起点
+  }, { passive: false });
+})();
+
+console.log('%c[Patch v8] 客服面板开关修复完成', 'color:#10b981;font-weight:bold');
+})();
+</script>
 </body>
 </html>

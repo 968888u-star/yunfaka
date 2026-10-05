@@ -4984,6 +4984,22 @@ window.saveSettings = function(){
     else { if(window.toast) toast(d.msg||'保存失败','error'); }
   });
 };
+/* 修改管理密码：走后端，已通过 admin token 鉴权，无需再校验当前密码 */
+window.saveAdminPwd = function(){
+  if(tokenExpired()) return needReLogin();
+  var newPwdEl = document.getElementById('pwd-new'), newPwd2El = document.getElementById('pwd-new2');
+  var np = newPwdEl ? newPwdEl.value : '';
+  if(!np || np.length < 6){ if(window.toast) toast('新密码至少6位','error'); return; }
+  if(newPwd2El && newPwd2El.value !== np){ if(window.toast) toast('两次输入的新密码不一致','error'); return; }
+  apiAdminAction('save_settings', { new_admin_password: np, config: {} }).then(function(d){
+    if(d.ok){
+      if(window.toast) toast('管理密码已修改 ✅ 请用新密码重新登录','success');
+      if(newPwdEl) newPwdEl.value=''; if(newPwd2El) newPwd2El.value='';
+      var oldEl = document.getElementById('pwd-old'); if(oldEl) oldEl.value='';
+      setTimeout(function(){ window.adminLogout(); }, 1500);
+    } else { if(window.toast) toast(d.msg||'修改失败','error'); }
+  });
+};
 
 /* ===== 3. 会员登录/找回密码后端化 ===== */
 window.memberLogin = function(){

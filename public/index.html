@@ -6681,5 +6681,397 @@ console.log('%c[P19] Luban 管理优化已启用：设置页字段已隐藏 · �
   'color:#6366f1;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P20 · Luban 管理增强
+     - 修复上游余额显示（P19 遗漏）
+     - 通用接码成本显示 + 保存
+     - 上游价格/服务变动 → 自动同步到平台
+     - 自动同步开关 + 间隔设置 + 上次同步时间
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) { console.warn('[P20] 核心未就绪'); return; }
+
+var _toast = function(m,t){ try{ window.toast(m, t||'success'); }catch(e){ console.log('[P20]', m); } };
+var _esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+var _now = function(){ var d=new Date(),p=function(n){return String(n).padStart(2,'0');};
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); };
+
+/* ============ 工具1：全量拉取上游服务 ============ */
+window.yfLubanFetchAll = function(){
+  var page = 1;
+  var allItems = [];
+  var emptyStreak = 0;
+  var maxPages = 50;
+  function fetchPage(){
+    return fetch('/api/luban?action=services&language=zh&page=' + page)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.code !== 0) throw new Error(d.msg || '拉取失败');
+        var list = Array.isArray(d.msg) ? d.msg : [];
+        if (list.length > 0){
+          allItems.push.apply(allItems, list);
+          emptyStreak = 0;
+          page++;
+          if (page > maxPages) return null;
+          return new Promise(function(res){ setTimeout(function(){ res(fetchPage()); }, 150); });
+        }
+        emptyStreak++;
+        if (emptyStreak >= 2) return null;
+        page++;
+        if (page > maxPages) return null;
+        return new Promise(function(res){ setTimeout(function(){ res(fetchPage()); }, 300); });
+      });
+  }
+  return fetchPage().then(function(){ return allItems; });
+};
+
+/* ============ 工具2：合并上游服务到本地（自动识别增/改/删） ============ */
+window.yfLubanMergeServices = function(allItems){
+  var db = window.loadDB();
+  var m = Number(db.config.luban_markup) || 1.3;
+  var rt = Number(db.config.pay_usdt_rate) || 7.2;
+  var added = 0, updated = 0, removed = 0, restored = 0;
+  var remoteIds = {};
+
+  allItems.forEach(function(s){
+    var sid = String(s.service_id);
+    if (!sid) return;
+    remoteIds[sid] = true;
+
+    var origin = parseFloat(s.origin_cost);
+    if (isNaN(origin)) origin = (parseFloat(s.cost) || 0) / 1.3;
+    var newPrice = Math.max(1, Math.round(origin * rt * m * 100));
+
+    var exist = (db.products || []).find(function(p){
+      return p.source === 'luban' && String(p.luban_service_id) === sid;
+    });
+
+    if (exist){
+      var oldCost = parseFloat(exist.luban_origin_cost || 0);
+      var oldPrice = exist.price;
+      var wasRemoved = !!exist.luban_removed;
+
+      exist.luban_origin_cost = origin.toFixed(2);
+      exist.price = newPrice;
+      exist.luban_service_name = s.service_name || exist.luban_service_name;
+      exist.luban_country = s.country_name_zh || s.country_name_en || exist.luban_country;
+      exist.name = '[接码] ' + (s.service_name || '') + ' · ' + (s.country_name_zh || '');
+      exist.description = '国家：' + (s.country_name_zh || '') + ' ｜ 服务：' + s.service_name;
+
+      if (wasRemoved){
+        exist.luban_removed = false;
+        exist.active = true;
+        restored++;
+      } else if (oldCost !== origin || oldPrice !== newPrice){
+        updated++;
+      }
+    } else if (s.service_name){
+      db.seq.product++;
+      db.products.push({
+        id: db.seq.product,
+        name: '[接码] ' + s.service_name + ' · ' + (s.country_name_zh || ''),
+        price: newPrice,
+        description: '国家：' + (s.country_name_zh || '') + ' ｜ 服务：' + s.service_name,
+        note: '请在 20 分钟内完成注册',
+        category_id: 0, active: true, created_at: _now(),
+        skus: [], source: 'luban', luban_type: 'sms',
+        luban_service_id: sid,
+        luban_service_name: s.service_name,
+        luban_country: s.country_name_zh || s.country_name_en || '',
+        luban_origin_cost: origin.toFixed(2)
+      });
+      added++;
+    }
+  });
+
+  /* 上游已删除的服务 → 自动下架 */
+  (db.products || []).forEach(function(p){
+    if (p.source === 'luban' && p.luban_type === 'sms' && p.luban_service_id && p.active){
+      if (!remoteIds[String(p.luban_service_id)]){
+        p.active = false;
+        p.luban_removed = true;
+        removed++;
+      }
+    }
+  });
+
+  db.config.luban_last_sync = Date.now();
+  window.saveDB(db);
+  return { added: added, updated: updated, removed: removed, restored: restored };
+};
+
+/* ============ 自动同步定时器（每 10 分钟检查一次） ============ */
+(function(){
+  function autoCheck(){
+    try {
+      var db = window.loadDB();
+      var cfg = db.config || {};
+      if (cfg.luban_auto_sync === false) return;
+      var last = Number(cfg.luban_last_sync) || 0;
+      var hours = Number(cfg.luban_sync_interval_hours) || 6;
+      if (Date.now() - last < hours * 3600 * 1000) return;
+
+      console.log('[P20] 触发自动同步上游…');
+      window.yfLubanFetchAll().then(function(items){
+        if (!items || !items.length) return;
+        var r = window.yfLubanMergeServices(items);
+        console.log('[P20] 自动同步完成：', r);
+        var total = r.added + r.updated + r.removed + r.restored;
+        if (total > 0){
+          _toast('🔄 Luban 自动同步：新增 ' + r.added + '，改价 ' + r.updated + '，下架 ' + r.removed + '，恢复 ' + r.restored);
+        }
+        if (location.hash.indexOf('#/admin') === 0 && window.renderLuban){
+          setTimeout(function(){ window.renderLuban(); }, 500);
+        }
+      }).catch(function(e){ console.warn('[P20] 自动同步失败:', e); });
+    } catch(e){}
+  }
+  setInterval(autoCheck, 10 * 60 * 1000);
+  setTimeout(autoCheck, 30 * 1000);
+})();
+
+/* ============ 完全重写 renderLuban ============ */
+window.renderLuban = function(){
+  var db = window.loadDB();
+  var cfg = db.config || {};
+  var lubanProducts = db.products.filter(function(p){ return p.source === 'luban'; });
+  var markup = Number(cfg.luban_markup) || 1.3;
+  var commonCost = Number(cfg.luban_common_cost) || 2;
+  var rate = Number(cfg.pay_usdt_rate) || 7.2;
+  var autoSync = cfg.luban_auto_sync !== false;
+  var syncHours = Number(cfg.luban_sync_interval_hours) || 6;
+  var lastSync = Number(cfg.luban_last_sync) || 0;
+  var lastSyncText = lastSync ? new Date(lastSync).toLocaleString('zh-CN') : '从未同步';
+
+  var fmtUsdt = function(fen){ return (Number(fen||0)/100/rate).toFixed(2); };
+  var fmtYuan = function(fen){ return (Number(fen||0)/100).toFixed(2); };
+
+  var body = document.getElementById('tab-body');
+  if (!body) return;
+
+  var html = '';
+
+  /* --- 1. 顶部余额条 --- */
+  html += '<div class="card panel" style="padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #86efac">';
+  html += '<span style="font-weight:700;color:#065f46">💳 Luban 上游余额：</span>';
+  html += '<span id="p20-balance-val" class="mono" style="color:#10b981;font-weight:800;font-size:16px">查询中…</span>';
+  html += '<button class="btn ghost sm" id="p20-balance-refresh" style="margin-left:auto;background:#fff">🔄 刷新余额</button>';
+  html += '</div>';
+
+  /* --- 2. 加价与同步配置 --- */
+  html += '<div class="card panel" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #93c5fd">';
+  html += '<h2 style="margin:0 0 14px">⚙️ 加价与同步配置</h2>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px">';
+  html += '<label class="field" style="margin:0"><span>接码加价倍数（成本 × 倍数 = 售价）</span><input id="p20-markup" type="number" step="0.05" min="1" value="' + markup + '"></label>';
+  html += '<label class="field" style="margin:0"><span>通用接码成本（元/条）</span><input id="p20-common-cost" type="number" step="0.1" min="0.1" value="' + commonCost + '"></label>';
+  html += '<label class="field" style="margin:0"><span>汇率（1 USDT = ? CNY）</span><input id="p20-rate" type="number" step="0.01" min="1" value="' + rate + '"></label>';
+  html += '</div>';
+
+  /* 价格预览 */
+  html += '<div style="background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1e40af;line-height:1.9">';
+  html += '<b>💰 当前规则：</b>售价 = 上游成本(USD) × <b>' + markup + '</b> × 汇率 <b>' + rate + '</b><br>';
+  html += '📱 <b>通用接码</b>：成本 <b>' + commonCost + ' 元</b> → 售价 <b style="color:#e11d48;font-size:16px">' + (commonCost * markup).toFixed(2) + ' 元</b>（≈ ' + ((commonCost * markup) / rate).toFixed(2) + ' USDT）';
+  html += '</div>';
+
+  /* 自动同步开关 */
+  html += '<div style="background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:14px">';
+  html += '<label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;font-size:14px">';
+  html += '<input type="checkbox" id="p20-auto-sync" ' + (autoSync ? 'checked' : '') + '>';
+  html += '启用自动同步（定期检查上游价格/服务变动，自动同步到平台）';
+  html += '</label>';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;flex-wrap:wrap">';
+  html += '<span class="muted">同步间隔：</span>';
+  html += '<input id="p20-sync-hours" type="number" min="1" max="72" step="1" value="' + syncHours + '" style="width:80px">';
+  html += '<span class="muted">小时</span>';
+  html += '<span class="muted" style="margin-left:auto;font-size:12px">🕐 上次同步：' + _esc(lastSyncText) + '</span>';
+  html += '</div>';
+  html += '</div>';
+
+  /* 按钮 */
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button class="btn primary" id="p20-save">💾 保存并重算价格</button>';
+  html += '<button class="btn ghost" id="p20-sync-full" style="background:#fff">🔄 立即同步上游商品</button>';
+  html += '</div>';
+  html += '</div>';
+
+  /* --- 3. 按筛选拉取 --- */
+  html += '<div class="card panel">';
+  html += '<h2>📥 按筛选拉取</h2>';
+  html += '<div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">';
+  html += '<div style="flex:1;min-width:160px"><div class="muted" style="font-size:12px;margin-bottom:6px">国家（中文名）</div><input id="luban-filter-country" placeholder="留空 = 全部"></div>';
+  html += '<div style="flex:1;min-width:160px"><div class="muted" style="font-size:12px;margin-bottom:6px">服务关键词</div><input id="luban-filter-service" placeholder="留空 = 全部"></div>';
+  html += '<button class="btn primary" onclick="lubanSyncServices()">📥 按筛选拉取</button>';
+  html += '</div>';
+  html += '</div>';
+
+  /* --- 4. 商品列表 --- */
+  var activeCount = lubanProducts.filter(function(p){ return p.active; }).length;
+  html += '<div class="card panel">';
+  html += '<div class="spread" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">';
+  html += '<h2 style="margin:0">接码商品列表（' + lubanProducts.length + '，上架 ' + activeCount + '）</h2>';
+  html += '<input id="p20-search" placeholder="🔍 搜索服务/国家" style="width:200px;padding:6px 10px;font-size:13px">';
+  html += '</div>';
+
+  if (!lubanProducts.length){
+    html += '<div class="empty">还没有同步接码服务，点上方「🔄 立即同步上游商品」开始</div>';
+  } else {
+    html += '<div style="overflow-x:auto"><table id="p20-prod-table"><thead><tr>';
+    html += '<th>服务</th><th>国家</th><th>上游成本</th><th>我站售价</th><th>状态</th><th></th>';
+    html += '</tr></thead><tbody>';
+
+    lubanProducts.forEach(function(p){
+      var originUsd = parseFloat(p.luban_origin_cost || 0);
+      var costDisplay = originUsd > 0
+        ? '$' + originUsd.toFixed(4) + '<br><span class="muted" style="font-size:11px;font-weight:400">≈ ¥' + (originUsd * rate).toFixed(2) + '</span>'
+        : '<span class="muted">未知</span>';
+      var priceUsd = fmtUsdt(p.price);
+      var priceCny = fmtYuan(p.price);
+      var statusBadge;
+      if (p.luban_removed) statusBadge = '<span class="badge no">上游已下架</span>';
+      else if (p.active) statusBadge = '<span class="badge ok">上架</span>';
+      else statusBadge = '<span class="badge gray">下架</span>';
+
+      html += '<tr data-search="' + _esc((p.luban_service_name || p.name || '') + ' ' + (p.luban_country || '')).toLowerCase() + '">';
+      html += '<td><b>' + _esc(p.luban_service_name || p.name) + '</b></td>';
+      html += '<td>' + _esc(p.luban_country || '-') + '</td>';
+      html += '<td class="mono" style="font-size:12px;color:#6b7280">' + costDisplay + '</td>';
+      html += '<td style="font-weight:700;color:#e11d48">' + priceUsd + ' USDT<br><span class="muted" style="font-weight:400;font-size:11px">≈ ¥' + priceCny + '</span></td>';
+      html += '<td>' + statusBadge + '</td>';
+      html += '<td style="text-align:right;white-space:nowrap">';
+      html += '<button class="btn sm ghost" onclick="lubanToggleProduct(' + p.id + ')">' + (p.active ? '下架' : '上架') + '</button> ';
+      html += '<button class="btn sm danger" onclick="deleteProduct(' + p.id + ')">删除</button>';
+      html += '</td></tr>';
+    });
+
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+
+  body.innerHTML = html;
+
+  /* ===== 绑定事件 ===== */
+
+  /* 余额查询 */
+  function loadBalance(){
+    var valEl = document.getElementById('p20-balance-val');
+    if (!valEl) return;
+    valEl.textContent = '查询中…';
+    valEl.style.color = '#6b7280';
+    fetch('/api/luban?action=balance')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var el = document.getElementById('p20-balance-val');
+        if (!el) return;
+        var bal = null;
+        if (d){
+          if (d.code === 0 && d.msg && d.msg.balance !== undefined) bal = d.msg.balance;
+          else if (d.balance !== undefined) bal = d.balance;
+          else if (d.msg && typeof d.msg === 'object' && d.msg.balance !== undefined) bal = d.msg.balance;
+        }
+        if (bal !== null){
+          el.textContent = bal + ' USD';
+          el.style.color = '#10b981';
+        } else {
+          el.textContent = '查询失败：' + ((d && d.msg) || '未知响应');
+          el.style.color = '#ef4444';
+        }
+      })
+      .catch(function(e){
+        var el = document.getElementById('p20-balance-val');
+        if (el){
+          el.textContent = '查询失败：' + e.message;
+          el.style.color = '#ef4444';
+        }
+      });
+  }
+  loadBalance();
+
+  var balBtn = document.getElementById('p20-balance-refresh');
+  if (balBtn) balBtn.onclick = loadBalance;
+
+  /* 保存并重算 */
+  var saveBtn = document.getElementById('p20-save');
+  if (saveBtn) saveBtn.onclick = function(){
+    var db2 = window.loadDB();
+    var m = parseFloat(document.getElementById('p20-markup').value) || 1.3;
+    var c = parseFloat(document.getElementById('p20-common-cost').value) || 2;
+    var rt = parseFloat(document.getElementById('p20-rate').value) || 7.2;
+    var as = document.getElementById('p20-auto-sync').checked;
+    var sh = parseFloat(document.getElementById('p20-sync-hours').value) || 6;
+
+    db2.config.luban_markup = m;
+    db2.config.luban_common_cost = c;
+    db2.config.pay_usdt_rate = rt;
+    db2.config.luban_auto_sync = as;
+    db2.config.luban_sync_interval_hours = sh;
+
+    var count = 0;
+    (db2.products || []).forEach(function(p){
+      if (p.source === 'luban' && p.luban_type === 'sms'){
+        var origin = parseFloat(p.luban_origin_cost || 0);
+        if (origin > 0){
+          p.price = Math.max(1, Math.round(origin * rt * m * 100));
+          count++;
+        }
+      }
+    });
+
+    window.saveDB(db2);
+    _toast('✅ 已保存并重算 ' + count + ' 个商品价格，通用接码售价 ¥' + (c * m).toFixed(2));
+    setTimeout(function(){ window.renderLuban(); }, 400);
+  };
+
+  /* 立即同步上游商品 */
+  var syncBtn = document.getElementById('p20-sync-full');
+  if (syncBtn) syncBtn.onclick = function(){
+    var db2 = window.loadDB();
+    db2.config.luban_markup = parseFloat(document.getElementById('p20-markup').value) || 1.3;
+    db2.config.luban_common_cost = parseFloat(document.getElementById('p20-common-cost').value) || 2;
+    db2.config.pay_usdt_rate = parseFloat(document.getElementById('p20-rate').value) || 7.2;
+    db2.config.luban_auto_sync = document.getElementById('p20-auto-sync').checked;
+    db2.config.luban_sync_interval_hours = parseFloat(document.getElementById('p20-sync-hours').value) || 6;
+    window.saveDB(db2);
+
+    _toast('正在同步上游商品…');
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = '同步中…';
+
+    window.yfLubanFetchAll().then(function(items){
+      if (!items || !items.length){
+        _toast('未拉取到数据', 'error');
+        btn.disabled = false;
+        btn.textContent = '🔄 立即同步上游商品';
+        return;
+      }
+      var r = window.yfLubanMergeServices(items);
+      _toast('✅ 同步完成：新增 ' + r.added + '，改价 ' + r.updated + '，下架 ' + r.removed + '，恢复 ' + r.restored);
+      setTimeout(function(){ window.renderLuban(); }, 500);
+    }).catch(function(e){
+      _toast('同步失败：' + e.message, 'error');
+      btn.disabled = false;
+      btn.textContent = '🔄 立即同步上游商品';
+    });
+  };
+
+  /* 商品列表搜索 */
+  var searchEl = document.getElementById('p20-search');
+  if (searchEl) searchEl.oninput = function(){
+    var kw = this.value.trim().toLowerCase();
+    var rows = document.querySelectorAll('#p20-prod-table tbody tr');
+    rows.forEach(function(tr){
+      var s = tr.getAttribute('data-search') || '';
+      tr.style.display = (!kw || s.indexOf(kw) >= 0) ? '' : 'none';
+    });
+  };
+};
+
+console.log('%c[P20] Luban 管理增强：余额条 + 通用接码成本 + 自动同步 已加载',
+  'color:#6366f1;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

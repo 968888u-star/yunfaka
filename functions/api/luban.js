@@ -18,8 +18,12 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const action = url.searchParams.get('action');
   const BASE = 'https://lubansms.com/v2/api/';
-  const MARKUP = 1.3;
-  const USD_TO_CNY = 7.2;
+  // ⭐ 加价倍数和汇率从后台配置读取（写死值仅作默认兜底）
+  let MARKUP = 1.3, USD_TO_CNY = 7.2;
+  try {
+    const raw = await env.YUNFAKA_KV.get('state');
+    if (raw) { const st = JSON.parse(raw); const cfg = (st.db && st.db.config) || {}; if (cfg.luban_markup) MARKUP = Number(cfg.luban_markup) || 1.3; if (cfg.pay_usdt_rate) USD_TO_CNY = Number(cfg.pay_usdt_rate) || 7.2; }
+  } catch(e) {}
 
   function buildUrl(path, params) {
     const p = new URLSearchParams();

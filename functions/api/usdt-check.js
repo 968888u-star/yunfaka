@@ -90,16 +90,49 @@ export async function onRequest(context) {
       }
 
       if (order2) {
-        const available = state2.db.cards.filter(c => c.product_id === order2.product_id && c.status === 'unused');
-        if (available.length >= order2.quantity) {
-          available.slice(0, order2.quantity).forEach(c => {
-            c.status = 'used'; c.order_no = order2.order_no; c.used_at = nowStr(); order2.cards.push(c.content);
-          });
-          order2.status = 'delivered'; order2.delivered_at = nowStr();
-        } else {
-          order2.status = 'out_of_stock';
-        }
         order2.pay_tx = tx.transaction_id; order2.paid_at = nowStr(); order2.paid_amount_usdt = amount;
+        if (order2.source === 'smm') {
+          // ⭐ SMM推广：支付成功后自动提交上游下单
+          try {
+            const smmKey = env.CHINAYINLIU_API_KEY || '';
+            if (smmKey && order2.smm_service_id && order2.smm_link) {
+              const sp = new URLSearchParams();
+              sp.append('key', smmKey); sp.append('action', 'add');
+              sp.append('service', order2.smm_service_id);
+              sp.append('link', order2.smm_link);
+              sp.append('quantity', order2.quantity || 1);
+              const sr = await fetch('https://chinayinliu.com/api/v2', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: sp.toString() });
+              const sd = await sr.json();
+              if (sd && sd.order) { order2.smm_order_id = String(sd.order); order2.status = 'processing'; order2.submitted_at = nowStr(); }
+              else { order2.status = 'pending_review'; order2.auto_submit_error = (sd && (sd.error || sd.msg)) ? String(sd.error||sd.msg).slice(0,100) : '上游下单失败'; }
+            } else { order2.status = 'pending_review'; order2.auto_submit_error = '未配置上游API或缺少下单参数'; }
+          } catch(e) { order2.status = 'pending_review'; order2.auto_submit_error = String(e.message).slice(0,100); }
+        } else if (order2.source === 'luban') {
+          // ⭐ Luban接码：支付成功后自动请求号码
+          try {
+            const lbKey = env.LUBAN_APIKEY || '';
+            if (lbKey && order2.luban_type === 'sms' && order2.luban_service_id) {
+              const lr = await fetch(`https://lubansms.com/v2/api/getNumber?apikey=${lbKey}&service_id=${encodeURIComponent(order2.luban_service_id)}`);
+              const ld = await lr.json();
+              if (ld && ld.code === 0 && ld.data) {
+                order2.luban_request_id = ld.data.request_id || ld.data.id || '';
+                order2.luban_phone = ld.data.phone_number || ld.data.phone || '';
+                order2.status = 'processing'; order2.submitted_at = nowStr();
+              } else { order2.status = 'pending_review'; order2.auto_submit_error = (ld && ld.msg) ? String(ld.msg).slice(0,100) : '上游取号失败'; }
+            } else { order2.status = 'pending_review'; order2.auto_submit_error = '通用接码需人工处理或未配置API'; }
+          } catch(e) { order2.status = 'pending_review'; order2.auto_submit_error = String(e.message).slice(0,100); }
+        } else {
+          // 普通卡密商品：原逻辑
+          const available = state2.db.cards.filter(c => c.product_id === order2.product_id && c.status === 'unused');
+          if (available.length >= order2.quantity) {
+            available.slice(0, order2.quantity).forEach(c => {
+              c.status = 'used'; c.order_no = order2.order_no; c.used_at = nowStr(); order2.cards.push(c.content);
+            });
+            order2.status = 'delivered'; order2.delivered_at = nowStr();
+          } else {
+            order2.status = 'out_of_stock';
+          }
+        }
       } else if (recharge2) {
         const m = (state2.db.members || []).find(x => x.username === recharge2.username);
         if (m) {

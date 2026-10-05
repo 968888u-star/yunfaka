@@ -2053,6 +2053,7 @@ function renderSettings(){
       <label class="field"><span>收款地址</span><input id="cfg-usdt-address" value="${esc(cfg.pay_usdt_address)}"></label>
       <label class="field"><span>网络</span><input id="cfg-usdt-network" value="${esc(cfg.pay_usdt_network)}"></label>
       <label class="field"><span>汇率（1 USDT = ? CNY）</span><input id="cfg-usdt-rate" type="number" step="0.01" value="${cfg.pay_usdt_rate}"></label>
+      <label class="field"><span>Luban接码加价倍数（上游成本×倍数=售价，默认1.3）</span><input id="cfg-luban-markup" type="number" step="0.05" min="1" value="${cfg.luban_markup || 1.3}"></label>
       <button class="btn primary" onclick="saveSettings()">保存设置</button></div>`;
   $('#cfg-alipay-mode').addEventListener('change', () => { const m = $('#cfg-alipay-mode').value; $('#rp-settings').style.display = m === 'redpacket' ? '' : 'none'; $('#qr-settings').style.display = m === 'qr' ? '' : 'none'; });
 }
@@ -2082,7 +2083,7 @@ function saveSettings(){
     pay_alipay_redpacket_prefix: ($('#cfg-rp-prefix').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'YFK').slice(0, 6),
     pay_alipay_qr: $('#cfg-alipay-qr').value.trim(),
     pay_usdt_enabled: $('#cfg-usdt-enabled').checked, pay_usdt_address: $('#cfg-usdt-address').value.trim(),
-    pay_usdt_network: $('#cfg-usdt-network').value.trim() || 'TRC20', pay_usdt_rate: Number($('#cfg-usdt-rate').value) || 7.2,
+    pay_usdt_network: $('#cfg-usdt-network').value.trim() || 'TRC20', pay_usdt_rate: Number($('#cfg-usdt-rate').value) || 7.2, luban_markup: Number($('#cfg-luban-markup') ? $('#cfg-luban-markup').value : '1.3') || 1.3,
     pay_usdt_qr: $('#cfg-usdt-qr') ? $('#cfg-usdt-qr').value.trim() : (db.config.pay_usdt_qr || '')
   });
   saveDB(db); applySiteConfig(); toast('设置已保存','success'); renderSettings();

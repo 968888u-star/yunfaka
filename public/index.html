@@ -6200,5 +6200,132 @@ console.log('%c[P14] 409 假警报已静默 · 数据会自动重试保存 ✅',
   'color:#10b981;font-weight:bold;font-size:12px');
 })();
 </script>
+<!-- ============================================================
+     P15 · 客服对话框闪烁修复（每 5 秒轮询重建 DOM 导致）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* -------- HTML 转义 -------- */
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+/* -------- 覆盖 csRender：只在内容变化时更新 DOM -------- */
+window.csRender = function(msgs){
+  var box = document.getElementById('cs-msgs');
+  if (!box) return;
+
+  /* 空状态 */
+  if (!msgs || !msgs.length){
+    var emptyHtml = '<div class="cs-empty">有任何问题请留言，店主会尽快回复～</div>';
+    if (box._lastHtml === emptyHtml){
+      box.scrollTop = box.scrollHeight;
+      return;
+    }
+    box._lastHtml = emptyHtml;
+    box.innerHTML = emptyHtml;
+    return;
+  }
+
+  /* 拼 HTML */
+  var html = msgs.map(function(m){
+    var role = (m.role === 'admin') ? 'admin' : 'customer';
+    return '<div class="cs-msg ' + role + '">' +
+           esc(m.text) +
+           '<span class="cs-time">' + esc(m.time || '') + '</span></div>';
+  }).join('');
+
+  /* ⭐ 关键：内容完全相同 → 不碰 DOM → 不闪 */
+  if (box._lastHtml === html){
+    box.scrollTop = box.scrollHeight;
+    return;
+  }
+
+  /* 记录旧消息条数，用于禁用已存在消息的入场动画 */
+  var oldCount = box.querySelectorAll('.cs-msg').length;
+
+  box._lastHtml = html;
+  box.innerHTML = html;
+
+  /* 已存在的消息禁用动画（防止全部重播） */
+  var all = box.querySelectorAll('.cs-msg');
+  for (var i = 0; i < oldCount && i < all.length; i++){
+    all[i].style.animation = 'none';
+  }
+
+  box.scrollTop = box.scrollHeight;
+
+  /* 未读红点 */
+  var adminCount = msgs.filter(function(m){ return m.role === 'admin'; }).length;
+  var csPanel = document.getElementById('cs-panel');
+  if (adminCount > (window._csLastAdmin || 0) && csPanel && !csPanel.classList.contains('open')){
+    var floatBtn = document.getElementById('cs-float');
+    if (floatBtn) floatBtn.classList.add('has-msg');
+  }
+  window._csLastAdmin = adminCount;
+};
+
+/* -------- 覆盖 csSend：避免发送后立刻重建整个列表 -------- */
+window.csSend = function(){
+  var input = document.getElementById('cs-input');
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+
+  var btn = document.getElementById('cs-send');
+  var msgsBox = document.getElementById('cs-msgs');
+
+  /* 本地追加（不重建整个列表） */
+  if (msgsBox){
+    var emptyDiv = msgsBox.querySelector('.cs-empty');
+    if (emptyDiv) emptyDiv.remove();
+
+    var now = new Date();
+    var p = function(n){ return String(n).padStart(2, '0'); };
+    var timeStr = now.getFullYear() + '-' + p(now.getMonth()+1) + '-' + p(now.getDate())
+                + ' ' + p(now.getHours()) + ':' + p(now.getMinutes()) + ':' + p(now.getSeconds());
+
+    var msgDiv = document.createElement('div');
+    msgDiv.className = 'cs-msg customer';
+    msgDiv.innerHTML = esc(text) + '<span class="cs-time">' + timeStr + '</span>';
+    msgsBox.appendChild(msgDiv);
+    msgsBox.scrollTop = msgsBox.scrollHeight;
+
+    /* ⭐ 本地追加后，标记 _lastHtml 为"过期"，让 csPoll 拿到服务端数据后重建一次（合并） */
+    msgsBox._lastHtml = '__local_append__';
+  }
+
+  input.value = '';
+  if (btn){ btn.disabled = true; btn.textContent = '发送中'; }
+
+  var session = localStorage.getItem('yunfaka_chat_session') || '';
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session: session, text: text })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (btn){ btn.disabled = false; btn.textContent = '发送'; }
+    if (d.ok){
+      if (window.csPoll) window.csPoll();
+    } else {
+      alert('发送失败：' + (d.msg || '未知错误'));
+    }
+  })
+  .catch(function(){
+    if (btn){ btn.disabled = false; btn.textContent = '发送'; }
+    alert('网络错误，请检查网络后重试');
+  });
+};
+
+console.log('%c[P15] 客服对话框闪烁修复已启用（只在内容变化时更新 DOM）',
+  'color:#10b981;font-weight:bold;font-size:12px');
+})();
+</script>
 </body>
 </html>

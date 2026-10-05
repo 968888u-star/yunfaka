@@ -7073,5 +7073,115 @@ console.log('%c[P20] Luban 管理增强：余额条 + 通用接码成本 + 自�
   'color:#6366f1;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P21 · 首页隐藏接码/SMM + 静默 P11 假红条 + 诊断工具
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) { console.warn('[P21] 核心未就绪'); return; }
+
+/* ===== 1. 首页隐藏 Luban 接码 + SMM 推广（不影响后台） ===== */
+var _origRenderHome = window.renderHome;
+if (typeof _origRenderHome === 'function'){
+  window.renderHome = function(){
+    var _origLoadDB = window.loadDB;
+    /* 临时拦截 loadDB，让首页拿到"接码/SMM 全部下架"的数据 */
+    window.loadDB = function(){
+      var db = _origLoadDB.apply(this, arguments);
+      if (db && Array.isArray(db.products)){
+        db.products = db.products.map(function(p){
+          if (p && (p.source === 'luban' || p.source === 'smm')){
+            return Object.assign({}, p, { active: false });
+          }
+          return p;
+        });
+      }
+      return db;
+    };
+    try {
+      return _origRenderHome.apply(this, arguments);
+    } finally {
+      window.loadDB = _origLoadDB;
+    }
+  };
+}
+
+/* ===== 2. 静默 P11 假红条（"服务端保存失败"） ===== */
+var _origToast = window.toast;
+window.toast = function(msg, type){
+  var m = String(msg || '');
+  /* 这两条都是 P11 的过度提示，本地已保存，不需要打扰用户 */
+  if (m.indexOf('服务端保存失败') >= 0 ||
+      m.indexOf('配置仅本地生效') >= 0){
+    console.log('%c[P21] 静默 P11 假红条（本地已保存）', 'color:#6b7280;font-size:12px', m);
+    return;
+  }
+  return _origToast.apply(this, arguments);
+};
+
+/* ===== 3. 诊断工具：在 Console 里执行 yfDiagSync() 查看同步状态 ===== */
+window.yfDiagSync = function(){
+  console.group('[P21] 服务端同步诊断');
+  var localCfg = (window.loadDB() || {}).config || {};
+  console.log('① 本地 config:', {
+    tg_bot_token: localCfg.tg_bot_token ? localCfg.tg_bot_token.slice(0,12) + '…' : '(空)',
+    tg_chat_id: localCfg.tg_chat_id || '(空)',
+    site_name: localCfg.site_name,
+    pay_usdt_rate: localCfg.pay_usdt_rate
+  });
+  fetch('/api/state?t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.ok || !d.db || !d.db.config){
+        console.warn('② 服务端返回异常:', d);
+        console.groupEnd();
+        return;
+      }
+      var s = d.db.config;
+      console.log('② 服务端 config:', {
+        tg_bot_token: s.tg_bot_token ? s.tg_bot_token.slice(0,12) + '…' : '(空)',
+        tg_chat_id: s.tg_chat_id || '(空)',
+        site_name: s.site_name,
+        pay_usdt_rate: s.pay_usdt_rate
+      });
+      console.log('③ rev:', d.rev);
+      console.log('④ 手动推送: yfDiagPush()');
+      console.groupEnd();
+    })
+    .catch(function(e){
+      console.error('② 拉取失败:', e);
+      console.groupEnd();
+    });
+};
+
+window.yfDiagPush = function(){
+  var db = window.loadDB();
+  fetch('/api/state?t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var rev = (d && d.rev !== undefined) ? d.rev : 0;
+      return fetch('/api/state', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ db: db, baseRev: rev })
+      }).then(function(r){ return r.json(); });
+    })
+    .then(function(d){
+      if (d && d.ok){
+        console.log('%c[P21] ✅ 推送成功，rev = ' + d.rev, 'color:#10b981;font-weight:bold');
+        if (window.toast) _origToast('推送成功 ✅', 'success');
+      } else {
+        console.error('[P21] ❌ 推送失败:', d);
+        if (window.toast) _origToast('推送失败：' + (d && d.msg || '未知'), 'error');
+      }
+    })
+    .catch(function(e){ console.error(e); });
+};
+
+console.log('%c[P21] 首页已隐藏接码/SMM · P11 假红条已静默', 'color:#10b981;font-weight:bold;font-size:13px');
+console.log('%c  诊断同步：yfDiagSync()  |  手动推送：yfDiagPush()', 'color:#6b7280;font-size:12px');
+})();
+</script>
 </body>
 </html>

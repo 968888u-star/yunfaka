@@ -1772,7 +1772,9 @@ function resendTg(orderNo){
 }function renderProducts(){
   const db = loadDB();
   const smmCount = db.products.filter(p => p.source === 'smm').length;
-  const prods = db.products.filter(p => p.source !== 'smm');
+  const _allProds = db.products.filter(p => p.source !== 'smm');
+  const _showN = Math.min(window._adminProdShow || 50, _allProds.length);
+  const prods = _allProds.slice(0, _showN); /* P26优化：分页渲染，避免1000+商品一次性渲染卡顿 */
   const rows = prods.length ? prods.map(p => {
     const stock = stockOf(db, p.id); const cat = db.categories.find(c => String(c.id) === String(p.category_id));
     const skus = getSkus(p); const priceDisplay = skus.length ? usdt(getMinPrice(p)) + ' USDT 起' : usdt(p.price) + ' USDT';
@@ -1796,7 +1798,7 @@ function resendTg(orderNo){
       <label class="field"><span>发货说明</span><input id="np-note" placeholder="请在 24 小时内激活"></label>
       <label class="field"><span>规格（可选）</span>${skuEditorHtml([])}</label>
       <button class="btn primary" onclick="createProduct()">创建商品</button></div>
-    <div class="card panel"><h2>商品列表（${prods.length}）${smmCount ? '<span class="muted" style="font-size:13px;font-weight:400;margin-left:8px">另有 ' + smmCount + ' 个推广商品，请在「SMM推广」tab 管理</span>' : ''}</h2><div style="overflow-x:auto"><table><thead><tr><th>商品</th><th>分类</th><th>价格</th><th>库存</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    <div class="card panel"><h2>商品列表（${prods.length}）${smmCount ? '<span class="muted" style="font-size:13px;font-weight:400;margin-left:8px">另有 ' + smmCount + ' 个推广商品，请在「SMM推广」tab 管理</span>' : ''}</h2><div style="overflow-x:auto"><table><thead><tr><th>商品</th><th>分类</th><th>价格</th><th>库存</th><th>状态</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${_showN < _allProds.length ? '<div style="text-align:center;margin-top:10px"><button class="btn ghost" onclick="window._adminProdShow=(window._adminProdShow||50)+50;renderProducts()">加载更多（已显示 '+_showN+' / '+_allProds.length+'）</button></div>' : ''}</div>`;
 }
 function categoryOptions(db, selectedId){
   const sel = String(selectedId || 0);
@@ -2733,7 +2735,7 @@ function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.or
       }
     }).catch(function(e){ console.warn('pull fail', e); });
   }
-  pull(); setInterval(pull, 8000);
+  pull(); setInterval(pull, 15000); /* P26优化：8s→15s，与yfPullNow错开减少重复拉取 */
   document.addEventListener('visibilitychange', function(){ if (!document.hidden) pull(); });
   window.addEventListener('online', pull);
 })();
@@ -7262,10 +7264,7 @@ function yfPullNow(){
       /* 重绘页面 */
       if (window.route) { try { window.route(); } catch(e){} }
 
-      /* 轻提示 */
-      if (window.toast){
-        try { window.toast('🔄 数据已同步', 'info'); } catch(e){}
-      }
+      /* 数据已同步提示已移除（P26优化：静默同步，不打扰用户） */
     })
     .catch(function(){ _yfPulling = false; });
 }
@@ -7277,8 +7276,8 @@ fetch('/api/state?t=' + Date.now(), { cache:'no-store' })
   .then(function(d){ if (d && d.ok) _yfRev = d.rev; })
   .catch(function(){});
 
-/* 3 秒轮询 */
-setInterval(yfPullNow, 3000);
+/* P26优化：轮询间隔 3s→10s，减少全量数据拉取频率（支付页有独立30s检测，足够） */
+setInterval(yfPullNow, 10000);
 
 /* 页面回到前台立即拉 */
 document.addEventListener('visibilitychange', function(){

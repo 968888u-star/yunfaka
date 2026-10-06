@@ -7582,5 +7582,67 @@ console.log('%c[P24] 数据新旧保护已启用', 'color:#10b981;font-weight:bo
 console.log('%c  诊断：yfDiagData()  |  强制推送：yfForcePush()', 'color:#6b7280;font-size:11px');
 })();
 </script>
+<!-- ============================================================
+     P25 · 多设备同步修复（最终补丁，最后执行）
+     根因：P11(yf_config_override) + P18(yf_cfg_v1) 两个本地缓存
+     在 loadDB 时强制覆盖服务端配置，导致其他设备永远显示旧数据；
+     P21 还把"保存失败"提示静默了。本补丁：
+     1. 立即清除两个本地覆盖键（使 P11/P18 的 merge 变为空操作）
+     2. 每次成功 GET /api/state 后再次清除（防止被重新写入）
+     3. 给 POST /api/state 注入 X-Access-Token（防 403）
+     4. 保存失败时明确提示（绕过 P21 的静默）
+     ============================================================ -->
+<script>
+(function(){
+  'use strict';
+  var OVERRIDE_KEYS = ['yf_config_override', 'yf_cfg_v1'];
+  function clearOverrides(){
+    OVERRIDE_KEYS.forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
+  }
+  // 1. 立即清除一次（旧设备的 stale 缓存立刻失效）
+  clearOverrides();
+
+  // 2/3. 包装 fetch：GET 成功后清缓存；POST 注入 Token 头并在失败时提示
+  var _of = window.fetch;
+  window.fetch = function(){
+    var args = arguments;
+    var url = String(args[0]);
+    var isState = url.indexOf('/api/state') >= 0;
+    var isPost = !!(args[1] && (args[1].method === 'POST' || args[1].method === 'post'));
+    if (isState && isPost){
+      try {
+        var tok = '';
+        try { tok = localStorage.getItem('yf_access_token') || ''; } catch(e){}
+        if (tok){
+          args[1] = args[1] || {};
+          args[1].headers = Object.assign({}, args[1].headers || {}, { 'X-Access-Token': tok });
+        }
+      } catch(e){}
+    }
+    var p = _of.apply(this, args);
+    if (isState){
+      if (!isPost){
+        // GET 成功（服务端可达）→ 清掉本地覆盖键，服务端为唯一真相源
+        p.then(function(r){ try{ return r.json(); }catch(e){ return null; } })
+         .then(function(d){ if (d && d.ok && d.db) clearOverrides(); });
+      } else {
+        // POST 失败 → 明确提示（文案避开 P21 静默关键词）
+        p.then(function(r){ try{ return r.json(); }catch(e){ return { ok:false, msg:'HTTP '+r.status }; } })
+         .then(function(d){
+            if (d && !d.ok){
+              var msg = '⚠️ 数据未同步到云端（仅本设备生效）：' + (d.msg || '请重试');
+              try { console.warn('[P25]', msg, d); } catch(e){}
+              if (window.toast){
+                try { window.toast(msg, 'error'); } catch(e){}
+              }
+            }
+         });
+      }
+    }
+    return p;
+  };
+  console.log('%c[P25] ✅ 多设备同步修复已启用（本地配置缓存已禁用，服务端为唯一真相源）', 'color:#10b981;font-weight:bold');
+})();
+</script>
 </body>
 </html>

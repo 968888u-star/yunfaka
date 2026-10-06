@@ -2,7 +2,7 @@
 // POST { username, password } -> { ok, member:{username,balance,...} }
 // 同时支持暗号找回密码：POST { action:'findpwd', username, secret } -> { ok }
 // 重置密码：POST { action:'resetpwd', username, secret, new_password } -> { ok }
-import { verifyPwd, hashPwd } from '../_lib/auth.js';
+import { verifyPwd, hashPwd, needsHashUpgrade } from '../_lib/auth.js';
 
 function nowStr() { return new Date().toISOString().slice(0, 19).replace('T', ' '); }
 
@@ -49,6 +49,12 @@ export async function onRequest(context) {
     if (!m) return Response.json({ ok: false, msg: '账号不存在' }, { status: 401, headers: cors });
     if (!verifyPwd(body.password || '', m.password)) {
       return Response.json({ ok: false, msg: '密码错误' }, { status: 401, headers: cors });
+    }
+    // 旧格式哈希自动升级到 v2 标准格式（下次登录走标准分支）
+    if (needsHashUpgrade(m.password)) {
+      m.password = hashPwd(body.password || '');
+      state.rev = (state.rev || 0) + 1;
+      await env.YUNFAKA_KV.put('state', JSON.stringify(state));
     }
     // 返回脱敏后的会员信息（不含密码/暗号）
     return Response.json({

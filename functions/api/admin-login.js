@@ -1,6 +1,6 @@
 // functions/api/admin-login.js · 管理员登录（后端校验密码，签发 session token）
 // POST { password } -> { ok, token }  （token 有效期 12 小时，后续调 /api/admin-action 携带）
-import { signToken, verifyPwd, getSecret } from '../_lib/auth.js';
+import { signToken, verifyPwd, getSecret, hashPwd, needsHashUpgrade } from '../_lib/auth.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -30,6 +30,12 @@ export async function onRequest(context) {
     // 登录成功：若 KV 里缺失 admin_pwd_hash，补写回去，避免后续被前端覆盖
     if (state && state.db && state.db.config && !state.db.config.admin_pwd_hash) {
       state.db.config.admin_pwd_hash = storedHash;
+      state.rev = (state.rev || 0) + 1;
+      await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+    }
+    // 旧格式哈希自动升级到 v2 标准格式（前端旧 hashPwd 生成的无 v2: 前缀）
+    if (state && state.db && state.db.config && needsHashUpgrade(state.db.config.admin_pwd_hash)) {
+      state.db.config.admin_pwd_hash = hashPwd(password);
       state.rev = (state.rev || 0) + 1;
       await env.YUNFAKA_KV.put('state', JSON.stringify(state));
     }

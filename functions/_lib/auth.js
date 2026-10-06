@@ -77,10 +77,33 @@ export function hashPwdOld(pwd) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
 
+// 前端旧版密码哈希（1000轮迭代，与 public/index.html 前端 hashPwd 完全一致）
+// 旧会员/管理员通过前端注册或改密时用此算法存储，登录需兼容校验
+export function hashPwdFrontendOld(pwd) {
+  const salt = 'yfk2024salt::v2::';
+  let str = salt + pwd + salt;
+  let h1 = 0x811c9dc5, h2 = 0x1000193;
+  for (let round = 0; round < 1000; round++) {
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+      h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+    }
+    str = h1.toString(16) + h2.toString(16) + pwd + salt;
+  }
+  return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
+}
+// 判断存储的哈希是否为旧格式（需升级到 v2 标准格式）
+export function needsHashUpgrade(storedHash) {
+  return !!(storedHash && !String(storedHash).startsWith('v2:'));
+}
 export function verifyPwd(input, storedHash) {
   if (!storedHash) return false;
   if (storedHash.startsWith('v2:')) return hashPwd(input) === storedHash;
-  return hashPwdOld(input) === storedHash;
+  if (hashPwdOld(input) === storedHash) return true;
+  // 兼容前端旧版 1000 轮迭代哈希（注册/改密时前端生成，无 v2: 前缀）
+  if (hashPwdFrontendOld(input) === storedHash) return true;
+  return false;
 }
 
 export function getSecret(env) {

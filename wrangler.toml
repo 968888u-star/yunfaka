@@ -10,9 +10,9 @@ pages_build_output_dir = "public"
 # 然后把返回的 id 填到下面
 [[kv_namespaces]]
 binding = "YUNFAKA_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "534dd287bfb1419cb5ed4485515b9e1a"
 
 # 预览环境也绑定同一个 KV（可选，注释掉则预览环境无数据）
 # [[env.preview.kv_namespaces]]
 # binding = "YUNFAKA_KV"
-# id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# id = "534dd287bfb1419cb5ed4485515b9e1a"

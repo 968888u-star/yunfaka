@@ -59,15 +59,28 @@ function safeMsg(m) {
   return m;
 }
 
-// ========== 限流（基于 KV） ==========
-// 返回 { blocked: bool, retryAfter?: number }
+// ========== 限流（内存版，不消耗 KV 写入配额） ==========
+// 背景：Cloudflare KV 免费版每日仅 1000 次写入，原实现每次限流都 kv.put()，
+//       与业务数据写入叠加后极易超限（SMM 875 商品操作即可打爆当日配额）。
+// 改为内存 Map：单 Workers 实例内精确，多实例间不共享（防刷足够，代价可接受）。
+const _rlStore = new Map();
+let _rlLastCleanup = Date.now();
 export async function rateLimit(kv, key, max, windowMs) {
   const now = Date.now();
-  const raw = await kv.get(key);
-  let rec = raw ? JSON.parse(raw) : { t: now, n: 0 };
-  if (now - rec.t > windowMs) { rec.t = now; rec.n = 0; }
+  // 每 10 分钟清理一次过期 key，防止内存无限增长
+  if (now - _rlLastCleanup > 600000) {
+    _rlLastCleanup = now;
+    try {
+      for (const [k, v] of _rlStore) {
+        if (now - (v.t || 0) > 7200000) _rlStore.delete(k); // 超2小时必清
+      }
+      if (_rlStore.size > 50000) _rlStore.clear(); // 极端保护
+    } catch (e) {}
+  }
+  let rec = _rlStore.get(key);
+  if (!rec || now - rec.t > windowMs) { rec = { t: now, n: 0 }; }
   rec.n++;
-  await kv.put(key, JSON.stringify(rec), { expirationTtl: Math.ceil(windowMs / 1000) + 60 });
+  _rlStore.set(key, rec);
   if (rec.n > max) return { blocked: true, retryAfter: Math.ceil((windowMs - (now - rec.t)) / 1000) };
   return { blocked: false };
 }

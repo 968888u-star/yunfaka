@@ -8226,16 +8226,38 @@ function analyzeDiff(oldDb, newDb){
   return null;
 }
 
+/* ===== P29: saveDB 网络写入防抖合并（修复 KV put() daily limit 超限） =====
+   背景：SMM 875 个商品逐个上架/改价会触发 875 次 POST，每次 1 次 KV 写入，
+   叠加其他接口极易超过 Cloudflare KV 免费版每日 1000 次写入限额。
+   方案：管理员已登录时，1200ms 窗口内连续多次 saveDB 合并为 1 次网络请求。
+   localStorage 仍立即写入（数据不丢），仅网络同步延迟合并。 */
+var __saveTimer = null;
+var __saveDb = null;
+var __saveResolvers = [];
+function __doFlushSave(){
+  __saveTimer = null;
+  var db = __saveDb; var rs = __saveResolvers;
+  __saveDb = null; __saveResolvers = [];
+  if (!db || !rs.length) return;
+  const token = sessionStorage.getItem('yunfaka_admin_token') || '';
+  postFullDb(db, token).then(function(d){ rs.forEach(function(r){ r(d); }); }).catch(function(e){
+    console.warn('[P28] 保存失败:', e.message);
+    if (window.toast) window.toast('保存失败：' + e.message, 'error');
+    var ret = { ok: false, msg: e.message };
+    rs.forEach(function(r){ r(ret); });
+  });
+}
+try { window.addEventListener('beforeunload', function(){ if (__saveTimer){ clearTimeout(__saveTimer); __doFlushSave(); } }); } catch(e){}
+
 window.saveDB = function(db){
   window.__DB = db;
 
   const token = sessionStorage.getItem('yunfaka_admin_token') || '';
   if (token){
-    return postFullDb(db, token).catch(e => {
-      console.warn('[P28] 保存失败:', e.message);
-      if (window.toast) window.toast('保存失败：' + e.message, 'error');
-      return { ok: false, msg: e.message };
-    });
+    /* 防抖合并：1200ms 内多次 saveDB 只发一次网络请求 */
+    __saveDb = db;
+    if (!__saveTimer) __saveTimer = setTimeout(__doFlushSave, 1200);
+    return new Promise(function(res){ __saveResolvers.push(res); });
   }
 
   // 无 admin token：只接受"新增订单/充值/会员"三种意图

@@ -155,6 +155,22 @@ export function needsHashUpgrade(storedHash) {
   return !!(storedHash && !String(storedHash).startsWith('pbkdf2$'));
 }
 
+/* ========== 检测 hash 是否为可识别格式（损坏数据兜底） ==========
+ * 历史 bug：hashPwd() 是 async 但未 await，把 "[object Promise]" 写进了 KV。
+ * 若 storedHash 存在但不匹配任何已知格式，视为损坏，应回退到默认密码。
+ */
+export function isHashRecognizable(storedHash) {
+  if (!storedHash) return false;
+  const s = String(storedHash).trim();
+  if (!s) return false;
+  if (s.startsWith('PLAINTEXT:')) return true;
+  if (s.startsWith('pbkdf2$')) return true;
+  if (s.startsWith('v2:')) return true;
+  // 旧格式：纯 hex（hashPwdLegacyOld / hashPwdLegacyFrontend 输出）
+  if (/^[0-9a-f]{16,64}$/i.test(s)) return true;
+  return false;
+}
+
 /* ========== 会员暗号哈希 ========== */
 export async function hashSecret(secret) {
   if (!secret) return '';

@@ -5,7 +5,7 @@
 //   3. 从 admin_config 独立 KV 读密码 hash
 import {
   signToken, verifyPwd, getSecret, hashPwd,
-  needsHashUpgrade, LEGACY_DEFAULT_ADMIN_HASH
+  needsHashUpgrade, isHashRecognizable, LEGACY_DEFAULT_ADMIN_HASH
 } from '../_lib/auth.js';
 import { readAdminConfig, writeAdminConfig } from '../_lib/admin-config.js';
 import { optionsResponse, jsonError, jsonOk, rateLimit, getClientIp } from '../_lib/common.js';
@@ -34,7 +34,13 @@ export async function onRequest(context) {
 
     // 从独立 KV 读 hash
     const ac = await readAdminConfig(env);
-    const storedHash = (ac && ac.admin_pwd_hash) || LEGACY_DEFAULT_ADMIN_HASH;
+    let storedHash = (ac && ac.admin_pwd_hash) || LEGACY_DEFAULT_ADMIN_HASH;
+    // ⭐ 损坏 hash 兜底：历史 bug 把 "[object Promise]" 写进了 KV，导致任何密码都失败
+    // 检测到不可识别的 hash 时，回退到默认密码 admin888，登录成功后自动覆盖为正确 PBKDF2
+    if (ac && ac.admin_pwd_hash && !isHashRecognizable(ac.admin_pwd_hash)) {
+      console.warn('[admin-login] 检测到损坏的 admin_pwd_hash，已回退到默认密码:', String(ac.admin_pwd_hash).slice(0, 40));
+      storedHash = LEGACY_DEFAULT_ADMIN_HASH;
+    }
     const isDefault = !ac || !ac.admin_pwd_hash || storedHash === LEGACY_DEFAULT_ADMIN_HASH;
 
     // 校验密码

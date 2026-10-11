@@ -46,7 +46,12 @@ export async function onRequest(context) {
       sessions[sessionId].push(msg);
       // 只保留最近100条
       if (sessions[sessionId].length > 100) sessions[sessionId] = sessions[sessionId].slice(-100);
-      await kv.put('chat_sessions', JSON.stringify(sessions));
+      // KV 写入降级：配额耗尽（KV put() limit exceeded）时不阻塞，TG 推送成功即视为发送成功
+      try {
+        await kv.put('chat_sessions', JSON.stringify(sessions));
+      } catch (kvErr) {
+        console.warn('[chat] KV写入失败（配额耗尽？），降级仅转发TG:', kvErr && kvErr.message);
+      }
 
       // 2) 转发到店主TG（带会话ID前缀，店主回复时带#ID即可）
       const stateRaw = await kv.get('state');
@@ -126,8 +131,9 @@ async function checkTgReplies(kv, env) {
       if (sessions[sessionId].length > 100) sessions[sessionId] = sessions[sessionId].slice(-100);
     }
 
-    await kv.put('chat_sessions', JSON.stringify(sessions));
-    await kv.put('chat_tg_offset', String(newOffset));
+    // KV 写入降级：配额耗尽时不阻塞，offset 也尽力保存（失败则下次重复拉取，可接受）
+    try { await kv.put('chat_sessions', JSON.stringify(sessions)); } catch (e) { console.warn('[chat] reply KV写入失败:', e && e.message); }
+    try { await kv.put('chat_tg_offset', String(newOffset)); } catch (e) { console.warn('[chat] offset KV写入失败:', e && e.message); }
   } catch (e) {
     console.warn('检查TG回复失败', e);
   }

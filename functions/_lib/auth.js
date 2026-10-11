@@ -6,7 +6,7 @@
 //   4. 补齐所有导出（needsHashUpgrade / hashSecret / verifySecret / LEGACY_DEFAULT_ADMIN_HASH）
 
 const enc = new TextEncoder();
-const PBKDF2_ITERATIONS = 120000;
+const PBKDF2_ITERATIONS = 10000; // Cloudflare Workers CPU 限制（免费版 10ms），120k 迭代会超时
 const PBKDF2_SALT_BYTES = 16;
 
 /* ========== HMAC ========== */

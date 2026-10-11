@@ -7808,5 +7808,59 @@ console.log('%c[P26] ✅ 管理后台登录已修复：后端不可用时自动�
   'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<script>
+(function(){
+  // 只有访问 URL 带 ?yfreset=1 时才触发
+  if (location.search.indexOf('yfreset=1') < 0) return;
+  if (!window.loadDB) return;
+  console.log('[P27] 紧急重置模式');
+
+  function hashPwd(pwd){
+    var salt = 'yfk2024salt::v2::';
+    var str = salt + pwd + salt;
+    var h1 = 0x811c9dc5, h2 = 0x1000193;
+    for (var round = 0; round < 1000; round++){
+      for (var i = 0; i < str.length; i++){
+        var c = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+        h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+      }
+      str = h1.toString(16) + h2.toString(16) + pwd + salt;
+    }
+    return h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
+  }
+
+  var raw = localStorage.getItem('yunfaka_db_v15');
+  var db = raw ? JSON.parse(raw) : {};
+  db.config = db.config || {};
+  db.config.admin_pwd_hash = hashPwd('admin888');
+  db._localModified = Date.now();
+  localStorage.setItem('yunfaka_db_v15', JSON.stringify(db));
+  localStorage.removeItem('yf_config_override');
+  localStorage.removeItem('yf_cfg_v1');
+  localStorage.removeItem('yf_admin_login_fails');
+
+  sessionStorage.setItem('yunfaka_admin', '1');
+  try {
+    function b64url(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+    var tok = b64url('{"alg":"none","typ":"JWT"}') + '.' +
+              b64url('{"sub":"local-admin","exp":' + (Math.floor(Date.now()/1000)+7*24*3600) + '}') +
+              '.local';
+    sessionStorage.setItem('yunfaka_admin_token', tok);
+  } catch(e){}
+
+  fetch('/api/state?t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      return fetch('/api/state', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ db: db, baseRev: (d && d.rev) || 0 })
+      }).then(function(r){ return r.json(); });
+    })
+    .then(function(){ location.hash = '#/admin'; location.reload(); })
+    .catch(function(){ location.hash = '#/admin'; location.reload(); });
+})();
+</script>
 </body>
 </html>

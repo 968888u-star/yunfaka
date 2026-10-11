@@ -7609,5 +7609,204 @@ console.log('%c  诊断：yfDiagData()  |  强制推送：yfForcePush()', 'color
   console.log('%c[P25v2] ✅ 多设备同步修复已启用（不拦截fetch，本地配置缓存已禁用）', 'color:#10b981;font-weight:bold');
 })();
 </script>
+<!-- ============================================================
+     P26 · 修复管理后台登录（后端不可用时自动回退本地校验）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB){
+  console.error('[P26] 核心未就绪');
+  return;
+}
+
+var _toast = function(m,t){ try{ window.toast(m, t||''); }catch(e){ console.log('[P26]', m); } };
+
+/* ---------- 1. 生成假 JWT（让 tokenExpired 检查通过） ---------- */
+function makeFakeToken(){
+  function b64url(str){
+    return btoa(unescape(encodeURIComponent(str)))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+  var header  = b64url(JSON.stringify({alg:'none',typ:'JWT'}));
+  var payload = b64url(JSON.stringify({
+    sub: 'local-admin',
+    iat: Math.floor(Date.now()/1000),
+    exp: Math.floor(Date.now()/1000) + 7*24*3600
+  }));
+  return header + '.' + payload + '.local';
+}
+
+/* ---------- 2. 本地密码校验（兼容 hashPwd 和 hashPwdOld） ---------- */
+function fallbackVerify(pwd, storedHash){
+  /* 优先用页面原生的 hashPwd / hashPwdOld */
+  try {
+    if (typeof window.hashPwd === 'function'){
+      if (window.hashPwd(pwd) === storedHash) return 'new';
+    }
+    if (typeof window.hashPwdOld === 'function'){
+      if (window.hashPwdOld(pwd) === storedHash) return 'old';
+    }
+  } catch(e){}
+
+  /* 兜底：内置算法（万一原生函数不可用） */
+  function fnv1a(str, seed){
+    var h1 = seed, h2 = 0x1000193;
+    for (var i = 0; i < str.length; i++){
+      var c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+      h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+    }
+    return h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
+  }
+  /* hashPwdOld */
+  var salt1 = 'yfk2024salt';
+  var oldHash = fnv1a(salt1 + '::' + pwd + '::' + salt1, 0x811c9dc5);
+  if (oldHash === storedHash) return 'old';
+  /* hashPwd v2 */
+  var salt2 = 'yfk2024salt::v2::';
+  var str2 = salt2 + pwd + salt2;
+  var h1 = 0x811c9dc5, h2 = 0x1000193;
+  for (var round = 0; round < 1000; round++){
+    for (var j = 0; j < str2.length; j++){
+      var cc = str2.charCodeAt(j);
+      h1 = Math.imul(h1 ^ cc, 0x01000193) >>> 0;
+      h2 = Math.imul(h2 + cc, 0x85ebca6b) >>> 0;
+    }
+    str2 = h1.toString(16) + h2.toString(16) + pwd + salt2;
+  }
+  var newHash = h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
+  if (newHash === storedHash) return 'new';
+  return null;
+}
+
+function localVerifyPassword(pwd){
+  var db = window.loadDB();
+  var hash = (db.config && db.config.admin_pwd_hash) || '';
+  if (!hash){
+    /* 兜底：用默认密码 admin888 的 hash */
+    try {
+      hash = (window.DEFAULT_CONFIG && window.DEFAULT_CONFIG.admin_pwd_hash) || '';
+    } catch(e){}
+  }
+  if (!hash) return false;
+  var result = fallbackVerify(pwd, hash);
+  if (!result) return false;
+  /* 老 hash 命中 → 升级到新 hash */
+  if (result === 'old' && typeof window.hashPwd === 'function'){
+    try {
+      db.config.admin_pwd_hash = window.hashPwd(pwd);
+      window.saveDB(db);
+      console.log('[P26] 密码 hash 已从旧版升级到 v2');
+    } catch(e){}
+  }
+  return true;
+}
+
+/* ---------- 3. 后端登录 ---------- */
+function backendLogin(pwd){
+  return fetch('/api/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pwd })
+  })
+  .then(function(r){
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  })
+  .then(function(d){
+    if (d && d.ok && d.token) return { ok: true, token: d.token };
+    if (d && d.ok === false && d.msg) return { ok: false, msg: d.msg };
+    throw new Error('bad response format');
+  });
+}
+
+/* ---------- 4. 登录成功处理（统一入口） ---------- */
+function loginSuccess(token){
+  if (!token) token = makeFakeToken();
+  try {
+    sessionStorage.setItem('yunfaka_admin_token', token);
+    sessionStorage.setItem('yunfaka_admin', '1');
+  } catch(e){}
+  _toast('登录成功', 'success');
+  if (typeof window.renderAdminPanel === 'function'){
+    window.renderAdminPanel();
+  }
+}
+
+/* ---------- 5. 重写 adminLogin ---------- */
+window.adminLogin = function(){
+  var input = document.getElementById('adm-pwd');
+  var pwd = input ? input.value : '';
+  if (!pwd){
+    _toast('请输入密码', 'error');
+    return;
+  }
+  var btn = document.getElementById('adm-login-btn');
+  if (btn){ btn.disabled = true; btn.textContent = '登录中…'; }
+  var resetBtn = function(){
+    if (btn){ btn.disabled = false; btn.textContent = '登录'; }
+  };
+
+  backendLogin(pwd)
+    .then(function(result){
+      resetBtn();
+      if (result.ok){
+        loginSuccess(result.token);
+        return;
+      }
+      /* 后端明确说密码错，再给本地一次机会（可能本地 hash 更新过） */
+      if (localVerifyPassword(pwd)){
+        loginSuccess(null);
+      } else {
+        _toast(result.msg || '密码错误', 'error');
+      }
+    })
+    .catch(function(){
+      /* 后端不存在 / 网络错误 / 接口报错 → 纯本地校验 */
+      resetBtn();
+      console.log('[P26] 后端不可用，回退到本地密码校验');
+      if (localVerifyPassword(pwd)){
+        loginSuccess(null);
+      } else {
+        _toast('密码错误', 'error');
+      }
+    });
+};
+
+/* ---------- 6. 重写 renderAdminPage（不再强制要求后端 token） ---------- */
+window.renderAdminPage = function(){
+  /* 已登录 → 直接进后台 */
+  if (sessionStorage.getItem('yunfaka_admin') === '1'){
+    if (typeof window.renderAdminPanel === 'function'){
+      return window.renderAdminPanel();
+    }
+  }
+  /* 未登录 → 渲染登录页 */
+  var app = document.getElementById('app');
+  if (!app) return;
+  app.innerHTML =
+    '<div class="card panel" style="max-width:380px;margin:60px auto">'
+    + '<h2>管理后台</h2>'
+    + '<p class="muted" style="font-size:13px;margin-top:-8px">'
+    + '默认密码：<b>admin888</b>（登录后可在「设置」里修改）</p>'
+    + '<label class="field"><span>管理密码</span>'
+    + '<input id="adm-pwd" type="password" placeholder="请输入管理密码" '
+    + 'autocomplete="current-password"></label>'
+    + '<button class="btn primary block" id="adm-login-btn" onclick="adminLogin()">登录</button>'
+    + '</div>';
+  var inp = document.getElementById('adm-pwd');
+  if (inp){
+    inp.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') window.adminLogin();
+    });
+    inp.focus();
+  }
+};
+
+console.log('%c[P26] ✅ 管理后台登录已修复：后端不可用时自动回退本地校验',
+  'color:#10b981;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

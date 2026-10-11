@@ -21,12 +21,8 @@ export async function onRequest(context) {
   }
 
   try {
-    // 登录限流：IP 维度 5 次/15 分钟
+    // 登录限流已取消（用户要求）：不再限制密码尝试次数
     const ip = getClientIp(request);
-    const rl = await rateLimit(env.YUNFAKA_KV, 'login:admin:' + ip, 5, 15 * 60 * 1000);
-    if (rl.blocked) {
-      return jsonError(`尝试次数过多，请 ${rl.retryAfter} 秒后再试`, 429, env, request);
-    }
 
     const body = await request.json();
     const password = body.password || '';

@@ -6099,10 +6099,13 @@ setTimeout(function(){
     })
     .catch(function(e){ console.warn('[P13] GET 请求失败:', e); });
 
-  // 3.2 POST 权限探测
+  // 3.2 POST 权限探测（仅管理员登录后才探测，避免未登录时 403 误报"需要 ACCESS_TOKEN"）
+  var __p13_adminTok = '';
+  try { __p13_adminTok = sessionStorage.getItem('yunfaka_admin_token') || ''; } catch(e){}
+  if (__p13_adminTok){
   fetch('/api/state', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {'Content-Type':'application/json','X-Admin-Token':__p13_adminTok},
     body: JSON.stringify({
       db: { products:[], orders:[], cards:[], members:[], recharges:[], categories:[], config:{} },
       baseRev: 0,
@@ -6111,10 +6114,7 @@ setTimeout(function(){
   })
   .then(function(r){
     if (r.status === 403){
-      console.error('%c[P13] ❌ POST 被拒绝 403 —— ACCESS_TOKEN 未配置或不对', 'color:#ef4444;font-weight:bold;font-size:13px');
-      console.error('   → 请从 Cloudflare 环境变量复制 ACCESS_TOKEN，然后执行：');
-      console.error('   → yfSetToken("你的token值")');
-      if (window.toast) window.toast('❌ 服务端拒绝写入：需要 ACCESS_TOKEN', 'error');
+      console.error('%c[P13] ❌ POST 被拒绝 403 —— 管理员 token 失效，请重新登录', 'color:#ef4444;font-weight:bold;font-size:13px');
     } else if (r.status === 200){
       console.log('%c[P13] ✅ POST 权限正常', 'color:#10b981;font-weight:bold');
     } else {
@@ -6122,6 +6122,9 @@ setTimeout(function(){
     }
   })
   .catch(function(e){ console.warn('[P13] POST 探测失败:', e); });
+  } else {
+    console.log('%c[P13] 未登录管理员，跳过 POST 权限探测', 'color:#6b7280;font-size:12px');
+  }
 }, 2500);
 
 /* ===== 4. 保存后强制验证：3 秒后检查服务端是否真的保存了 ===== */

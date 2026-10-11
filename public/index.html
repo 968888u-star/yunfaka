@@ -8124,5 +8124,405 @@ console.log(
 
 })();
 </script>
+<!-- ============================================================
+     P28 · 前后端彻底分离（前端不再存密码/配置，所有写操作走后端）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* ============ 1. 清空所有本地敏感缓存 ============ */
+[
+  'yf_config_override',     // P11 旧配置备份
+  'yf_cfg_v1',              // P18 旧配置备份
+  'yf_db_backup_v1',        // P24 本地全量备份
+  'yf_admin_login_fails',   // P3 本地锁定
+  'yf_admin_fails',         // P27 本地锁定
+  'yunfaka_db_v15'          // 旧主数据库缓存
+].forEach(k => { try { localStorage.removeItem(k); } catch(e){} });
+
+/* ============ 2. 内存缓存 ============ */
+window.__DB = null;
+window.__REV = 0;
+window.__LAST_DB = null;
+
+var EMPTY_DB = function(){
+  return {
+    seq: { product: 0, card: 0, category: 0 },
+    config: { site_name: '云发卡', tg_btn_color: '#0088cc', pay_usdt_rate: 7.2 },
+    categories: [], products: [], cards: [], orders: [], members: [], recharges: []
+  };
+};
+
+/* ============ 3. loadDB：从内存读 ============ */
+window.loadDB = function(){
+  return window.__DB || EMPTY_DB();
+};
+
+/* ============ 4. saveDB：有 token 全权写，无 token 走 public ============ */
+function hasAdminToken(){
+  return !!sessionStorage.getItem('yunfaka_admin_token');
+}
+
+function postFullDb(db, token){
+  return fetch('/api/state?t=' + Date.now(), { cache: 'no-store' })
+    .then(r => r.json())
+    .then(d => {
+      const rev = (d && d.rev) || 0;
+      return fetch('/api/state', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': token
+        },
+        body: JSON.stringify({ db, baseRev: rev })
+      });
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.ok){ window.__REV = d.rev; return d; }
+      throw new Error((d && d.msg) || '保存失败');
+    });
+}
+
+function analyzeDiff(oldDb, newDb){
+  if (!oldDb) return null;
+  const oldOrders = oldDb.orders || [];
+  const newOrders = newDb.orders || [];
+  if (newOrders.length === oldOrders.length + 1){
+    return { type: 'order', data: newOrders[0] };
+  }
+  const oldRc = oldDb.recharges || [];
+  const newRc = newDb.recharges || [];
+  if (newRc.length === oldRc.length + 1){
+    return { type: 'recharge', data: newRc[0] };
+  }
+  const oldMem = oldDb.members || [];
+  const newMem = newDb.members || [];
+  if (newMem.length === oldMem.length + 1){
+    return { type: 'member', data: newMem[newMem.length - 1] };
+  }
+  return null;
+}
+
+window.saveDB = function(db){
+  window.__DB = db;
+
+  const token = sessionStorage.getItem('yunfaka_admin_token') || '';
+  if (token){
+    return postFullDb(db, token).catch(e => {
+      console.warn('[P28] 保存失败:', e.message);
+      if (window.toast) window.toast('保存失败：' + e.message, 'error');
+      return { ok: false, msg: e.message };
+    });
+  }
+
+  // 无 admin token：只接受"新增订单/充值/会员"三种意图
+  const diff = analyzeDiff(window.__LAST_DB, db);
+  if (!diff){
+    console.warn('[P28] 无 admin token，拒绝写入（无有效差异）');
+    return Promise.resolve({ ok: false, msg: '请先登录管理后台' });
+  }
+
+  let publicBody = { action: '' };
+  if (diff.type === 'order'){
+    const o = diff.data;
+    publicBody = {
+      action: 'create_order',
+      order_no: o.order_no,
+      product_id: o.product_id,
+      sku_id: o.sku_id || 0,
+      quantity: o.quantity,
+      secret: o.secret,
+      username: o.username || '',
+      use_balance: (o.balance_used || 0) > 0,
+      pay_method: o.pay_method
+    };
+  } else if (diff.type === 'recharge'){
+    const r = diff.data;
+    publicBody = {
+      action: 'create_recharge',
+      username: r.username,
+      amount: r.amount,
+      method: r.method
+    };
+  } else if (diff.type === 'member'){
+    const m = diff.data;
+    publicBody = {
+      action: 'register_member',
+      username: m.username,
+      password: m._plainPassword || '',
+      secret: m._plainSecret || ''
+    };
+  }
+
+  return fetch('/api/public', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(publicBody)
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d && d.ok){
+      setTimeout(() => pullServerData().then(() => {
+        if (window.route) window.route();
+      }), 300);
+      return d;
+    }
+    console.warn('[P28] public 写入失败:', d && d.msg);
+    if (window.toast) window.toast((d && d.msg) || '操作失败', 'error');
+    return { ok: false, msg: (d && d.msg) || '失败' };
+  })
+  .catch(e => {
+    console.warn('[P28] public 网络错误:', e);
+    return { ok: false, msg: e.message };
+  });
+};
+
+/* ============ 5. route：__DB 未就绪时显示加载中 ============ */
+var _origRoute = window.route;
+window.route = function(){
+  if (window.__DB === null){
+    var app = document.getElementById('app');
+    if (app) app.innerHTML = '<div class="loading">正在从服务器加载数据…</div>';
+    return;
+  }
+  return _origRoute.apply(this, arguments);
+};
+
+/* ============ 6. pullServerData：拉服务器数据到内存 ============ */
+function pullServerData(){
+  const token = sessionStorage.getItem('yunfaka_admin_token') || '';
+  const headers = token ? { 'X-Admin-Token': token } : {};
+  return fetch('/api/state?t=' + Date.now(), { cache: 'no-store', headers })
+    .then(r => r.json())
+    .then(d => {
+      if (!d || !d.ok || !d.db) return d;
+      window.__DB = d.db;
+      window.__REV = d.rev || 0;
+      window.__LAST_DB = JSON.parse(JSON.stringify(d.db));
+      return d;
+    })
+    .catch(e => { console.warn('[P28] pull 失败:', e); });
+}
+window.yfPullServerData = pullServerData;
+
+/* ============ 7. payOrder：变 no-op，后端负责处理 ============ */
+window.payOrder = function(orderNo){
+  console.log('[P28] payOrder 交给后端处理:', orderNo);
+  setTimeout(() => pullServerData().then(() => { if (window.route) window.route(); }), 400);
+  setTimeout(() => pullServerData().then(() => { if (window.route) window.route(); }), 1500);
+};
+
+/* ============ 8. 屏蔽 P3 本地失败锁定 ============ */
+window.checkAdminLock = function(){ return ''; };
+
+/* ============ 9. 屏蔽 P24 本地备份推送 ============ */
+window.yfForcePush = function(){ console.log('[P28] 已禁用'); };
+
+/* ============ 10. 覆盖 adminLogin：纯后端 ============ */
+window.adminLogin = function(){
+  var input = document.getElementById('adm-pwd');
+  var pwd = input ? input.value : '';
+  if (!pwd){ if (window.toast) window.toast('请输入密码', 'error'); return; }
+  var btn = document.getElementById('adm-login-btn');
+  if (btn){ btn.disabled = true; btn.textContent = '登录中…'; }
+  var resetBtn = function(){ if (btn){ btn.disabled = false; btn.textContent = '登录'; } };
+
+  fetch('/api/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pwd })
+  })
+  .then(r => r.json())
+  .then(d => {
+    resetBtn();
+    if (d && d.ok && d.token){
+      sessionStorage.setItem('yunfaka_admin_token', d.token);
+      sessionStorage.setItem('yunfaka_admin', '1');
+      if (window.toast){
+        if (d.need_change) window.toast('⚠️ 请立即修改默认密码', 'warn');
+        else window.toast('登录成功', 'success');
+      }
+      pullServerData().then(() => {
+        if (window.applySiteConfig) window.applySiteConfig();
+        if (window.renderAdminPanel) window.renderAdminPanel();
+      });
+    } else {
+      if (window.toast) window.toast((d && d.msg) || '密码错误', 'error');
+    }
+  })
+  .catch(e => {
+    resetBtn();
+    if (window.toast) window.toast('网络错误：' + e.message, 'error');
+  });
+};
+
+/* ============ 11. 覆盖 adminLogout ============ */
+window.adminLogout = function(){
+  sessionStorage.removeItem('yunfaka_admin_token');
+  sessionStorage.removeItem('yunfaka_admin');
+  if (window.toast) window.toast('已退出登录');
+  window.__DB = null;
+  window.__LAST_DB = null;
+  pullServerData().then(() => {
+    location.hash = '#/';
+    if (window.route) window.route();
+  });
+};
+
+/* ============ 12. 覆盖 renderAdminPage ============ */
+window.renderAdminPage = function(){
+  if (sessionStorage.getItem('yunfaka_admin') === '1'){
+    if (window.renderAdminPanel) return window.renderAdminPanel();
+  }
+  var app = document.getElementById('app');
+  if (!app) return;
+  app.innerHTML =
+    '<div class="card panel" style="max-width:380px;margin:60px auto">' +
+      '<h2>管理后台</h2>' +
+      '<p class="muted" style="font-size:13px;margin-top:-8px">' +
+        '默认密码：<b>admin888</b>（登录后可在「设置」里修改）</p>' +
+      '<label class="field"><span>管理密码</span>' +
+        '<input id="adm-pwd" type="password" placeholder="请输入管理密码" autocomplete="current-password">' +
+      '</label>' +
+      '<button class="btn primary block" id="adm-login-btn" onclick="adminLogin()">登录</button>' +
+    '</div>';
+  var inp = document.getElementById('adm-pwd');
+  if (inp){
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') window.adminLogin(); });
+    setTimeout(() => inp.focus(), 50);
+  }
+};
+
+/* ============ 13. 覆盖 saveAdminPwd ============ */
+window.saveAdminPwd = function(){
+  var oldEl = document.getElementById('pwd-old');
+  var newEl = document.getElementById('pwd-new');
+  var new2El = document.getElementById('pwd-new2');
+  var oldPwd = oldEl ? oldEl.value : '';
+  var newPwd = newEl ? newEl.value : '';
+  var new2 = new2El ? new2El.value : '';
+  if (!oldPwd){ if (window.toast) window.toast('请输入当前密码', 'error'); return; }
+  if (!newPwd || newPwd.length < 6){ if (window.toast) window.toast('新密码至少 6 位', 'error'); return; }
+  if (newPwd !== new2){ if (window.toast) window.toast('两次输入不一致', 'error'); return; }
+
+  // 先验证旧密码：调 admin-login
+  fetch('/api/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: oldPwd })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (!d || !d.ok){
+      if (window.toast) window.toast('当前密码错误', 'error');
+      throw new Error('old pwd wrong');
+    }
+    // 用新 token 提交改密
+    const token = d.token;
+    sessionStorage.setItem('yunfaka_admin_token', token);
+    return fetch('/api/admin-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+      body: JSON.stringify({ action: 'save_settings', config: {}, new_admin_password: newPwd })
+    });
+  })
+  .then(r => r && r.json())
+  .then(d => {
+    if (d && d.ok){
+      if (window.toast) window.toast('管理密码已修改 ✅', 'success');
+      if (oldEl) oldEl.value = '';
+      if (newEl) newEl.value = '';
+      if (new2El) new2El.value = '';
+    } else {
+      if (window.toast) window.toast((d && d.msg) || '修改失败', 'error');
+    }
+  })
+  .catch(e => { if (e.message !== 'old pwd wrong') console.warn('[P28]', e); });
+};
+
+/* ============ 14. 覆盖 saveSettings ============ */
+window.saveSettings = function(){
+  if (!hasAdminToken()){
+    if (window.toast) window.toast('请先登录管理后台', 'error');
+    return;
+  }
+  function V(id, fb){ var e = document.getElementById(id); return e ? String(e.value).trim() : (fb || ''); }
+  function C(id, fb){ var e = document.getElementById(id); return e ? !!e.checked : !!fb; }
+  function N(id, fb){ var e = document.getElementById(id); if (!e) return fb;
+    var v = parseFloat(e.value); return isNaN(v) ? fb : v; }
+
+  var payload = {
+    site_name: V('cfg-name', ''),
+    hero_subtitle: V('cfg-hero-sub', ''),
+    tg_username: V('cfg-tg', '').replace(/^@/, ''),
+    tg_btn_color: V('cfg-tg-color', '#0088cc'),
+    tg_bot_token: V('cfg-tg-bot-token', ''),
+    tg_chat_id: V('cfg-tg-chat-id', ''),
+    pay_alipay_enabled: C('cfg-alipay-enabled', true),
+    pay_alipay_mode: V('cfg-alipay-mode', 'redpacket'),
+    pay_alipay_redpacket_prefix: V('cfg-rp-prefix', 'YFK').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6),
+    pay_alipay_qr: V('cfg-alipay-qr', ''),
+    pay_usdt_enabled: C('cfg-usdt-enabled', true),
+    pay_usdt_address: V('cfg-usdt-address', ''),
+    pay_usdt_network: V('cfg-usdt-network', 'TRC20'),
+    pay_usdt_rate: N('cfg-usdt-rate', 7.2),
+    balance_enabled: C('cfg-balance-enabled', true),
+    recharge_min: Math.round(N('cfg-recharge-min', 10) * 100),
+    luban_markup: N('cfg-luban-markup', 1.3),
+    luban_common_cost: N('cfg-luban-common-cost', 2)
+  };
+
+  fetch('/api/admin-action', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Token': sessionStorage.getItem('yunfaka_admin_token') || ''
+    },
+    body: JSON.stringify({ action: 'save_settings', config: payload })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d && d.ok){
+      if (window.toast) window.toast('设置已保存 ✅', 'success');
+      pullServerData().then(() => {
+        if (window.applySiteConfig) window.applySiteConfig();
+        if (window.renderSettings) window.renderSettings();
+      });
+    } else {
+      if (window.toast) window.toast((d && d.msg) || '保存失败', 'error');
+    }
+  })
+  .catch(e => {
+    if (window.toast) window.toast('网络错误：' + e.message, 'error');
+  });
+};
+
+/* ============ 15. 屏蔽 P22 冗余拉取 ============ */
+window.yfPullNow = pullServerData;
+
+/* ============ 16. 首次加载 + 定时轮询 ============ */
+pullServerData().then(() => {
+  if (window.applySiteConfig) window.applySiteConfig();
+  if (window.route) window.route();
+});
+
+setInterval(pullServerData, 10000);
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden) setTimeout(pullServerData, 300);
+});
+window.addEventListener('online', function(){ setTimeout(pullServerData, 300); });
+
+console.log(
+  '%c[P28] ✅ 前后端彻底分离已启用：前端不存密码/配置，全部走后端 API',
+  'color:#10b981;font-weight:bold;font-size:13px'
+);
+console.log(
+  '%c  管理员登录：/api/admin-login | 写操作：/api/admin-action | 普通用户：/api/public',
+  'color:#6b7280;font-size:12px'
+);
+})();
+</script>
 </body>
 </html>

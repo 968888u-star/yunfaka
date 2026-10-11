@@ -4403,7 +4403,9 @@ window.yfSmmSaveCategoryEdits = function(){
               '<button class="btn sm primary" onclick="yfSmmBatchMoveTo()">📥 移入分类</button>' +
               '<button class="btn sm ghost" style="background:#fff" onclick="yfSmmBatchMoveOut()">📤 移出到「未分类」</button>' +
               '<button class="btn sm ghost" style="background:#fff" onclick="yfSmmBatchSelectAllInCat()">☑ 选中该分类全部</button>' +
-              '<button class="btn sm ghost" style="background:#fff" onclick="yfSmmClearSelection()">✖ 清空</button>';
+              '<button class="btn sm ghost" style="background:#fff" onclick="yfSmmClearSelection()">✖ 清空</button>' +
+              '<button class="btn sm" style="background:#10b981;color:#fff;border:none" onclick="yfSmmBatchSetActive(true)">☑ 批量上架</button>' +
+              '<button class="btn sm ghost" style="background:#fff" onclick="yfSmmBatchSetActive(false)">☒ 批量下架</button>';
             firstPanel.parentNode.insertBefore(bar, firstPanel.nextSibling);
           }
         } else {
@@ -4476,6 +4478,22 @@ window.yfSmmBatchMoveTo = function(){
   window.saveDB(db);
   if (window.yfLog) window.yfLog('smmBatchMoveTo', '移入「' + target + '」' + count + ' 个');
   _toast('✅ 已将 ' + count + ' 个商品移入「' + target + '」','success');
+  if (window.renderSmmTab) window.renderSmmTab();
+};
+window.yfSmmBatchSetActive = function(active){
+  var ids = window.yfSmmGetSelectedIds();
+  if (!ids.length){ _toast('请先勾选商品','warn'); return; }
+  var db = window.loadDB();
+  var count = 0;
+  (db.products || []).forEach(function(p){
+    if (p.source === 'smm' && ids.indexOf(String(p.smm_service_id)) >= 0){
+      p.active = !!active;
+      count++;
+    }
+  });
+  window.saveDB(db);
+  if (window.yfLog) window.yfLog('smmBatchSetActive', (active ? '上架' : '下架') + count + ' 个 SMM 商品');
+  _toast('✅ 已' + (active ? '上架' : '下架') + ' ' + count + ' 个商品','success');
   if (window.renderSmmTab) window.renderSmmTab();
 };
 window.yfSmmBatchMoveOut = function(){

@@ -50,7 +50,8 @@ export async function onRequest(context) {
       const admin = await requireAdmin(request, env);
       if (!admin) return jsonError('无权限写入，请先登录管理后台', 403, env, request);
 
-      const rl = await rateLimit(env.YUNFAKA_KV, 'write:' + getClientIp(request), 20, 10000);
+      // 写入限流：放宽到 200次/10秒（SMM 批量上架/改价操作频繁，20次太容易误触）
+      const rl = await rateLimit(env.YUNFAKA_KV, 'write:' + getClientIp(request), 200, 10000);
       if (rl.blocked) return jsonError('操作过于频繁，请稍后再试', 429, env, request);
 
       const cl = Number(request.headers.get('content-length') || 0);
@@ -98,13 +99,22 @@ export async function onRequest(context) {
       if (db.config) delete db.config.admin_pwd_hash;
 
       const newRev = currentRev + 1;
-      await env.YUNFAKA_KV.put(
-        'state',
-        JSON.stringify({ rev: newRev, db, updated_at: Date.now() })
-      );
+      let payload;
+      try {
+        payload = JSON.stringify({ rev: newRev, db, updated_at: Date.now() });
+      } catch (e2) {
+        return jsonError('数据序列化失败：' + (e2 && e2.message ? e2.message : String(e2)), 400, env, request, e2);
+      }
+      if (payload.length > 24 * 1024 * 1024) {
+        return jsonError('数据过大（' + Math.round(payload.length / 1024 / 1024) + 'MB），超过 KV 存储限制，请清理卡密/订单', 413, env, request);
+      }
+      await env.YUNFAKA_KV.put('state', payload);
       return jsonOk({ ok: true, rev: newRev }, env, request);
     } catch (e) {
-      return jsonError('保存失败', 400, env, request, e);
+      // 返回真实错误信息，方便诊断（之前只返回"保存失败"，问题被吞掉）
+      const detail = (e && e.message) ? e.message : String(e);
+      console.error('[state POST] 保存失败:', detail, e && e.stack);
+      return jsonError('保存失败：' + detail, 400, env, request, e);
     }
   }
 

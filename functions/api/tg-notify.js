@@ -1,7 +1,7 @@
+import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
 export async function onRequest(context) {
   const { request, env } = context;
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
@@ -64,6 +64,6 @@ export async function onRequest(context) {
 
     return Response.json({ ok: true }, { headers: corsHeaders });
   } catch (e) {
-    return Response.json({ ok: false, msg: e.message }, { headers: corsHeaders });
+    return Response.json({ ok: false, msg: '操作失败，请稍后重试' }, { headers: corsHeaders });
   }
 }

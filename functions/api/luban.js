@@ -1,3 +1,4 @@
+import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
 // ==================================================================
 // LubanSms API 统一入口（完整版）
 // 路径名来自官方文档，不要修改
@@ -6,7 +7,6 @@
 export async function onRequest(context) {
   const { request, env } = context;
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
@@ -167,6 +167,6 @@ export async function onRequest(context) {
 
     return ok({ ok: false, msg: '未知 action: ' + action });
   } catch (e) {
-    return ok({ ok: false, msg: e.message });
+    return ok({ ok: false, msg: '操作失败，请稍后重试' });
   }
 }

@@ -1,166 +1,146 @@
-// functions/api/admin-action.js · 后台敏感操作统一入口（后端执行，防前端篡改）
-// 所有操作必须携带 X-Admin-Token（由 /api/admin-login 签发）
-// POST { action, ...params }
-import { verifyToken, getSecret, hashPwd } from '../_lib/auth.js';
+// functions/api/admin-action.js · 后台敏感操作统一入口（安全加固版）
+// 变更：
+//   1. 统一 requireAdmin 鉴权（强制 ADMIN_SECRET）
+//   2. hashPwd 改为 async（PBKDF2），调用处加 await
+//   3. 操作日志记录 IP + UA
+//   4. CORS 收紧、错误脱敏、操作限流
+import { hashPwd } from '../_lib/auth.js';
+import { requireAdmin, corsHeaders, optionsResponse, jsonError, jsonOk, rateLimit, getClientIp } from '../_lib/common.js';
 
 function nowStr() { return new Date().toISOString().slice(0, 19).replace('T', ' '); }
-function addLog(db, action, detail) {
+function addLog(db, action, detail, ip, ua) {
   if (!Array.isArray(db.logs)) db.logs = [];
-  db.logs.unshift({ time: nowStr(), action, detail });
+  db.logs.unshift({ time: nowStr(), action, detail, ip: ip || '', ua: (ua || '').slice(0, 80) });
   if (db.logs.length > 500) db.logs.length = 500;
 }
 
 export async function onRequest(context) {
   const { request, env } = context;
-  const cors = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,X-Admin-Token',
-  };
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-  if (request.method !== 'POST') return Response.json({ ok: false, msg: 'Method not allowed' }, { status: 405, headers: cors });
+  if (request.method === 'OPTIONS') return optionsResponse(request, env);
+  if (request.method !== 'POST') return jsonError('Method not allowed', 405, env, request);
 
-  // ⭐ 校验管理员 session token
-  const token = request.headers.get('x-admin-token') || request.headers.get('X-Admin-Token') || '';
-  const payload = await verifyToken(token, getSecret(env));
-  if (!payload || payload.sub !== 'admin') {
-    return Response.json({ ok: false, msg: '未登录或登录已过期，请重新登录' }, { status: 401, headers: cors });
-  }
+  const admin = await requireAdmin(request, env);
+  if (!admin) return jsonError('未登录或登录已过期，请重新登录', 401, env, request);
 
+  // 管理员操作限流（防刷）
+  const ip = getClientIp(request);
+  const rl = await rateLimit(env.YUNFAKA_KV, 'adminaction:' + ip, 60, 60000);
+  if (rl.blocked) return jsonError('操作过于频繁，请稍后再试', 429, env, request);
+
+  const ua = request.headers.get('user-agent') || '';
   try {
     const body = await request.json();
     const action = body.action || '';
     const raw = await env.YUNFAKA_KV.get('state');
-    if (!raw) return Response.json({ ok: false, msg: '无数据' }, { headers: cors });
+    if (!raw) return jsonError('无数据', 404, env, request);
     const state = JSON.parse(raw);
     const db = state.db;
     let changed = false;
 
-    // ========== 1. 审核通过并发货 ==========
     if (action === 'approve_order') {
       const o = (db.orders || []).find(x => x.order_no === body.order_no);
-      if (!o) return Response.json({ ok: false, msg: '订单不存在' }, { headers: cors });
-      if (o.status !== 'pending_review') return Response.json({ ok: false, msg: '订单状态不是待审核' }, { headers: cors });
+      if (!o) return jsonError('订单不存在', 404, env, request);
+      if (o.status !== 'pending_review') return jsonError('订单状态不是待审核', 400, env, request);
       if (o.source === 'luban' || o.source === 'smm') {
         o.status = 'processing'; o.approved_at = nowStr();
-        addLog(db, 'approve_order', `订单 ${o.order_no}(${o.product_name}) 审核通过，转上游处理`);
+        addLog(db, 'approve_order', `订单 ${o.order_no}(${o.product_name}) 审核通过，转上游处理`, ip, ua);
         changed = true;
       } else {
         const orderSku = o.sku_id || 0;
         const available = (db.cards || []).filter(c => c.product_id === o.product_id && c.status === 'unused' && String(c.sku_id || 0) === String(orderSku));
-        if (available.length < o.quantity) {
-          return Response.json({ ok: false, msg: `库存不足：需要 ${o.quantity} 条，仅余 ${available.length} 条` }, { headers: cors });
-        }
+        if (available.length < o.quantity) return jsonError(`库存不足：需要 ${o.quantity} 条，仅余 ${available.length} 条`, 400, env, request);
         const usedIds = new Set((db.orders || []).flatMap(x => x.cards || []));
         const safe = available.filter(c => !usedIds.has(c.content));
         const toUse = safe.length >= o.quantity ? safe.slice(0, o.quantity) : available.slice(0, o.quantity);
         toUse.forEach(c => { c.status = 'used'; c.order_no = o.order_no; c.used_at = nowStr(); o.cards.push(c.content); });
         o.status = 'delivered'; o.delivered_at = nowStr(); o.approved_at = nowStr();
-        addLog(db, 'approve_order', `订单 ${o.order_no}(${o.product_name}×${o.quantity}) 审核通过并发货`);
+        addLog(db, 'approve_order', `订单 ${o.order_no}(${o.product_name}×${o.quantity}) 审核通过并发货`, ip, ua);
         changed = true;
       }
     }
-
-    // ========== 2. 驳回订单（自动退余额） ==========
     else if (action === 'reject_order') {
       const o = (db.orders || []).find(x => x.order_no === body.order_no);
-      if (!o) return Response.json({ ok: false, msg: '订单不存在' }, { headers: cors });
+      if (!o) return jsonError('订单不存在', 404, env, request);
       if (o.balance_used > 0 && o.username) {
         const m = (db.members || []).find(x => x.username === o.username);
         if (m) { m.balance = (m.balance || 0) + o.balance_used; }
         o.refunded_amount = o.balance_used; o.refunded_at = nowStr(); o.balance_used = 0;
       }
-      o.status = 'rejected'; o.rejected_at = nowStr(); o.reject_reason = body.reason || '';
-      addLog(db, 'reject_order', `订单 ${o.order_no} 被驳回${body.reason ? '：' + body.reason : ''}`);
+      o.status = 'rejected'; o.rejected_at = nowStr(); o.reject_reason = (body.reason || '').slice(0, 200);
+      addLog(db, 'reject_order', `订单 ${o.order_no} 被驳回${body.reason ? '：' + body.reason : ''}`, ip, ua);
       changed = true;
     }
-
-    // ========== 3. 调整会员余额 ==========
     else if (action === 'adjust_balance') {
       const m = (db.members || []).find(x => x.username === body.username);
-      if (!m) return Response.json({ ok: false, msg: '会员不存在' }, { headers: cors });
+      if (!m) return jsonError('会员不存在', 404, env, request);
       const delta = Math.round(Number(body.delta) || 0);
-      if (delta === 0) return Response.json({ ok: false, msg: '调整金额不能为0' }, { headers: cors });
+      if (delta === 0) return jsonError('调整金额不能为0', 400, env, request);
       const newBal = (m.balance || 0) + delta;
-      if (newBal < 0) return Response.json({ ok: false, msg: '调整后余额不能为负' }, { headers: cors });
+      if (newBal < 0) return jsonError('调整后余额不能为负', 400, env, request);
       m.balance = newBal;
-      addLog(db, 'adjust_balance', `会员 ${m.username} 余额 ${delta > 0 ? '+' : ''}${(delta / 100).toFixed(2)}元 → ¥${(newBal / 100).toFixed(2)}（${body.reason || '未说明'}）`);
+      addLog(db, 'adjust_balance', `会员 ${m.username} 余额 ${delta > 0 ? '+' : ''}${(delta / 100).toFixed(2)}元 → ¥${(newBal / 100).toFixed(2)}（${(body.reason || '未说明').slice(0, 100)}）`, ip, ua);
       changed = true;
     }
-
-    // ========== 4. 删除订单 ==========
     else if (action === 'delete_order') {
       const idx = (db.orders || []).findIndex(x => x.order_no === body.order_no);
-      if (idx < 0) return Response.json({ ok: false, msg: '订单不存在' }, { headers: cors });
+      if (idx < 0) return jsonError('订单不存在', 404, env, request);
       const o = db.orders[idx];
       db.orders.splice(idx, 1);
-      addLog(db, 'delete_order', `删除订单 ${o.order_no}(${o.product_name})`);
+      addLog(db, 'delete_order', `删除订单 ${o.order_no}(${o.product_name})`, ip, ua);
       changed = true;
     }
-
-    // ========== 5. 保存设置（含敏感字段） ==========
     else if (action === 'save_settings') {
       const cfg = body.config || {};
-      // 只允许白名单字段，防止注入其他字段
       const allowed = ['site_name', 'tg_chat_id', 'tg_username', 'tg_bot_token', 'tg_btn_color',
         'pay_usdt_address', 'pay_usdt_qr', 'pay_usdt_rate', 'pay_usdt_network', 'pay_usdt_enabled',
         'pay_alipay_enabled', 'pay_alipay_mode', 'pay_alipay_qr', 'pay_alipay_note', 'pay_alipay_redpacket_prefix',
-        'recharge_min', 'recharge_bonus_pct', 'recharge_bonus_text', 'admin_pwd_hash'];
+        'recharge_min', 'recharge_bonus_pct', 'recharge_bonus_text', 'smm_markup', 'smm_cost_currency'];
       if (!db.config) db.config = {};
-      allowed.forEach(k => { if (cfg[k] !== undefined) db.config[k] = cfg[k]; });
-      // 修改管理员密码需单独校验
+      allowed.forEach(k => { if (cfg[k] !== undefined) db.config[k] = String(cfg[k]).slice(0, 500); });
       if (body.new_admin_password) {
-        if (body.new_admin_password.length < 6) return Response.json({ ok: false, msg: '新密码至少6位' }, { headers: cors });
-        db.config.admin_pwd_hash = hashPwd(body.new_admin_password);
+        if (String(body.new_admin_password).length < 8) return jsonError('新密码至少8位，建议12位以上含大小写数字符号', 400, env, request);
+        db.config.admin_pwd_hash = await hashPwd(body.new_admin_password);
       }
-      addLog(db, 'save_settings', '修改站点设置');
+      addLog(db, 'save_settings', '修改站点设置', ip, ua);
       changed = true;
     }
-
-    // ========== 6. 重置会员密码 ==========
     else if (action === 'reset_member_pwd') {
       const m = (db.members || []).find(x => x.username === body.username);
-      if (!m) return Response.json({ ok: false, msg: '会员不存在' }, { headers: cors });
-      if (!body.new_password || body.new_password.length < 6) return Response.json({ ok: false, msg: '新密码至少6位' }, { headers: cors });
-      m.password = hashPwd(body.new_password);
-      addLog(db, 'reset_member_pwd', `重置会员 ${m.username} 的密码`);
+      if (!m) return jsonError('会员不存在', 404, env, request);
+      if (!body.new_password || String(body.new_password).length < 6) return jsonError('新密码至少6位', 400, env, request);
+      m.password = await hashPwd(body.new_password);
+      addLog(db, 'reset_member_pwd', `重置会员 ${m.username} 的密码`, ip, ua);
       changed = true;
     }
-
-    // ========== 7. 删除会员 ==========
     else if (action === 'delete_member') {
       const idx = (db.members || []).findIndex(x => x.username === body.username);
-      if (idx < 0) return Response.json({ ok: false, msg: '会员不存在' }, { headers: cors });
+      if (idx < 0) return jsonError('会员不存在', 404, env, request);
       db.members.splice(idx, 1);
-      addLog(db, 'delete_member', `删除会员 ${body.username}`);
+      addLog(db, 'delete_member', `删除会员 ${body.username}`, ip, ua);
       changed = true;
     }
-
-    // ========== 8. 缺货/失败订单自动退款（也可手动触发） ==========
     else if (action === 'refund_order') {
       const o = (db.orders || []).find(x => x.order_no === body.order_no);
-      if (!o) return Response.json({ ok: false, msg: '订单不存在' }, { headers: cors });
+      if (!o) return jsonError('订单不存在', 404, env, request);
       if (o.balance_used > 0 && o.username) {
         const m = (db.members || []).find(x => x.username === o.username);
         if (m) { m.balance = (m.balance || 0) + o.balance_used; }
         o.refunded_amount = o.balance_used; o.refunded_at = nowStr(); o.balance_used = 0;
       }
       o.status = 'rejected'; o.refund_auto = true;
-      addLog(db, 'refund_order', `订单 ${o.order_no} 退款 ¥${((o.refunded_amount || 0) / 100).toFixed(2)}`);
+      addLog(db, 'refund_order', `订单 ${o.order_no} 退款 ¥${((o.refunded_amount || 0) / 100).toFixed(2)}`, ip, ua);
       changed = true;
     }
-
     else {
-      return Response.json({ ok: false, msg: '未知操作: ' + action }, { headers: cors });
+      return jsonError('未知操作: ' + String(action).slice(0, 30), 400, env, request);
     }
 
     if (changed) {
       state.rev = (state.rev || 0) + 1;
       await env.YUNFAKA_KV.put('state', JSON.stringify(state));
     }
-    return Response.json({ ok: true, rev: state.rev }, { headers: cors });
+    return jsonOk({ ok: true, rev: state.rev }, env, request);
   } catch (e) {
-    return Response.json({ ok: false, msg: e.message }, { status: 500, headers: cors });
+    return jsonError('操作失败', 500, env, request, e);
   }
 }

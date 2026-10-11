@@ -1,3 +1,4 @@
+import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
 export async function onRequest(context) {
     const { request, env } = context;
     // 自动兼容不同名字的 KV 绑定

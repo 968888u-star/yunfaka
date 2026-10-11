@@ -1,3 +1,4 @@
+import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
 // functions/api/tg-send.js · Telegram 消息发送代理（后端持有 Token，前端不再暴露）
 // POST { text, chat_id?, order_no?, type? }
 //   - 不指定 chat_id 时使用 db.config.tg_chat_id（店主）
@@ -6,7 +7,6 @@ export async function onRequest(context) {
   const { request, env } = context;
   const cors = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
@@ -47,6 +47,6 @@ export async function onRequest(context) {
     if (!d.ok) return Response.json({ ok: false, msg: d.description || 'TG 发送失败' }, { headers: cors });
     return Response.json({ ok: true }, { headers: cors });
   } catch (e) {
-    return Response.json({ ok: false, msg: e.message }, { headers: cors });
+    return Response.json({ ok: false, msg: '操作失败，请稍后重试' }, { headers: cors });
   }
 }

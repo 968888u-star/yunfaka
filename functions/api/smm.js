@@ -1,3 +1,4 @@
+import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
 // functions/api/smm.js · chinayinliu.com SMM 代理 (Cloudflare Pages Function)
 
 export async function onRequest(context) {
@@ -6,7 +7,6 @@ export async function onRequest(context) {
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
-        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       }
@@ -63,7 +63,7 @@ export async function onRequest(context) {
     catch (e) { return json({ ok: false, msg: '上游返回非JSON', raw: text.substring(0, 500) }); }
     return json({ ok: true, data });
   } catch (e) {
-    return json({ ok: false, msg: 'fetch failed: ' + e.message });
+    return json({ ok: false, msg: '操作失败，请稍后重试' });
   }
 }
 
@@ -71,7 +71,6 @@ function json(obj) {
   return new Response(JSON.stringify(obj), {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-    }
+      }
   });
 }

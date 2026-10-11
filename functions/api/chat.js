@@ -1,10 +1,10 @@
+import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
 // functions/api/chat.js · 在线客服消息中转（Cloudflare Pages Function）
 // 客户消息存KV并转发到店主TG；店主在TG回复带 #会话ID 前缀，系统解析后存回对应会话
 export async function onRequest(context) {
   const { request, env } = context;
   const cors = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
@@ -76,7 +76,7 @@ export async function onRequest(context) {
 
     return Response.json({ ok: false, msg: 'Method not allowed' }, { headers: cors, status: 405 });
   } catch (e) {
-    return Response.json({ ok: false, msg: e.message }, { headers: cors, status: 500 });
+    return Response.json({ ok: false, msg: '操作失败，请稍后重试' }, { headers: cors, status: 500 });
   }
 }
 

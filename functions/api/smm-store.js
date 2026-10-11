@@ -1,10 +1,11 @@
+import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
 // functions/api/smm-store.js · SMM商品多设备同步（GitHub持久化存储）
 // 需要在Cloudflare Pages → Settings → Environment variables 添加 GH_TOKEN（GitHub Personal Access Token）
 const GH_REPO = '968888u-star/yunfaka';
 const GH_PATH = 'public/smm-data.json';
 const GH_API = 'https://api.github.com/repos/' + GH_REPO + '/contents/' + GH_PATH;
 const GH_RAW = 'https://raw.githubusercontent.com/' + GH_REPO + '/main/' + GH_PATH;
-const cors = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+const cors = { 'Content-Type': 'application/json', };
 
 async function ghGetJson() {
   try {
@@ -46,6 +47,6 @@ export async function onRequest(context) {
     }
     return new Response(JSON.stringify({ ok: false, msg: 'method not allowed' }), { headers: cors, status: 405 });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, msg: e.message }), { headers: cors, status: 500 });
+    return new Response(JSON.stringify({ ok: false, msg: '操作失败，请稍后重试' }), { headers: cors, status: 500 });
   }
 }

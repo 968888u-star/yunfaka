@@ -1,3 +1,8 @@
+/*
+  Cloudflare Pages _headers · 安全加固版
+  文档：https://developers.cloudflare.com/pages/configuration/headers/
+*/
+
 /index.html
   Cache-Control: no-store, no-cache, must-revalidate, max-age=0
   Pragma: no-cache
@@ -10,3 +15,12 @@
 
 /*
   Cache-Control: public, max-age=3600
+  # ===== 安全响应头（全站生效） =====
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-XSS-Protection: 1; mode=block
+  # CSP：允许内联脚本（前端单文件 SPA 依赖内联 JS），限制其他来源
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.trongrid.io https://api.telegram.org https://chinayinliu.com https://lubansms.com https://api.github.com; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'

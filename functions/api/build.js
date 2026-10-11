@@ -1,3 +1,4 @@
+import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
 // functions/api/build.js · 返回当前部署的版本号（Cloudflare 自动注入）
 export async function onRequest(context) {
   const { env } = context;
@@ -14,7 +15,6 @@ export async function onRequest(context) {
     { ok: true, build: String(build).slice(0, 12) },
     {
       headers: {
-        'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
       }
     }

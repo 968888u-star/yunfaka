@@ -8524,5 +8524,31 @@ console.log(
 );
 })();
 </script>
+<script>
+(function(){
+'use strict';
+/* 应急登录：URL 带 ?yflogin=1 自动登录 */
+if (location.search.indexOf('yflogin=1') < 0) return;
+console.log('[应急] 自动登录中…');
+fetch('/api/admin-login', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({ password: 'admin888' })
+})
+.then(r => r.json())
+.then(d => {
+  if (d && d.ok && d.token){
+    sessionStorage.setItem('yunfaka_admin_token', d.token);
+    sessionStorage.setItem('yunfaka_admin', '1');
+    alert('✅ 登录成功！点确定进后台');
+    location.hash = '#/admin';
+    location.reload();
+  } else {
+    alert('❌ 登录失败：' + ((d && d.msg) || '未知错误'));
+  }
+})
+.catch(e => alert('❌ 网络错误：' + e.message));
+})();
+</script>
 </body>
 </html>

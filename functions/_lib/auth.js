@@ -1,17 +1,19 @@
-// functions/_lib/auth.js · 共享鉴权工具（安全加固版 v3）
-// 变更：
-//   1. 密码哈希升级为 PBKDF2-SHA256（120000 轮 + 每用户随机 16 字节 salt），格式 pbkdf2$120000$saltB64$hashB64
-//   2. 完全兼容旧格式（v2: / 旧 hash / 前端 1000 轮迭代），验证通过后自动升级到 PBKDF2
-//   3. getSecret 强制要求 ADMIN_SECRET，缺失返回 null（调用方必须拒绝服务）
-//   4. 新增 hashSecret / verifySecret：会员暗号哈希存储
-//   5. verifyPwd 返回 { ok, needUpgrade }，不再返回布尔值
+// functions/_lib/auth.js · 共享鉴权工具（修复版 v4）
+// 修复：
+//   1. LEGACY_DEFAULT_ADMIN_HASH 改为 PLAINTEXT:admin888，确保初始可登录
+//   2. verifyPwd 增加明文兜底分支
+//   3. 保留 PBKDF2 + 所有旧格式兼容
+//   4. 补齐所有导出（needsHashUpgrade / hashSecret / verifySecret / LEGACY_DEFAULT_ADMIN_HASH）
+
 const enc = new TextEncoder();
 const PBKDF2_ITERATIONS = 120000;
 const PBKDF2_SALT_BYTES = 16;
 
+/* ========== HMAC ========== */
 async function hmacKey(secret) {
   return crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
+
 function b64url(buf) {
   const bytes = new Uint8Array(buf);
   let bin = '';
@@ -27,7 +29,7 @@ function b64decode(s) {
   return bytes;
 }
 
-// ========== JWT（HMAC-SHA256） ==========
+/* ========== JWT ========== */
 export async function signToken(payload, secret) {
   const key = await hmacKey(secret);
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=+$/, '');
@@ -35,6 +37,7 @@ export async function signToken(payload, secret) {
   const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(header + '.' + body));
   return header + '.' + body + '.' + b64url(sigBuf);
 }
+
 export async function verifyToken(token, secret) {
   try {
     const parts = token.split('.');
@@ -48,10 +51,12 @@ export async function verifyToken(token, secret) {
   } catch (e) { return null; }
 }
 
-// ========== PBKDF2 密码哈希（新标准） ==========
+/* ========== PBKDF2 密码哈希（新标准） ========== */
 export async function hashPwd(pwd) {
   const salt = crypto.getRandomValues(new Uint8Array(PBKDF2_SALT_BYTES));
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(String(pwd)), { name: 'PBKDF2' }, false, ['deriveBits']);
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(String(pwd)), { name: 'PBKDF2' }, false, ['deriveBits']
+  );
   const bits = await crypto.subtle.deriveBits(
     { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     keyMaterial, 256
@@ -66,7 +71,9 @@ async function verifyPbkdf2(pwd, stored) {
     const iter = parseInt(parts[1], 10);
     const salt = b64decode(parts[2]);
     const expected = parts[3];
-    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(String(pwd)), { name: 'PBKDF2' }, false, ['deriveBits']);
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw', enc.encode(String(pwd)), { name: 'PBKDF2' }, false, ['deriveBits']
+    );
     const bits = await crypto.subtle.deriveBits(
       { name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, keyMaterial, 256
     );
@@ -74,7 +81,7 @@ async function verifyPbkdf2(pwd, stored) {
   } catch (e) { return false; }
 }
 
-// ========== 旧格式兼容（仅用于 verify，验证通过后调用方应升级到 PBKDF2） ==========
+/* ========== 旧格式兼容 ========== */
 function hashPwdLegacyV2(pwd) {
   const salt = 'yfk2024salt::v2::';
   const str = salt + '::' + pwd + '::' + salt;
@@ -88,6 +95,7 @@ function hashPwdLegacyV2(pwd) {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return 'v2:' + (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
+
 function hashPwdLegacyOld(pwd) {
   const salt = 'yfk2024salt';
   const str = salt + '::' + pwd + '::' + salt;
@@ -101,10 +109,11 @@ function hashPwdLegacyOld(pwd) {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
+
 function hashPwdLegacyFrontend(pwd) {
   const salt = 'yfk2024salt::v2::';
   let str = salt + pwd + salt;
-  let h1 = 0x811c9dc5, h2 = 0x1000193;
+  let h1 = 0x811c9dc5 >>> 0, h2 = 0x1000193 >>> 0;
   for (let round = 0; round < 1000; round++) {
     for (let i = 0; i < str.length; i++) {
       const c = str.charCodeAt(i);
@@ -116,14 +125,25 @@ function hashPwdLegacyFrontend(pwd) {
   return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
 }
 
-// 统一密码校验：返回 { ok, needUpgrade }
+/* ========== 统一密码校验（返回 { ok, needUpgrade }） ========== */
 export async function verifyPwd(input, storedHash) {
   if (!storedHash) return { ok: false, needUpgrade: false };
   const s = String(storedHash);
+
+  // ⭐ 明文兜底：用于初始化/应急重置
+  if (s.startsWith('PLAINTEXT:')) {
+    const expected = s.slice('PLAINTEXT:'.length);
+    const ok = String(input) === expected;
+    return { ok, needUpgrade: ok };
+  }
+
+  // PBKDF2 新格式
   if (s.startsWith('pbkdf2$')) {
     const ok = await verifyPbkdf2(input, s);
     return { ok, needUpgrade: false };
   }
+
+  // 旧格式兼容
   let ok = false;
   if (s.startsWith('v2:')) ok = hashPwdLegacyV2(input) === s;
   else if (hashPwdLegacyOld(input) === s) ok = true;
@@ -135,11 +155,12 @@ export function needsHashUpgrade(storedHash) {
   return !!(storedHash && !String(storedHash).startsWith('pbkdf2$'));
 }
 
-// ========== 会员暗号哈希 ==========
+/* ========== 会员暗号哈希 ========== */
 export async function hashSecret(secret) {
   if (!secret) return '';
   return await hashPwd('::secret::' + secret);
 }
+
 export async function verifySecret(input, stored) {
   if (!stored) return { ok: false, needUpgrade: false };
   const s = String(stored);
@@ -147,15 +168,17 @@ export async function verifySecret(input, stored) {
     const ok = await verifyPbkdf2('::secret::' + input, s);
     return { ok, needUpgrade: false };
   }
-  return { ok: s === String(input).trim(), needUpgrade: s === String(input).trim() };
+  // 旧明文
+  const ok = s === String(input).trim();
+  return { ok, needUpgrade: ok };
 }
 
-// ========== 密钥获取（强制 ADMIN_SECRET，缺失返回 null） ==========
+/* ========== 密钥获取 ========== */
 export function getSecret(env) {
   const s = env.ADMIN_SECRET || '';
   if (!s || s === 'yunfaka-default-secret-change-me') return null;
   return s;
 }
 
-// 旧默认管理员密码 hash（兼容已部署但从未改密的站点）
-export const LEGACY_DEFAULT_ADMIN_HASH = 'v2:1bc7d4e0d34ee3';
+/* ⭐ 默认管理员密码：明文兜底，初次部署即可登录，登录后自动升级为 PBKDF2 */
+export const LEGACY_DEFAULT_ADMIN_HASH = 'PLAINTEXT:admin888';

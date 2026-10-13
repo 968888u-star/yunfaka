@@ -80,6 +80,14 @@ export async function onRequest(context) {
         );
       }
 
+      // P33防误覆盖保护：阻止旧标签页/误操作把大量已上架SMM瞬间全下架
+      // （旧标签页localStorage存的是下架状态，随便点一下就把整库下架写回服务端）
+      const curSmmOn = (current && current.db && current.db.products || []).filter(p => p && p.source === 'smm' && p.active).length;
+      const newSmmOn = (db.products || []).filter(p => p && p.source === 'smm' && p.active).length;
+      const protectOff = db.config && String(db.config.smm_shelf_protection) === 'false';
+      if (!protectOff && curSmmOn >= 500 && newSmmOn < 100) {
+        return jsonError('已阻止大规模下架（' + curSmmOn + '上架→' + newSmmOn + '）。旧标签页数据过旧，请关闭所有旧标签页刷新后再操作；确需全下架请分批进行', 400, env, request);
+      }
       // 保护敏感字段
       if (current && current.db && current.db.config) {
         if (!db.config) db.config = {};

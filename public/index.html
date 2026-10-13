@@ -8252,11 +8252,17 @@ try { window.addEventListener('beforeunload', function(){ if (__saveTimer){ clea
 window.saveDB = function(db){
   window.__DB = db;
 
+  /* ⭐ P30修复：必须立即写 localStorage！P28覆盖saveDB时丢失了本地写入，
+     导致 renderSmmTab/renderProducts 重绘时读到旧数据，按钮状态不变，
+     用户反复点击又重置防抖计时器，网络请求永远发不出去（上架"失败"假象）。 */
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch(e){}
+  try { if (typeof BACKUP_KEY !== 'undefined'){ db._localModified = Date.now(); localStorage.setItem(BACKUP_KEY, JSON.stringify(db)); } } catch(e){}
+
   const token = sessionStorage.getItem('yunfaka_admin_token') || '';
   if (token){
-    /* 防抖合并：1200ms 内多次 saveDB 只发一次网络请求 */
+    /* 防抖合并：800ms 内多次 saveDB 只发一次网络请求（缩短窗口减少等待） */
     __saveDb = db;
-    if (!__saveTimer) __saveTimer = setTimeout(__doFlushSave, 1200);
+    if (!__saveTimer) __saveTimer = setTimeout(__doFlushSave, 800);
     return new Promise(function(res){ __saveResolvers.push(res); });
   }
 

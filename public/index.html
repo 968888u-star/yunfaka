@@ -8635,5 +8635,219 @@ console.log('%c[P29] ✅ P21 污染已阻断 + 自动恢复已启用', 'color:#1
 console.log('%c  手动修复：yfFixActive()', 'color:#6b7280;font-size:12px');
 })();
 </script>
+<!-- ============================================================
+     P30 · SMM 自动精细化分类（Telegram 精细分类）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB) { console.warn('[P30] 核心未就绪'); return; }
+
+var _toast = function(m,t){ try{ window.toast(m, t||'success'); }catch(e){ console.log('[P30]', m); } };
+
+/* ========== 1. Telegram 精细化分类核心规则 ========== */
+function smartCategorize(name, p){
+  var n = String(name || '').toLowerCase();
+  if (p && p.description) n += ' ' + String(p.description).toLowerCase();
+  if (p && p.smm_category) n += ' ' + String(p.smm_category).toLowerCase();
+
+  /* ---------- Telegram 精细分类（12 子类） ---------- */
+  if (/telegram|电报|飞机|纸飞机|^\s*tg[\s\-_]/i.test(n) || /类别[：:]\s*tg|type[：:]\s*tg/i.test(n)){
+    // ① 会员 / Premium / Stars
+    if (/premium|会员|直充|星钻|star|礼物|gift|代开|emoji/.test(n)) return 'TG会员';
+    // ② 在线活人
+    if (/在线|活人|online|active|活跃|真实/.test(n)) return 'TG在线活人';
+    // ③ 帖子浏览（先判浏览）
+    if (/浏览|view|播放|阅读/.test(n)){
+      if (/帖子|post|单帖|单条|指定刷|一条帖子/.test(n)) return 'TG帖子浏览';
+      if (/频道|channel/.test(n)) return 'TG频道浏览';
+      return 'TG帖子浏览';
+    }
+    // ④ 频道上粉
+    if (/频道|channel/.test(n) && /粉|订阅|关注|sub|member|follow|上粉/.test(n)) return 'TG频道上粉';
+    // ⑤ 群组上粉
+    if (/群组|群|group|member/.test(n)) return 'TG群组上粉';
+    // ⑥ 通用上粉
+    if (/粉|follow|sub|订阅|关注|member|上粉/.test(n)) return 'TG上粉';
+    // ⑦ 点赞 / 反应
+    if (/点赞|like|react|表情|emoji/.test(n)) return 'TG点赞反应';
+    // ⑧ 转发
+    if (/转发|share|repost|forward/.test(n)) return 'TG转发';
+    // ⑨ 评论
+    if (/评论|comment|reply/.test(n)) return 'TG评论';
+    // ⑩ 投票
+    if (/投票|vote|poll/.test(n)) return 'TG投票';
+    // ⑪ 频道/群组（其他）
+    if (/频道|channel/.test(n)) return 'TG频道其他';
+    // ⑫ 兜底
+    return 'TG综合服务';
+  }
+
+  /* ---------- 其他平台（保持不变） ---------- */
+  if (/instagram|ins\b|^ig[\s\-_]/i.test(n)) return 'Instagram';
+  if (/youtube|油管|^yt[\s\-_]/i.test(n)) return 'YouTube';
+  if (/tiktok|抖音国际|海外版抖音/.test(n)) return 'TikTok';
+  if (/facebook|脸书|^fb[\s\-_]/i.test(n)) return 'Facebook';
+  if (/twitter|推特|tweet/.test(n)) return 'Twitter/X';
+  if (/chatgpt|openai|claude|gemini|copilot|midjourney|\bai\b/.test(n)) return 'AI/ChatGPT';
+  if (/netflix|奈飞/.test(n)) return 'Netflix';
+  if (/spotify|声田/.test(n)) return 'Spotify';
+  if (/discord/.test(n)) return 'Discord';
+  if (/google|谷歌|gmail/.test(n)) return 'Google';
+  if (/apple|苹果|icloud/.test(n)) return 'Apple';
+  if (/tencent|腾讯|\bqq\b|微信|wechat|视频号/.test(n)) return '腾讯/微信';
+  if (/bilibili|哔哩|b站/.test(n)) return 'B站';
+  if (/xiaohongshu|小红书|xhs/.test(n)) return '小红书';
+  if (/douyin|抖音/.test(n)) return '抖音';
+  if (/weibo|微博/.test(n)) return '微博';
+  if (/kuaishou|快手/.test(n)) return '快手';
+  return '其他';
+}
+
+/* ========== 2. 覆盖 smmCatOf（保留手动分类优先） ========== */
+window.smmCatOf = function(name, p){
+  if (p && p.smm_platform_manual) return p.smm_platform_manual;
+  return smartCategorize(name, p);
+};
+
+/* ========== 3. 分类预设顺序（保证 tab 显示顺序友好） ========== */
+var CATEGORY_ORDER = [
+  'TG会员','TG在线活人','TG频道上粉','TG群组上粉','TG上粉',
+  'TG频道浏览','TG帖子浏览','TG点赞反应','TG转发','TG评论','TG投票',
+  'TG频道其他','TG综合服务',
+  'Instagram','YouTube','TikTok','Facebook','Twitter/X',
+  'AI/ChatGPT','Netflix','Spotify','Discord','Google','Apple',
+  '腾讯/微信','抖音','B站','小红书','微博','快手',
+  '未分类','其他'
+];
+
+/* ========== 4. 自动重新分类 + 同步分类到配置 ========== */
+window.yfSmmAutoRecategorize = function(db){
+  db = db || window.loadDB();
+  var count = 0;
+  var catStats = {};
+  (db.products || []).forEach(function(p){
+    if (p.source !== 'smm') return;
+    if (p.smm_platform_manual) { catStats[p.smm_platform_manual] = (catStats[p.smm_platform_manual]||0)+1; return; }
+    var newCat = smartCategorize(p.smm_service_name || p.name, p);
+    if (p.smm_platform !== newCat){ p.smm_platform = newCat; count++; }
+    catStats[newCat] = (catStats[newCat] || 0) + 1;
+  });
+
+  /* 把新出现的分类写进 smm_categories，保证前台 tab 显示 */
+  var usedCats = Object.keys(catStats).filter(function(c){ return catStats[c] > 0; });
+  var current = String(db.config.smm_categories || '').split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+  var merged = CATEGORY_ORDER.filter(function(c){
+    return usedCats.indexOf(c) >= 0 || current.indexOf(c) >= 0;
+  });
+  /* 保留用户自定义但不在预设里的分类 */
+  current.forEach(function(c){ if (merged.indexOf(c) < 0) merged.push(c); });
+  var newCfg = merged.join('\n');
+  if (newCfg !== db.config.smm_categories){
+    db.config.smm_categories = newCfg;
+  }
+
+  return { count: count, stats: catStats };
+};
+
+/* ========== 5. 同步上游后自动重分类 ========== */
+(function(){
+  var _orig = window.smmSyncCore;
+  if (typeof _orig !== 'function') return;
+  window.smmSyncCore = function(silent){
+    var r = _orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var db = window.loadDB();
+        var res = window.yfSmmAutoRecategorize(db);
+        if (res.count > 0){
+          window.saveDB(db);
+          console.log('[P30] 同步后自动分类：更新 ' + res.count + ' 个');
+        }
+        if (window.renderSmmTab) window.renderSmmTab();
+      } catch(e){ console.warn('[P30]', e); }
+    }, 1000);
+    return r;
+  };
+})();
+
+(function(){
+  var _orig = window.smmRefreshCost;
+  if (typeof _orig !== 'function') return;
+  window.smmRefreshCost = function(){
+    var r = _orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var db = window.loadDB();
+        var res = window.yfSmmAutoRecategorize(db);
+        if (res.count > 0){
+          window.saveDB(db);
+          console.log('[P30] 刷新成本后自动分类：更新 ' + res.count + ' 个');
+        }
+        if (window.renderSmmTab) window.renderSmmTab();
+      } catch(e){ console.warn('[P30]', e); }
+    }, 1000);
+    return r;
+  };
+})();
+
+/* ========== 6. 在 SMM 后台注入"一键重新分类"按钮 ========== */
+(function(){
+  var _orig = window.renderSmmTab;
+  if (typeof _orig !== 'function') return;
+  window.renderSmmTab = function(){
+    var r = _orig.apply(this, arguments);
+    setTimeout(function(){
+      try {
+        var body = document.getElementById('tab-body');
+        if (!body) return;
+        var spread = body.querySelector('.spread');
+        if (!spread || spread.querySelector('#yf-p30-recategorize')) return;
+        var row = spread.querySelector('.row');
+        if (!row) return;
+        var btn = document.createElement('button');
+        btn.id = 'yf-p30-recategorize';
+        btn.className = 'btn ghost sm';
+        btn.textContent = '🏷️ 一键重新分类';
+        btn.style.background = '#10b981';
+        btn.style.color = '#fff';
+        btn.style.border = 'none';
+        btn.onclick = function(){
+          if (!confirm('根据商品名称重新智能分类所有 SMM 商品？\n（手动分类过的商品不受影响）')) return;
+          var db = window.loadDB();
+          var res = window.yfSmmAutoRecategorize(db);
+          window.saveDB(db);
+          _toast('✅ 已重新分类 ' + res.count + ' 个商品', 'success');
+          console.log('[P30] 分类统计：', res.stats);
+          if (window.renderSmmTab) window.renderSmmTab();
+        };
+        row.insertBefore(btn, row.firstChild);
+      } catch(e){ console.warn('[P30] 注入按钮失败:', e); }
+    }, 300);
+    return r;
+  };
+})();
+
+/* ========== 7. 启动时自动分类一次 ========== */
+setTimeout(function(){
+  try {
+    var db = window.loadDB();
+    if (!db || !db.products) return;
+    var res = window.yfSmmAutoRecategorize(db);
+    if (res.count > 0){
+      window.saveDB(db);
+      console.log('%c[P30] ✅ 启动时自动分类：更新 ' + res.count + ' 个 SMM 商品',
+        'color:#10b981;font-weight:bold');
+      console.log('[P30] 分类分布：', res.stats);
+      if (window.route) setTimeout(function(){ window.route(); }, 600);
+    }
+  } catch(e){ console.warn('[P30]', e); }
+}, 3500);
+
+console.log('%c[P30] ✅ SMM 自动精细化分类已启用', 'color:#10b981;font-weight:bold;font-size:13px');
+console.log('%c  手动重新分类：yfSmmAutoRecategorize()  |  UI：SMM tab「🏷️ 一键重新分类」',
+  'color:#6b7280;font-size:12px');
+})();
+</script>
 </body>
 </html>

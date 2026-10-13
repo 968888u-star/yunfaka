@@ -2727,6 +2727,14 @@ function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.or
         var srvEmpty = (!srv.orders||!srv.orders.length) && (!srv.members||!srv.members.length) && (!srv.cards||!srv.cards.length);
         var localHas = (local.orders&&local.orders.length>0) || (local.members&&local.members.length>0);
         if (srvEmpty && localHas){ window.saveDB(local); return; }
+        /* P32防震荡：本地有未同步修改（时间戳比服务端新5秒以上）时，
+           不被15秒轮询覆盖，改为推送本地到服务端，根治"上架后自动下架"假象 */
+        var localTs = Number(local._localModified || local._lastModified || 0);
+        var srvTs = Number(srv._localModified || srv._lastModified || 0);
+        if (localTs > srvTs + 5000){
+          console.warn('[P32] 本地有未同步修改(' + new Date(localTs).toLocaleTimeString() + ')，拒绝覆盖，改为推送本地');
+          window.saveDB(local); return;
+        }
         try { _saveDB(srv); } catch(e){}
         if (window.applySiteConfig) window.applySiteConfig();
         var ae = document.activeElement;
@@ -7523,9 +7531,13 @@ setTimeout(function(){
           console.log('  本地:', new Date(backupTime).toLocaleString());
           console.log('  服务端:', srvTime ? new Date(srvTime).toLocaleString() : '未知');
 
+          /* P32修复：补上 X-Admin-Token，否则永远403失败，兜底形同虚设 */
+          var __p24tok = ''; try { __p24tok = sessionStorage.getItem('yunfaka_admin_token') || ''; } catch(e){}
+          var __p24hdr = { 'Content-Type': 'application/json' };
+          if (__p24tok) __p24hdr['X-Admin-Token'] = __p24tok;
           fetch('/api/state', {
             method:'POST',
-            headers:{'Content-Type':'application/json'},
+            headers: __p24hdr,
             body: JSON.stringify({ db: backup, baseRev: d.rev })
           })
           .then(function(r){ return r.json(); })

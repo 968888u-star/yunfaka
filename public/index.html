@@ -8849,5 +8849,271 @@ console.log('%c  手动重新分类：yfSmmAutoRecategorize()  |  UI：SMM tab�
   'color:#6b7280;font-size:12px');
 })();
 </script>
+<!-- ============================================================
+     P31 · SMM 分类管理增强：置顶 + 多选批量操作
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB) { console.warn('[P31] 核心未就绪'); return; }
+
+var _toast = function(m,t){ try{ window.toast(m, t||'success'); }catch(e){ console.log('[P31]', m); } };
+var _esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+var CORE = ['未分类','其他'];
+
+function getCheckedIdx(){
+  var arr = [];
+  document.querySelectorAll('#yf-smm-cat-list .yf-smm-cat-cb:checked').forEach(function(cb){
+    var i = parseInt(cb.dataset.idx);
+    if (!isNaN(i)) arr.push(i);
+  });
+  return arr.sort(function(a,b){ return a-b; });
+}
+
+function reRender(){ window.yfSmmManageCategories(); }
+
+/* ========== 1. 覆盖弹窗（带复选框 + 置顶按钮 + 批量工具栏） ========== */
+window.yfSmmManageCategories = function(){
+  var list = window.yfSmmGetCategories();
+  var html = '<h3>🏷️ 管理 SMM 分类</h3>'
+    + '<p class="muted" style="font-size:12px;margin-top:-10px;margin-bottom:12px">'
+    + '☑ 勾选多个分类后，点顶部「⬆ 置顶选中」可一键置顶 · Shift+点击可选中区间（桌面端）</p>'
+
+    /* 批量工具栏 */
+    + '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;align-items:center">'
+    +   '<label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0">'
+    +     '<input type="checkbox" id="yf-smm-cat-all" style="width:auto"> 全选</label>'
+    +   '<span style="font-size:12px;color:#6b7280" id="yf-smm-cat-count">已选 0</span>'
+    +   '<button class="btn sm primary" style="margin-left:auto" onclick="yfSmmCatBatchTop()">⬆ 置顶选中</button>'
+    +   '<button class="btn sm ghost" onclick="yfSmmCatBatchMoveUp()">↑ 上移</button>'
+    +   '<button class="btn sm ghost" onclick="yfSmmCatBatchMoveDown()">↓ 下移</button>'
+    +   '<button class="btn sm danger" onclick="yfSmmCatBatchDelete()">🗑 删除选中</button>'
+    + '</div>'
+
+    /* 分类列表 */
+    + '<div id="yf-smm-cat-list" style="max-height:400px;overflow-y:auto;margin-bottom:14px;padding:2px">';
+
+  list.forEach(function(c, i){
+    var isCore = CORE.indexOf(c) >= 0;
+    var isFirst = (i === 0);
+    var isLast = (i === list.length - 1);
+    var isUncategorized = (c === '未分类');
+
+    html += '<div class="yf-smm-cat-row" data-idx="' + i + '" '
+          + 'style="display:flex;gap:5px;align-items:center;margin-bottom:5px;padding:3px;border-radius:8px;'
+          + (isCore ? 'background:#f8fafc;' : '') + '">'
+
+          /* 复选框 */
+          + '<input type="checkbox" class="yf-smm-cat-cb" data-idx="' + i + '"'
+          +   (isCore ? ' disabled' : '')
+          +   ' style="width:auto;flex-shrink:0;margin:0 4px 0 2px;cursor:pointer">'
+
+          /* 名称输入框 */
+          + '<input class="yf-smm-cat-input" data-idx="' + i + '" value="' + _esc(c) + '"'
+          +   (isCore ? ' readonly' : '')
+          +   ' style="flex:1;min-width:0;padding:8px 10px;font-size:13px;'
+          +   (isCore ? 'background:#eef2f7;color:#6b7280;cursor:not-allowed' : '') + '">'
+
+          /* ⤒ 置顶（未分类不允许） */
+          + '<button class="btn sm ghost" title="置顶" '
+          +   'style="padding:6px 9px;flex-shrink:0;' + (isUncategorized ? 'opacity:.35;cursor:not-allowed' : 'color:#10b981;font-weight:700') + '"'
+          +   (isUncategorized ? ' disabled' : ' onclick="yfSmmCatTop(' + i + ')"')
+          + '>⤒</button>'
+
+          /* ↑ 上移 */
+          + '<button class="btn sm ghost" style="padding:6px 9px;flex-shrink:0"'
+          +   (isFirst || isUncategorized ? ' disabled' : ' onclick="yfSmmCatMove(' + i + ',-1)"')
+          + '>↑</button>'
+
+          /* ↓ 下移 */
+          + '<button class="btn sm ghost" style="padding:6px 9px;flex-shrink:0"'
+          +   (isLast || isUncategorized ? ' disabled' : ' onclick="yfSmmCatMove(' + i + ',1)"')
+          + '>↓</button>'
+
+          /* × 删除 */
+          + '<button class="btn sm danger" style="padding:6px 9px;flex-shrink:0"'
+          +   (isCore ? ' disabled' : ' onclick="yfSmmCatDelete(' + i + ')"')
+          + '>×</button>'
+
+          + '</div>';
+  });
+
+  html += '</div>'
+
+    /* 底部：新增分类 */
+    + '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    +   '<input id="yf-smm-new-cat" placeholder="新分类名称（如：TG会员）" style="flex:1;padding:8px 10px;font-size:13px">'
+    +   '<button class="btn primary sm" onclick="yfSmmCatAdd()">+ 添加</button>'
+    + '</div>'
+
+    /* 底部：保存 / 取消 */
+    + '<div class="row" style="justify-content:flex-end;gap:8px">'
+    +   '<button class="btn ghost" onclick="closeModal()">取消</button>'
+    +   '<button class="btn primary" onclick="yfSmmSaveCategoryEdits()">💾 保存名称修改</button>'
+    + '</div>';
+
+  window.openModal(html, true);
+};
+
+/* ========== 2. 单击置顶 ========== */
+window.yfSmmCatTop = function(idx){
+  var list = window.yfSmmGetCategories();
+  if (idx <= 0 || idx >= list.length) return;
+  if (list[idx] === '未分类'){ _toast('「未分类」需保持在第一位', 'info'); return; }
+  var item = list.splice(idx, 1)[0];
+  var startIdx = (list[0] === '未分类') ? 1 : 0;
+  list.splice(startIdx, 0, item);
+  window.yfSmmSaveCategories(list);
+  _toast('已置顶「' + item + '」', 'success');
+  reRender();
+};
+
+/* ========== 3. 批量置顶选中 ========== */
+window.yfSmmCatBatchTop = function(){
+  var selected = getCheckedIdx();
+  if (!selected.length){ _toast('请先勾选分类', 'warn'); return; }
+  var list = window.yfSmmGetCategories();
+  var picked = [];
+  var rest = [];
+  list.forEach(function(c, i){
+    if (selected.indexOf(i) >= 0 && c !== '未分类'){
+      picked.push(c);
+    } else {
+      rest.push(c);
+    }
+  });
+  if (!picked.length){ _toast('选中的分类无法置顶', 'info'); return; }
+  var head = (rest[0] === '未分类') ? [rest.shift()] : [];
+  var newList = head.concat(picked, rest);
+  window.yfSmmSaveCategories(newList);
+  _toast('✅ 已置顶 ' + picked.length + ' 个分类', 'success');
+  reRender();
+};
+
+/* ========== 4. 批量上移（选中项整体上移一层） ========== */
+window.yfSmmCatBatchMoveUp = function(){
+  var selected = getCheckedIdx();
+  if (!selected.length){ _toast('请先勾选分类', 'warn'); return; }
+  var list = window.yfSmmGetCategories();
+  // 从上往下，逐个与前面非选中项交换
+  for (var i = 1; i < list.length; i++){
+    if (selected.indexOf(i) < 0) continue;
+    if (list[i] === '未分类') continue;
+    // 找前面最近的非选中项（跳过未分类）
+    for (var j = i - 1; j >= 0; j--){
+      if (selected.indexOf(j) >= 0) continue;
+      if (list[j] === '未分类') break;
+      var t = list[i]; list[i] = list[j]; list[j] = t;
+      // 交换后索引更新
+      selected = selected.map(function(x){ return x === i ? j : (x === j ? i : x); });
+      break;
+    }
+  }
+  window.yfSmmSaveCategories(list);
+  _toast('已上移', 'success');
+  reRender();
+};
+
+/* ========== 5. 批量下移 ========== */
+window.yfSmmCatBatchMoveDown = function(){
+  var selected = getCheckedIdx();
+  if (!selected.length){ _toast('请先勾选分类', 'warn'); return; }
+  var list = window.yfSmmGetCategories();
+  for (var i = list.length - 2; i >= 0; i--){
+    if (selected.indexOf(i) < 0) continue;
+    if (list[i] === '未分类') continue;
+    for (var j = i + 1; j < list.length; j++){
+      if (selected.indexOf(j) >= 0) continue;
+      if (list[j] === '未分类') continue;
+      var t = list[i]; list[i] = list[j]; list[j] = t;
+      selected = selected.map(function(x){ return x === i ? j : (x === j ? i : x); });
+      break;
+    }
+  }
+  window.yfSmmSaveCategories(list);
+  _toast('已下移', 'success');
+  reRender();
+};
+
+/* ========== 6. 批量删除选中（连同商品的 smm_platform 归到未分类） ========== */
+window.yfSmmCatBatchDelete = function(){
+  var selected = getCheckedIdx();
+  if (!selected.length){ _toast('请先勾选分类', 'warn'); return; }
+  var list = window.yfSmmGetCategories();
+  var victims = selected.map(function(i){ return list[i]; }).filter(function(c){ return CORE.indexOf(c) < 0; });
+  if (!victims.length){ _toast('核心分类不可删除', 'error'); return; }
+  if (!confirm('确定删除 ' + victims.length + ' 个分类？\n\n' + victims.join('、') + '\n\n其下商品会归到「未分类」。')) return;
+
+  var db = window.loadDB();
+  var affected = 0;
+  (db.products || []).forEach(function(p){
+    if (p.source !== 'smm') return;
+    if (victims.indexOf(p.smm_platform) >= 0){
+      p.smm_platform = '未分类';
+      p.smm_platform_manual = '未分类';
+      affected++;
+    }
+  });
+
+  // 删除分类（保序）
+  var kept = [];
+  list.forEach(function(c, i){
+    if (selected.indexOf(i) < 0) kept.push(c);
+  });
+  window.yfSmmSaveCategories(kept);
+  window.saveDB(db);
+
+  _toast('已删除 ' + victims.length + ' 个分类，' + affected + ' 个商品归到未分类', 'success');
+  reRender();
+};
+
+/* ========== 7. 全选 / 计数 / Shift 范围选择 ========== */
+if (!window.__p31Bound){
+  window.__p31Bound = true;
+  var _lastCheckedIdx = -1;
+
+  document.addEventListener('change', function(e){
+    var t = e.target;
+    if (!t || !t.classList) return;
+
+    // 全选
+    if (t.id === 'yf-smm-cat-all'){
+      document.querySelectorAll('#yf-smm-cat-list .yf-smm-cat-cb').forEach(function(cb){
+        if (!cb.disabled) cb.checked = t.checked;
+      });
+      updateCount();
+      return;
+    }
+
+    // 单个勾选
+    if (t.classList.contains('yf-smm-cat-cb')){
+      var idx = parseInt(t.dataset.idx);
+      // Shift + 点击 = 范围选择
+      if (e.shiftKey && _lastCheckedIdx >= 0 && !isNaN(idx)){
+        var from = Math.min(idx, _lastCheckedIdx);
+        var to = Math.max(idx, _lastCheckedIdx);
+        document.querySelectorAll('#yf-smm-cat-list .yf-smm-cat-cb').forEach(function(cb){
+          var i = parseInt(cb.dataset.idx);
+          if (i >= from && i <= to && !cb.disabled) cb.checked = true;
+        });
+      }
+      _lastCheckedIdx = idx;
+      updateCount();
+    }
+  });
+
+  function updateCount(){
+    var n = document.querySelectorAll('#yf-smm-cat-list .yf-smm-cat-cb:checked').length;
+    var el = document.getElementById('yf-smm-cat-count');
+    if (el) el.textContent = '已选 ' + n;
+  }
+  window.__p31UpdateCount = updateCount;
+}
+
+console.log('%c[P31] ✅ SMM 分类管理增强：⤒ 置顶 / 多选批量操作已启用',
+  'color:#10b981;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

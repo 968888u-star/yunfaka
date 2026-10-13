@@ -2553,14 +2553,38 @@ function renderSmmClient(){
     ${hasMore ? '<div style="text-align:center;margin:20px 0"><button class="btn ghost" onclick="smmLoadMore()" style="padding:10px 30px">加载更多（已显示 ' + showCount + ' / ' + filtered.length + ' 个）</button></div>' : ''}`;
 }
 function smmBuy(id){
-  var db = loadDB(); var p = db.products.find(x => x.id === id); if (!p){ toast('服务不存在','error'); return; }
-  var min = p.smm_min || 1, max = p.smm_max || 100000; var cfg = getConfig(db); var member = getCurrentMember(db);
-  var lastSecret = (member && member.secret) || localStorage.getItem(LS_SECRET) || ''; var isPkg = smmIsPackage(p);
-  var defQty = isPkg ? 1 : Math.max(min, 1000); if (defQty > max) defQty = max;
+  var db = loadDB();
+  var p = db.products.find(x => x.id === id);
+  if (!p){ toast('服务不存在','error'); return; }
+  var min = p.smm_min || 1, max = p.smm_max || 100000;
+  var cfg = getConfig(db);
+  var member = getCurrentMember(db);
+  var lastSecret = (member && member.secret) || localStorage.getItem(LS_SECRET) || '';
+  var isPkg = smmIsPackage(p);
+  var defQty = isPkg ? 1 : Math.max(min, 1000);
+  if (defQty > max) defQty = max;
+
+  /* 🌟 按平台生成输入框占位提示 */
+  var platform = p.smm_platform || smmCatOf(p.smm_service_name || p.name, p);
+  var placeholderMap = {
+    'Telegram':   '例如：@username 或 https://t.me/username',
+    'Instagram':  '例如：@username 或 https://instagram.com/username',
+    'Twitter/X':  '例如：@username 或 https://x.com/username',
+    'TikTok':     '例如：@username 或 https://tiktok.com/@username',
+    'YouTube':    '例如：@channel 或 https://youtube.com/watch?v=xxx',
+    'Facebook':   '例如：https://facebook.com/xxx',
+    'Discord':    '例如：https://discord.gg/xxx',
+    'Spotify':    '例如：https://open.spotify.com/user/xxx',
+    'Netflix':    '例如：https://netflix.com/xxx',
+    'Google':     '例如：https://youtube.com/xxx',
+    'Apple':      '例如：https://apple.com/xxx'
+  };
+  var inputPlaceholder = placeholderMap[platform] || '例如：@username 或 https://... 或 数字ID';
+
   openModal(`<h3>下单 · ${esc(p.smm_service_name)}</h3>
     <div class="kv"><span class="k">服务</span><span class="v">${esc(p.smm_service_name)}</span></div>
     <div class="kv" style="margin-bottom:14px"><span class="k">单价</span><span class="v" style="color:#e11d48" id="smm-unit">${usdt(p.price)} USDT/${isPkg?'份':'1000条'}</span></div>
-    <label class="field"><span>目标链接（帖子/账号/视频 URL）</span><input id="smm-link" placeholder="https://..."></label>
+    <label class="field"><span>目标链接 / 用户名 / ID（不限格式，支持 @username）</span><input id="smm-link" placeholder="${esc(inputPlaceholder)}"></label>
     ${isPkg ? '' : `<label class="field"><span>数量（${min} ~ ${max}）</span><input id="smm-qty" type="number" min="${min}" max="${max}" value="${defQty}"></label>`}
     <label class="field"><span>暗号（用于查询订单）</span><input id="smm-secret" maxlength="60" value="${esc(lastSecret)}"></label>
     <div class="spread" style="margin:14px 0 6px;padding-top:14px;border-top:1px dashed var(--line)"><span class="muted" style="font-size:13px">订单金额</span><span id="smm-amount" style="font-size:18px;font-weight:800;color:#e11d48">${usdt(smmCalcAmount(p, defQty))} USDT</span></div>
@@ -2569,22 +2593,99 @@ function smmBuy(id){
   var qtyEl = isPkg ? null : $('#smm-qty');
   function smmRefreshAmount(){ var q = isPkg ? 1 : (parseInt(qtyEl.value) || 0); var amountFen = smmCalcAmount(p, q); if ($('#smm-amount')) $('#smm-amount').textContent = usdt(amountFen) + ' USDT'; }
   if (qtyEl) qtyEl.addEventListener('input', smmRefreshAmount);
-  var usdtEnabled = cfg.pay_usdt_enabled !== false; var alipayEnabled = cfg.pay_alipay_enabled !== false;
+  var usdtEnabled = cfg.pay_usdt_enabled !== false;
+  var alipayEnabled = cfg.pay_alipay_enabled !== false;
   $('#smm-pay-wrap').innerHTML = `<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">${usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="smm-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : ''}${alipayEnabled ? `<label class="pay-method ${!usdtEnabled?'active':''}" data-method="alipay"><input type="radio" name="smm-pay" value="alipay" ${!usdtEnabled?'checked':''}><span class="logo">💰</span> 支付宝</label>` : ''}</div></label>`;
   document.querySelectorAll('#smm-pay-methods .pay-method').forEach(el => { el.addEventListener('click', () => { document.querySelectorAll('#smm-pay-methods .pay-method').forEach(x => x.classList.remove('active')); el.classList.add('active'); var r = el.querySelector('input[type=radio]'); if (r) r.checked = true; }); });
 }
+
 function smmSubmit(id){
-  if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; } window._submitting = true; setTimeout(() => window._submitting = false, 5000);
-  var db = loadDB(); var cfg = getConfig(db); var p = db.products.find(x => x.id === id); if (!p){ window._submitting = false; return; }
-  var link = $('#smm-link').value.trim(); var secret = $('#smm-secret').value.trim(); var qty = smmIsPackage(p) ? 1 : (parseInt($('#smm-qty').value) || 0);
-  if (!link || !/^https?:\/\//i.test(link)){ toast('链接必须 http:// 或 https:// 开头','error'); return; }
-  if (!secret){ toast('请输入暗号','error'); return; }
-  if (qty < (p.smm_min || 1) || qty > (p.smm_max || 100000)){ toast('数量超范围','error'); return; }
-  var amount = smmCalcAmount(p, qty); var radio = document.querySelector('input[name="smm-pay"]:checked'); if (!radio){ toast('请选择支付方式','error'); return; }
-  var member = getCurrentMember(db); var orderNo = genOrderNo();
-  var order = { order_no: orderNo, product_id: id, product_name: p.name, sku_id: 0, sku_name: '', category_id: 0, quantity: qty, amount: amount, balance_used: 0, amount_due: amount, secret: secret, username: member ? member.username : '', status: 'pending', pay_method: radio.value, cards: [], note: p.note || '', created_at: now(), delivered_at: '', source: 'smm', smm_service_id: p.smm_service_id, smm_service_name: p.smm_service_name, smm_link: link, usdt_rate: usdtRate() };
+  if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; }
+  window._submitting = true;
+  setTimeout(function(){ window._submitting = false; }, 5000);
+
+  var db = loadDB();
+  var cfg = getConfig(db);
+  var p = db.products.find(x => x.id === id);
+  if (!p){ toast('服务不存在','error'); window._submitting = false; return; }
+
+  var rawLink = $('#smm-link').value.trim();
+  var secret = $('#smm-secret').value.trim();
+  var qty = smmIsPackage(p) ? 1 : (parseInt($('#smm-qty').value) || 0);
+
+  /* ==================== 🌟 智能链接解析 ==================== */
+  /* 不再强制 http/https，自动识别 @用户名 / 短域名 / 纯ID */
+  if (!rawLink){ toast('请输入目标链接 / 用户名 / ID','error'); window._submitting = false; return; }
+
+  var link = rawLink;
+  var platform = p.smm_platform || smmCatOf(p.smm_service_name || p.name, p);
+
+  /* 1. 以 @ 开头 → 按平台自动补全为完整 URL */
+  if (link.startsWith('@')){
+    var username = link.substring(1);
+    switch(platform){
+      case 'Telegram':  link = 'https://t.me/' + username; break;
+      case 'Instagram': link = 'https://instagram.com/' + username; break;
+      case 'Twitter/X': link = 'https://x.com/' + username; break;
+      case 'TikTok':    link = 'https://tiktok.com/@' + username; break;
+      case 'YouTube':   link = 'https://youtube.com/@' + username; break;
+      case 'Facebook':  link = 'https://facebook.com/' + username; break;
+      case 'Discord':   link = 'https://discord.gg/' + username; break;
+      case 'Spotify':   link = 'https://open.spotify.com/user/' + username; break;
+      case 'Netflix':   link = 'https://netflix.com/' + username; break;
+      default:          link = 'https://' + username; break;
+    }
+  }
+  /* 2. 无协议但含合法域名（如 t.me/xxx、twitter.com/xxx） → 补 https:// */
+  else if (!/^https?:\/\//i.test(link) && /^[\w\-.]+\.[a-z]{2,}(\/|$)/i.test(link)){
+    link = 'https://' + link;
+  }
+  /* 3. 其他格式（纯数字ID、自定义内容等）保持原样交给上游 */
+
+  console.log('[SMM链接解析] 平台:', platform, '| 原始:', rawLink, '| 提交:', link);
+  /* ======================================================== */
+
+  if (!secret){ toast('请输入暗号','error'); window._submitting = false; return; }
+  if (qty < (p.smm_min || 1) || qty > (p.smm_max || 100000)){ toast('数量超范围','error'); window._submitting = false; return; }
+
+  var amount = smmCalcAmount(p, qty);
+  var radio = document.querySelector('input[name="smm-pay"]:checked');
+  if (!radio){ toast('请选择支付方式','error'); window._submitting = false; return; }
+
+  var member = getCurrentMember(db);
+  var orderNo = genOrderNo();
+  var order = {
+    order_no: orderNo,
+    product_id: id,
+    product_name: p.name,
+    sku_id: 0,
+    sku_name: '',
+    category_id: 0,
+    quantity: qty,
+    amount: amount,
+    balance_used: 0,
+    amount_due: amount,
+    secret: secret,
+    username: member ? member.username : '',
+    status: 'pending',
+    pay_method: radio.value,
+    cards: [],
+    note: p.note || '',
+    created_at: now(),
+    delivered_at: '',
+    source: 'smm',
+    smm_service_id: p.smm_service_id,
+    smm_service_name: p.smm_service_name,
+    smm_link: link,          /* 补全后的链接，提交给上游 */
+    smm_link_raw: rawLink,   /* 保留用户原始输入，便于排查 */
+    usdt_rate: usdtRate()
+  };
   if (radio.value === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
-  db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret); closeModal();
+  db.orders.unshift(order);
+  saveDB(db);
+  saveMyOrder(orderNo, secret);
+  localStorage.setItem(LS_SECRET, secret);
+  closeModal();
   showPayModal('order', orderNo);
 }
 var _smmTimers = {};

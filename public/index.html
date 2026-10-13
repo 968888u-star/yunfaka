@@ -8306,5 +8306,120 @@ setTimeout(function(){
 console.log('%c[P29] ✅ P21 污染已阻断，SMM 商品不再消失', 'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P29 · 彻底修复 P21 污染 + 自动恢复历史数据（v2）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.renderHome){
+  console.warn('[P29] 核心未就绪');
+  return;
+}
+
+// ========== 1. 阻断 P21 未来污染 ==========
+var _inRenderHome = false;
+var _origLoadDB = window.loadDB;
+window.loadDB = function(){
+  var db = _origLoadDB.apply(this, arguments);
+  if (_inRenderHome && db === window.__DB){
+    return Object.assign({}, db);   // 返回浅拷贝
+  }
+  return db;
+};
+
+var _origRenderHome = window.renderHome;
+window.renderHome = function(){
+  _inRenderHome = true;
+  try {
+    return _origRenderHome.apply(this, arguments);
+  } finally {
+    _inRenderHome = false;
+  }
+};
+
+// ========== 2. 自动恢复被污染的商品 ==========
+var _fixing = false;
+function autoFix(){
+  if (_fixing) return 0;
+  var db = window.__DB;
+  if (!db || !Array.isArray(db.products)) return 0;
+
+  var fixed = 0;
+  db.products.forEach(function(p){
+    if (!p) return;
+    if (p.source !== 'luban' && p.source !== 'smm') return;
+    if (p.active === false && !p.luban_removed && !p.smm_removed){
+      p.active = true;
+      fixed++;
+    }
+  });
+
+  if (fixed === 0) return 0;
+  _fixing = true;
+
+  console.log('%c[P29] 恢复 ' + fixed + ' 个商品的 active 状态',
+    'color:#10b981;font-weight:bold');
+
+  var token = '';
+  try { token = sessionStorage.getItem('yunfaka_admin_token') || ''; } catch(e){}
+
+  fetch('/api/state?t=' + Date.now(), { cache:'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var headers = { 'Content-Type': 'application/json' };
+      if (token) headers['X-Admin-Token'] = token;
+      return fetch('/api/state', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ db: db, baseRev: (d && d.rev) || 0 })
+      });
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      _fixing = false;
+      if (d && d.ok){
+        console.log('%c[P29] ✅ 已同步服务端', 'color:#10b981;font-weight:bold');
+        if (window.toast) window.toast('✅ 已恢复 ' + fixed + ' 个商品', 'success');
+        setTimeout(function(){ if (window.route) window.route(); }, 300);
+      } else {
+        console.warn('[P29] 服务端同步失败:', d);
+        if (window.toast) window.toast('已恢复本地，但服务端同步失败', 'warn');
+        setTimeout(function(){ if (window.route) window.route(); }, 300);
+      }
+    })
+    .catch(function(e){
+      _fixing = false;
+      console.warn('[P29] 同步异常:', e);
+      if (window.toast) window.toast('本地已恢复，服务端同步异常', 'warn');
+      setTimeout(function(){ if (window.route) window.route(); }, 300);
+    });
+
+  return fixed;
+}
+
+// ========== 3. 启动时执行一次 ==========
+setTimeout(autoFix, 2000);
+
+// ========== 4. 提供手动调用 ==========
+window.yfFixActive = function(){
+  var n = autoFix();
+  if (window.toast){
+    window.toast(n > 0 ? ('✅ 已恢复 ' + n + ' 个商品') : '当前无需修复',
+                 n > 0 ? 'success' : 'info');
+  }
+  console.log('[P29] 手动修复结果:', n);
+  return n;
+};
+
+// ========== 5. 从首页离开时也检查一下（提前恢复） ==========
+window.addEventListener('hashchange', function(){
+  setTimeout(function(){ autoFix(); }, 500);
+});
+
+console.log('%c[P29] ✅ P21 污染已阻断 + 自动恢复已启用', 'color:#10b981;font-weight:bold;font-size:13px');
+console.log('%c  手动修复：yfFixActive()', 'color:#6b7280;font-size:12px');
+})();
+</script>
 </body>
 </html>

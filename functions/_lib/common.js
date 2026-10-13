@@ -1,4 +1,4 @@
-// functions/_lib/common.js · 共享工具库（安全加固版）
+// functions/_lib/common.js · 共享工具库（安全加固版 + P30 修复公开配置白名单）
 // 提供：统一 CORS（白名单）、JSON 响应、错误脱敏、限流、数据脱敏、管理员校验、IP 获取
 import { verifyToken } from './auth.js';
 
@@ -116,11 +116,40 @@ export function sanitizeDbForPublic(db) {
     d.recharges = [];
   }
   // 4. 配置：只保留公开字段，删除所有敏感配置
+  // P30 修复：补齐前端所有需要的公开配置字段，否则未登录用户看不到使用说明/分类/自定义文案
   if (d.config && typeof d.config === 'object') {
     const pub = {};
-    const publicKeys = ['site_name', 'tg_username', 'tg_btn_color', 'pay_usdt_enabled', 'pay_alipay_enabled',
-      'pay_alipay_mode', 'pay_alipay_redpacket_prefix', 'recharge_min', 'recharge_bonus_pct', 'recharge_bonus_text',
-      'pay_usdt_rate', 'pay_usdt_network', 'smm_markup', 'pay_usdt_qr', 'pay_alipay_qr', 'pay_alipay_note'];
+    const publicKeys = [
+      // --- 原有基础字段 ---
+      'site_name', 'tg_username', 'tg_btn_color',
+      'pay_usdt_enabled', 'pay_alipay_enabled', 'pay_alipay_mode',
+      'pay_alipay_redpacket_prefix', 'recharge_min',
+      'recharge_bonus_pct', 'recharge_bonus_text',
+      'pay_usdt_rate', 'pay_usdt_network', 'smm_markup',
+      'pay_usdt_qr', 'pay_alipay_qr', 'pay_alipay_note',
+
+      // --- P30 新增：首页/客户端展示相关（未登录用户也需要看到） ---
+      'hero_subtitle',            // 首页 Banner 副标题
+      'yf_announcement',          // 首页公告
+      'member_card_title',        // 会员卡片标题
+      'home_entry_member_title',  // 首页会员入口标题
+      'home_entry_member_sub',    // 首页会员入口副标题
+      'home_entry_luban_title',   // 首页接码入口标题
+      'home_entry_luban_sub',     // 首页接码入口副标题
+      'home_entry_smm_title',     // 首页 SMM 入口标题
+      'home_entry_smm_sub',       // 首页 SMM 入口副标题
+
+      // --- P30 新增：SMM 客户端展示相关 ---
+      'smm_categories',           // SMM 自定义分类列表（换行分隔）
+      'smm_usage_text',           // SMM 使用说明 HTML
+      'smm_hero_title',           // SMM 顶部标题
+      'smm_hero_subtitle',        // SMM 顶部副标题
+
+      // --- P30 新增：Luban 客户端展示相关 ---
+      'luban_usage_text',         // Luban 使用说明 HTML
+      'luban_markup',             // Luban 加价倍数（未登录时算通用接码价格需要）
+      'luban_common_cost'         // Luban 通用接码成本（未登录时算通用接码价格需要）
+    ];
     publicKeys.forEach(k => { if (d.config[k] !== undefined) pub[k] = d.config[k]; });
     // USDT 收款地址：下单页需要显示，保留（这是公开收款地址，泄露风险低）
     if (d.config.pay_usdt_address) pub.pay_usdt_address = d.config.pay_usdt_address;

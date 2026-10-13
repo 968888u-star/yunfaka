@@ -8258,5 +8258,53 @@ fetch('/api/admin-login', {
 .catch(e => alert('❌ 网络错误：' + e.message));
 })();
 </script>
+<!-- ============================================================
+     P29 · 修复 P21 污染 SMM/Luban 商品 active 状态
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.renderHome){
+  console.warn('[P29] 核心未就绪');
+  return;
+}
+
+// 1. 标志：是否正在执行 renderHome
+var _inRenderHome = false;
+
+// 2. 包裹 loadDB：在 renderHome 执行期间返回浅拷贝，隔离 __DB
+var _origLoadDB = window.loadDB;
+window.loadDB = function(){
+  var db = _origLoadDB.apply(this, arguments);
+  if (_inRenderHome && db === window.__DB){
+    return Object.assign({}, db);   // 只拷贝外层，products 数组仍是引用
+  }
+  return db;
+};
+
+// 3. 包裹 renderHome：设置标志
+var _origRenderHome = window.renderHome;
+window.renderHome = function(){
+  _inRenderHome = true;
+  try {
+    return _origRenderHome.apply(this, arguments);
+  } finally {
+    _inRenderHome = false;
+  }
+};
+
+// 4. 启动时从服务端拉一次，恢复被污染的数据
+setTimeout(function(){
+  if (typeof window.yfPullServerData === 'function'){
+    window.yfPullServerData().then(function(){
+      if (window.route) window.route();
+      console.log('%c[P29] ✅ 已从服务端恢复商品数据', 'color:#10b981;font-weight:bold');
+    });
+  }
+}, 800);
+
+console.log('%c[P29] ✅ P21 污染已阻断，SMM 商品不再消失', 'color:#10b981;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

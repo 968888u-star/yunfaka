@@ -8186,24 +8186,31 @@ function hasAdminToken(){
 }
 
 function postFullDb(db, token){
-  return fetch('/api/state?t=' + Date.now(), { cache: 'no-store' })
-    .then(r => r.json())
-    .then(d => {
-      const rev = (d && d.rev) || 0;
-      return fetch('/api/state', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': token
-        },
-        body: JSON.stringify({ db, baseRev: rev })
+  /* P31: 加入409乐观锁冲突自动重试（最多2次）。旧版2703行有此逻辑，P28覆盖时丢失，
+     导致多标签页/定时同步导致rev变化时保存直接失败（"数据已被其他设备更新"）。 */
+  function attempt(retryLeft){
+    return fetch('/api/state?t=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        const rev = (d && d.rev) || 0;
+        return fetch('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+          body: JSON.stringify({ db, baseRev: rev })
+        });
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.ok){ window.__REV = d.rev; return d; }
+        // 409冲突：服务端返回最新 rev，自动重试一次（用本地最新db + 最新rev）
+        if (d && d.rev !== undefined && retryLeft > 0){
+          console.warn('[P31] 409冲突，自动重试，剩余次数:', retryLeft);
+          return attempt(retryLeft - 1);
+        }
+        throw new Error((d && d.msg) || '保存失败');
       });
-    })
-    .then(r => r.json())
-    .then(d => {
-      if (d && d.ok){ window.__REV = d.rev; return d; }
-      throw new Error((d && d.msg) || '保存失败');
-    });
+  }
+  return attempt(2);
 }
 
 function analyzeDiff(oldDb, newDb){

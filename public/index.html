@@ -351,6 +351,7 @@ function hashPwdOld(pwd){
   return h1.toString(16).padStart(8,'0') + h2.toString(16).padStart(8,'0');
 }
 function verifyPwd(input, storedHash, upgradeCallback){
+  if (storedHash && String(storedHash).indexOf('pbkdf2$') === 0) return false;
   if (hashPwd(input) === storedHash) return true;
   if (hashPwdOld(input) === storedHash){
     if (upgradeCallback) upgradeCallback(hashPwd(input));
@@ -997,7 +998,8 @@ function submitBuy(id){
         </div>`;
     }
   } else if (payMethod === 'usdt'){
-    const usdtAmount = showUsdt(amount);
+    const exactUsdt = (type === 'order' && typeof o !== 'undefined' && o && o.expected_usdt_exact) ? Number(o.expected_usdt_exact) : ((type === 'recharge' && typeof r !== 'undefined' && r && r.expected_usdt_exact) ? Number(r.expected_usdt_exact) : 0);
+    const usdtAmount = exactUsdt > 0 ? exactUsdt.toFixed(6) : showUsdt(amount);
     const qrImg = usdtQrUrl(cfg.pay_usdt_address, usdtAmount);
     const qrSelf = cfg.pay_usdt_qr ? `<div class="qr-wrap"><img src="${esc(cfg.pay_usdt_qr)}" alt="USDT 收款码"><div class="qr-tip">商家上传的 USDT 收款码</div></div>` : '';
     const qrAuto = qrImg ? `<div class="qr-wrap"><img src="${esc(qrImg)}" alt="USDT 地址二维码"><div class="qr-tip">扫描上方二维码可直接填入地址</div></div>` : '';
@@ -1011,7 +1013,7 @@ function submitBuy(id){
       <div class="kv" style="margin-bottom:12px"><span class="k">网络</span><span class="v">${esc(cfg.pay_usdt_network || 'TRC20')}</span></div>
       ${qrSelf}${qrAuto}${addrHtml}
       <div style="background:#dbeafe;border:1px dashed #93c5fd;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#1e40af;line-height:1.6">
-        <b>ℹ️ 说明：</b>请务必转账<b>${usdtAmount} USDT</b>（允许 ±1% 误差），系统每 30 秒自动检测链上转账，到账后自动发货。
+        <b>ℹ️ 说明：</b>请务必转账<b>${usdtAmount} USDT</b>${exactUsdt>0?'（含唯一识别尾数，<b>必须精确到小数点后6位</b>，多转少转都无法识别）':'（允许 ±1% 误差）'}，系统每 30 秒自动检测链上转账，到账后自动发货。
       </div>
       <div class="row" style="justify-content:flex-end">
         <button class="btn ghost" onclick="closeModal()">关闭</button>
@@ -2696,8 +2698,8 @@ function startPoll(orderNo){
   check(); _smmTimers[orderNo] = setInterval(check, 60000);
 }
 function smmManualCheck(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; smmApi('status', { order: o.smm_order_id }).then(r => { if (r.ok && r.data){ var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); o2.smm_state = r.data.status || ''; saveDB(db2); toast('状态：' + o2.smm_state, 'success'); if (location.hash === '#/order/' + orderNo) route(); } }); }
-function smmRefill(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定补单？')) return; smmApi('refill', { order: o.smm_order_id }).then(r => { if (r.ok && r.data && r.data.refill){ var db2 = loadDB(); db2.orders.find(x => x.order_no === orderNo).smm_refill_id = String(r.data.refill); saveDB(db2); toast('补单已提交','success'); } else toast('补单失败','error'); }); }
-function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定取消？')) return; smmApi('cancel', { orders: o.smm_order_id }).then(r => { toast('取消请求已提交','success'); setTimeout(() => smmManualCheck(orderNo), 3000); }); }(function(){
+function smmRefill(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定补单？')) return; smmApi('refill', { order_no: orderNo, order: o.smm_order_id }).then(r => { if (r.ok && r.data && r.data.refill){ var db2 = loadDB(); db2.orders.find(x => x.order_no === orderNo).smm_refill_id = String(r.data.refill); saveDB(db2); toast('补单已提交','success'); } else toast('补单失败','error'); }); }
+function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定取消？')) return; smmApi('cancel', { order_no: orderNo, orders: o.smm_order_id }).then(r => { toast('取消请求已提交','success'); setTimeout(() => smmManualCheck(orderNo), 3000); }); }(function(){
   var CS_KEY = 'yunfaka_chat_session';
   var csSession = localStorage.getItem(CS_KEY);
   if (!csSession){ csSession = 'C' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); localStorage.setItem(CS_KEY, csSession); }

@@ -1179,7 +1179,7 @@ function payOrder(orderNo){
   }
   if (o.source === 'smm') {
     o.status = 'processing'; saveDB(db);
-    smmApi('add', { service: o.smm_service_id, link: o.smm_link, quantity: o.quantity })
+    smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity })
       .then(r => {
         var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return;
         if (r.ok && r.data && r.data.order) {
@@ -2381,7 +2381,7 @@ function lubanCommonSubmit2(){
   db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret); closeModal();
   if (due === 0){ payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
   else showPayModal('order', orderNo);
-}function smmApi(action, payload){ return fetch('/api/smm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: action }, payload || {})) }).then(r => r.json()); }
+}function smmApi(action, payload){ var __h={'Content-Type':'application/json'}; var __mt=localStorage.getItem('yunfaka_member_token')||''; var __at=sessionStorage.getItem('yunfaka_admin_token')||''; if(__mt)__h['X-Member-Token']=__mt; if(__at)__h['X-Admin-Token']=__at; return fetch('/api/smm', { method: 'POST', headers: __h, body: JSON.stringify(Object.assign({ action: action }, payload || {})) }).then(r => r.json()); }
 function smmIsPackage(p){ if (p.smm_type === 'Package') return true; var mn = parseInt(p.smm_min), mx = parseInt(p.smm_max); return (mn === 1 && mx === 1); }
 function smmMarkup(){ try { return Number((loadDB().config || {}).smm_markup) || 1.5; } catch(e){ return 1.5; } }
 function smmUsdtOf(p){ return (parseFloat(p && p.smm_rate_usd || 0) * smmMarkup()).toFixed(2); }
@@ -3460,10 +3460,7 @@ window.yfSubscribeChatNotify = function(){
   try {
     if (val){
       localStorage.setItem('yf_chat_email', val);
-      fetch('/api/chat-subscribe', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ session: session, email: val })
-      }).catch(function(){});
+      /* /api/chat-subscribe 端点未实现，已移除 */
       _toast('✅ 已订阅，店主回复会发到你的邮箱','success');
     } else {
       localStorage.removeItem('yf_chat_email');
@@ -4872,10 +4869,8 @@ window.yfRestoreData = function(){
       var db = window.loadDB();
       var last = db._last_auto_backup || 0;
       if (Date.now() - last < 6 * 3600 * 1000) return;
-      fetch('/api/auto-backup', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ db: db, ts: Date.now() })
-      }).then(function(r){ return r.json(); }).then(function(d){
+      /* 自动备份由后端 cron 触发，前端不再主动提交 */
+      (function(){ return Promise.resolve({ok:true}); }).then(function(d){
         if (d && d.ok){
           db._last_auto_backup = Date.now();
           db._auto_backup_count = (db._auto_backup_count || 0) + 1;
@@ -4918,7 +4913,7 @@ window.yfRestoreData = function(){
 
 window.yfShowBackupHistory = function(){
   try {
-    fetch('/api/auto-backup?t=' + Date.now())
+    fetch('/api/backup?t=' + Date.now(), { headers: { 'X-Admin-Token': sessionStorage.getItem('yunfaka_admin_token') || '' } })
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (!d || !d.ok || !Array.isArray(d.list)){ _toast('暂无历史备份','info'); return; }
@@ -4939,7 +4934,7 @@ window.yfShowBackupHistory = function(){
 };
 window.yfRestoreFromBackup = function(id){
   if (!confirm('确定用该备份覆盖当前数据？此操作不可撤销！')) return;
-  fetch('/api/auto-backup?id=' + encodeURIComponent(id))
+  fetch('/api/backup?id=' + encodeURIComponent(id), { headers: { 'X-Admin-Token': sessionStorage.getItem('yunfaka_admin_token') || '' } })
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (!d || !d.ok || !d.db){ _toast('备份读取失败','error'); return; }
@@ -5232,6 +5227,7 @@ window.memberLogin = function(){
   fetch('/api/member-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username,password:password})})
     .then(function(r){return r.json();}).then(function(d){
       if(d.ok){
+        if(d.token) localStorage.setItem('yunfaka_member_token', d.token);
         if(window.setCurrentUsername) setCurrentUsername(username);
         if(window.toast) toast('登录成功','success'); if(window.route) window.route();
       } else { if(errEl) errEl.textContent = d.msg||'登录失败'; if(window.toast) toast(d.msg||'登录失败','error'); }
@@ -8059,7 +8055,8 @@ window.saveDB = function(db){
       secret: o.secret,
       username: o.username || '',
       use_balance: (o.balance_used || 0) > 0,
-      pay_method: o.pay_method
+      pay_method: o.pay_method,
+      smm_link: o.smm_link || ''
     };
   } else if (diff.type === 'recharge'){
     const r = diff.data;
@@ -8079,9 +8076,12 @@ window.saveDB = function(db){
     };
   }
 
+  var __memTok = localStorage.getItem('yunfaka_member_token') || '';
+  var __pubHeaders = { 'Content-Type': 'application/json' };
+  if (__memTok) __pubHeaders['X-Member-Token'] = __memTok;
   return fetch('/api/public', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: __pubHeaders,
     body: JSON.stringify(publicBody)
   })
   .then(r => r.json())

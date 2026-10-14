@@ -1,172 +1,142 @@
-import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
-// ==================================================================
-// LubanSms API 统一入口（完整版）
-// 路径名来自官方文档，不要修改
-// ==================================================================
+// functions/api/luban.js · LubanSms API 代理（安全修复版）
+// 安全修复：
+//   1. 取号类扣费操作（request_number/common_request）必须绑定已支付订单
+//   2. services 不再返回 origin_cost（泄露上游真实成本）
+//   3. 会员只能操作自己订单的号码
+import { requireAdmin, requireMember, optionsResponse, jsonError, jsonOk, rateLimit } from '../_lib/common.js';
+
+async function findOrder(env, orderNo) {
+  try {
+    const raw = await env.YUNFAKA_KV.get('state');
+    if (!raw) return null;
+    const state = JSON.parse(raw);
+    return (state.db && state.db.orders || []).find(o => String(o.order_no) === String(orderNo)) || null;
+  } catch (e) { return null; }
+}
 
 export async function onRequest(context) {
   const { request, env } = context;
-  const corsHeaders = {
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
-
+  if (request.method === 'OPTIONS') return optionsResponse(request, env);
   const apikey = env.LUBAN_APIKEY;
-  if (!apikey) return Response.json({ ok: false, msg: '未配置 LUBAN_APIKEY 环境变量' }, { headers: corsHeaders });
-
+  if (!apikey) return jsonError('未配置 LUBAN_APIKEY 环境变量', 400, env, request);
   const url = new URL(request.url);
   const action = url.searchParams.get('action');
   const BASE = 'https://lubansms.com/v2/api/';
-  // ⭐ 加价倍数和汇率从后台配置读取（写死值仅作默认兜底）
+
   let MARKUP = 1.3, USD_TO_CNY = 7.2;
   try {
     const raw = await env.YUNFAKA_KV.get('state');
     if (raw) { const st = JSON.parse(raw); const cfg = (st.db && st.db.config) || {}; if (cfg.luban_markup) MARKUP = Number(cfg.luban_markup) || 1.3; if (cfg.pay_usdt_rate) USD_TO_CNY = Number(cfg.pay_usdt_rate) || 7.2; }
-  } catch(e) {}
+  } catch (e) {}
 
   function buildUrl(path, params) {
     const p = new URLSearchParams();
     p.set('apikey', apikey);
-    Object.keys(params || {}).forEach(function(k){
-      const v = params[k];
-      if (v !== undefined && v !== null && v !== '') p.set(k, v);
-    });
+    Object.keys(params || {}).forEach(k => { const v = params[k]; if (v !== undefined && v !== null && v !== '') p.set(k, v); });
     return BASE + path + '?' + p.toString();
   }
-  function ok(data) { return Response.json(data, { headers: corsHeaders }); }
 
-  try {
-    // ---------- 账户 ----------
-    if (action === 'balance') {
-      const r = await fetch(buildUrl('getBalance', {}));
-      return ok(await r.json());
-    }
-
-    // ---------- 国家列表 ----------
-    if (action === 'countries') {
-      const r = await fetch(buildUrl('countries', {}));
-      return ok(await r.json());
-    }
-
-    // ---------- 服务列表（后台用，带成本价）----------
-    if (action === 'services') {
-      const params = {
-        language: url.searchParams.get('language') || 'zh',
-        page: url.searchParams.get('page') || '1',
-      };
-      const countryName = url.searchParams.get('countryName');
-      const service = url.searchParams.get('service');
-      if (countryName) params.country = countryName;
-      if (service) params.service = service;
-      const r = await fetch(buildUrl('List', params));
-      const d = await r.json();
-      if (d.code === 0 && Array.isArray(d.msg)) {
-        d.msg = d.msg.map(function(item){
-          if (item.cost !== undefined) {
-            item.origin_cost = item.cost;
-            item.cost = Math.round(parseFloat(item.cost) * MARKUP * 100) / 100;
-          }
-          return item;
-        });
-      }
-      return ok(d);
-    }
-
-    // ---------- 客户端服务列表（只返回人民币售价）----------
-    if (action === 'client_services') {
-      const params = {
-        language: url.searchParams.get('language') || 'zh',
-        page: url.searchParams.get('page') || '1',
-      };
-      const countryName = url.searchParams.get('countryName');
-      const service = url.searchParams.get('service');
-      if (countryName) params.country = countryName;
-      if (service) params.service = service;
-      const r = await fetch(buildUrl('List', params));
-      const d = await r.json();
-      if (d.code === 0 && Array.isArray(d.msg)) {
-        d.msg = d.msg.map(function(item){
-          if (item.cost !== undefined) {
-            const originUsd = parseFloat(item.cost) || 0;
-            const finalUsd = originUsd * MARKUP;
-            item.price_cny = Math.round(finalUsd * USD_TO_CNY * 100);
+  // ========== 只读操作（公开） ==========
+  if (action === 'balance' || action === 'countries') {
+    const pathMap = { balance: 'getBalance', countries: 'countries' };
+    const r = await fetch(buildUrl(pathMap[action], {}));
+    return jsonOk(await r.json(), env, request);
+  }
+  if (action === 'services' || action === 'client_services') {
+    const params = { language: url.searchParams.get('language') || 'zh', page: url.searchParams.get('page') || '1' };
+    if (url.searchParams.get('countryName')) params.country = url.searchParams.get('countryName');
+    if (url.searchParams.get('service')) params.service = url.searchParams.get('service');
+    const r = await fetch(buildUrl('List', params));
+    const d = await r.json();
+    if (d.code === 0 && Array.isArray(d.msg)) {
+      d.msg = d.msg.map(item => {
+        if (item.cost !== undefined) {
+          const originUsd = parseFloat(item.cost) || 0;
+          if (action === 'services') {
+            item.cost = Math.round(originUsd * MARKUP * 100) / 100;
+            // 安全修复：不再返回 origin_cost（泄露上游真实成本）
+            delete item.origin_cost;
+          } else {
+            item.price_cny = Math.round(originUsd * MARKUP * USD_TO_CNY * 100);
             delete item.cost;
             delete item.origin_cost;
           }
-          return item;
-        });
-      }
-      return ok(d);
+        }
+        return item;
+      });
     }
+    return jsonOk(d, env, request);
+  }
 
-    // ---------- 验证码接收：请求号码 ----------
+  // ========== 写操作（必须绑定订单） ==========
+  const orderNo = url.searchParams.get('order_no') || '';
+  if (!orderNo) return jsonError('缺少 order_no，接码操作必须绑定订单', 400, env, request);
+  const order = await findOrder(env, orderNo);
+  if (!order) return jsonError('订单不存在', 404, env, request);
+
+  // 取号类（扣费）必须已支付
+  const isChargeAction = (action === 'request_number' || action === 'common_request');
+  if (isChargeAction && order.status === 'pending') return jsonError('订单未支付，无法取号', 400, env, request);
+
+  // 会员只能操作自己的订单
+  const admin = await requireAdmin(request, env);
+  const member = await requireMember(request, env);
+  if (!admin && (!member || member.username !== order.username)) return jsonError('只能操作自己的订单', 403, env, request);
+
+  // 取号限流：单订单 3次/分钟
+  if (isChargeAction) {
+    const rl = await rateLimit(env.YUNFAKA_KV, 'luban:' + orderNo, 3, 60000);
+    if (rl.blocked) return jsonError('取号过于频繁，请稍后重试', 429, env, request);
+  }
+
+  try {
     if (action === 'request_number') {
-      const serviceId = url.searchParams.get('service_id');
-      if (!serviceId) return ok({ ok: false, msg: '缺少 service_id' });
+      const serviceId = url.searchParams.get('service_id') || order.luban_service_id || '';
+      if (!serviceId) return jsonError('缺少 service_id', 400, env, request);
       const r = await fetch(buildUrl('getNumber', { service_id: serviceId }));
-      return ok(await r.json());
+      return jsonOk(await r.json(), env, request);
     }
-
-    // ---------- 验证码接收：获取短信 ----------
     if (action === 'get_sms') {
       const requestId = url.searchParams.get('request_id');
-      if (!requestId) return ok({ ok: false, msg: '缺少 request_id' });
+      if (!requestId) return jsonError('缺少 request_id', 400, env, request);
       const r = await fetch(buildUrl('getSms', { request_id: requestId }));
-      return ok(await r.json());
+      return jsonOk(await r.json(), env, request);
     }
-
-    // ---------- 验证码接收：更改状态（释放号码）----------
     if (action === 'change_status') {
       const requestId = url.searchParams.get('request_id');
       const status = url.searchParams.get('status') || 'reject';
-      if (!requestId) return ok({ ok: false, msg: '缺少 request_id' });
-      const r = await fetch(buildUrl('setStatus', { request_id: requestId, status: status }));
-      return ok(await r.json());
+      if (!requestId) return jsonError('缺少 request_id', 400, env, request);
+      const r = await fetch(buildUrl('setStatus', { request_id: requestId, status }));
+      return jsonOk(await r.json(), env, request);
     }
-
-    // ---------- 验证码接收：重新激活号码 ----------
     if (action === 'reactivate') {
       const requestId = url.searchParams.get('request_id');
-      if (!requestId) return ok({ ok: false, msg: '缺少 request_id' });
+      if (!requestId) return jsonError('缺少 request_id', 400, env, request);
       const r = await fetch(buildUrl('getAgainNmber', { request_id: requestId }));
-      return ok(await r.json());
+      return jsonOk(await r.json(), env, request);
     }
-
-    // ---------- 通用短信：请求号码（支持国家/指定号码/类型/过滤）----------
     if (action === 'common_request') {
-      const phone = url.searchParams.get('phone') || '';
-      const cardType = url.searchParams.get('cardType') || '';
-      const filter = url.searchParams.get('filter') || '';
-      const country = url.searchParams.get('country') || '';
       const params = {};
-      if (phone) params.phone = phone;
-      if (cardType && cardType !== '全部') params.cardType = cardType;
-      if (filter) params.filter = filter;
-      if (country) params.country = country;
+      if (url.searchParams.get('phone')) params.phone = url.searchParams.get('phone');
+      if (url.searchParams.get('cardType') && url.searchParams.get('cardType') !== '全部') params.cardType = url.searchParams.get('cardType');
+      if (url.searchParams.get('filter')) params.filter = url.searchParams.get('filter');
+      if (url.searchParams.get('country')) params.country = url.searchParams.get('country');
       const r = await fetch(buildUrl('getKeywordNumber', params));
-      return ok(await r.json());
+      return jsonOk(await r.json(), env, request);
     }
-
-    // ---------- 通用短信：获取短信 ----------
     if (action === 'common_get_sms') {
       const phone = url.searchParams.get('phone');
       const keyword = url.searchParams.get('keyword') || '';
-      if (!phone) return ok({ ok: false, msg: '缺少 phone' });
-      const r = await fetch(buildUrl('getKeywordSms', { phone: phone, keyword: keyword }));
-      return ok(await r.json());
+      if (!phone) return jsonError('缺少 phone', 400, env, request);
+      const r = await fetch(buildUrl('getKeywordSms', { phone, keyword }));
+      return jsonOk(await r.json(), env, request);
     }
-
-    // ---------- 通用短信：释放号码 ----------
     if (action === 'common_release') {
       const phone = url.searchParams.get('phone');
-      if (!phone) return ok({ ok: false, msg: '缺少 phone' });
-      const r = await fetch(buildUrl('delKeywordNumber', { phone: phone }));
-      return ok(await r.json());
+      if (!phone) return jsonError('缺少 phone', 400, env, request);
+      const r = await fetch(buildUrl('delKeywordNumber', { phone }));
+      return jsonOk(await r.json(), env, request);
     }
-
-    return ok({ ok: false, msg: '未知 action: ' + action });
-  } catch (e) {
-    return ok({ ok: false, msg: '操作失败，请稍后重试' });
-  }
+    return jsonError('未知 action: ' + action, 400, env, request);
+  } catch (e) { return jsonError('操作失败，请稍后重试', 500, env, request, e); }
 }

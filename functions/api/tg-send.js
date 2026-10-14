@@ -1,52 +1,37 @@
-import { corsHeaders, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
-// functions/api/tg-send.js · Telegram 消息发送代理（后端持有 Token，前端不再暴露）
-// POST { text, chat_id?, order_no?, type? }
-//   - 不指定 chat_id 时使用 db.config.tg_chat_id（店主）
-//   - type=customer 且带 order_no 时，发送给订单绑定的客户 TG
+// functions/api/tg-send.js · Telegram 消息发送代理（安全修复版：仅管理员/会员可调用）
+import { requireAdmin, requireMember, optionsResponse, jsonError, jsonOk } from '../_lib/common.js';
+
 export async function onRequest(context) {
   const { request, env } = context;
-  const cors = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Methods': 'POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-  if (request.method !== 'POST') return Response.json({ ok: false, msg: 'Method not allowed' }, { status: 405, headers: cors });
-
+  if (request.method === 'OPTIONS') return optionsResponse(request, env);
+  if (request.method !== 'POST') return jsonError('Method not allowed', 405, env, request);
+  const admin = await requireAdmin(request, env);
+  const member = await requireMember(request, env);
+  if (!admin && !member) return jsonError('请先登录', 401, env, request);
   try {
     const body = await request.json();
-    const text = (body.text || '').trim();
-    if (!text) return Response.json({ ok: false, msg: '缺少消息内容' }, { headers: cors });
-
+    const text = String(body.text || '').trim().slice(0, 2000);
+    if (!text) return jsonError('缺少消息内容', 400, env, request);
     const raw = await env.YUNFAKA_KV.get('state');
-    if (!raw) return Response.json({ ok: false, msg: '无数据' }, { headers: cors });
+    if (!raw) return jsonError('无数据', 404, env, request);
     const state = JSON.parse(raw);
     const cfg = (state.db && state.db.config) || {};
     const botToken = cfg.tg_bot_token || env.TG_BOT_TOKEN || '';
-    if (!botToken) return Response.json({ ok: false, msg: '未配置 TG Bot Token' }, { headers: cors });
-
-    let chatId = body.chat_id || cfg.tg_chat_id || '';
-    // 发送给订单绑定的客户
-    if (body.type === 'customer' && body.order_no) {
-      const order = (state.db.orders || []).find(o => o.order_no === body.order_no);
-      if (order && order.customer_tg_id) chatId = order.customer_tg_id;
+    if (!botToken) return jsonError('未配置 TG Bot Token', 400, env, request);
+    let chatId = '';
+    if (admin) {
+      chatId = body.chat_id || cfg.tg_chat_id || '';
+      if (body.type === 'customer' && body.order_no) {
+        const order = (state.db.orders || []).find(o => o.order_no === body.order_no);
+        if (order && order.customer_tg_id) chatId = order.customer_tg_id;
+      }
+    } else {
+      chatId = cfg.tg_chat_id || '';
     }
-    if (!chatId) return Response.json({ ok: false, msg: '未指定接收方' }, { headers: cors });
-
-    const r = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: body.parse_mode || 'HTML',
-        disable_web_page_preview: true,
-      }),
-    });
+    if (!chatId) return jsonError('未指定接收方', 400, env, request);
+    const r = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }) });
     const d = await r.json();
-    if (!d.ok) return Response.json({ ok: false, msg: d.description || 'TG 发送失败' }, { headers: cors });
-    return Response.json({ ok: true }, { headers: cors });
-  } catch (e) {
-    return Response.json({ ok: false, msg: '操作失败，请稍后重试' }, { headers: cors });
-  }
+    if (!d.ok) return jsonError(d.description || 'TG 发送失败', 400, env, request);
+    return jsonOk({ ok: true }, env, request);
+  } catch (e) { return jsonError('操作失败，请稍后重试', 500, env, request, e); }
 }

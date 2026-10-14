@@ -1362,13 +1362,15 @@ function memberLogin(){
   const errEl = $('#login-err');
   if (!username){ errEl.textContent = '请输入账号'; toast('请输入账号','error'); return; }
   if (!password){ errEl.textContent = '请输入密码'; toast('请输入密码','error'); return; }
-  const db = loadDB();
-  const m = findMemberByUsername(db, username);
-  if (!m){ errEl.textContent = '账号不存在'; toast('账号不存在','error'); return; }
-  if (!verifyPwd(password, m.password, function(newHash){ m.password = newHash; saveDB(db); })){ errEl.textContent = '密码错误'; toast('密码错误','error'); return; }
-  errEl.textContent = ''; setCurrentUsername(username);
-  if (m.secret) localStorage.setItem(LS_SECRET, m.secret);
-  toast('登录成功','success'); route();
+  fetch('/api/member-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username,password:password})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d && d.ok){
+        if(d.token) localStorage.setItem('yunfaka_member_token', d.token);
+        errEl.textContent = ''; setCurrentUsername(username);
+        if(d.member && d.member.secret) localStorage.setItem(LS_SECRET, d.member.secret);
+        toast('登录成功','success'); route();
+      } else { errEl.textContent = (d&&d.msg)||'登录失败'; toast((d&&d.msg)||'登录失败','error'); }
+    }).catch(function(){ toast('网络错误','error'); });
 }
 function memberFindPwd(){
   const username = $('#fp-username').value.trim();
@@ -3109,6 +3111,116 @@ window.yfStrongAlert = yfStrongAlert;
       return r;
     };
   }
+
+/* ===== Luban 接码核心函数（补全缺失实现） ===== */
+var __lubanPollTimers = {};
+function __lubanFetch(action, params){
+  var h = {'Content-Type':'application/json'};
+  var mt = localStorage.getItem('yunfaka_member_token')||'';
+  var at = sessionStorage.getItem('yunfaka_admin_token')||'';
+  if(mt) h['X-Member-Token']=mt; if(at) h['X-Admin-Token']=at;
+  var orderNo = params.__orderNo; delete params.__orderNo;
+  var qs = Object.keys(params||{}).filter(function(k){return params[k]!==undefined&&params[k]!=='';}).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);}).join('&');
+  return fetch('/api/luban?action='+action+(qs?'&'+qs:'')+'&order_no='+encodeURIComponent(orderNo), {headers:h}).then(function(r){return r.json();});
+}
+function lubanStartSession(orderNo){
+  var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
+  if(o.luban_phone && o.luban_request_id){ lubanPollSms(orderNo, 0); return; }
+  if(window.toast) toast('正在请求号码…','info');
+  __lubanFetch('request_number', {service_id: o.luban_service_id||'', __orderNo: orderNo}).then(function(d){
+    var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
+    if(d && d.code===0 && d.data){
+      o2.luban_request_id = d.data.request_id || d.data.id || '';
+      o2.luban_phone = d.data.phone_number || d.data.phone || '';
+      o2.status = 'processing'; o2.submitted_at = now(); saveDB(db2);
+      if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
+      lubanPollSms(orderNo, 0);
+    } else {
+      o2.status = 'luban_error'; o2.luban_error = (d && (d.msg||d.message)) || '取号失败'; saveDB(db2);
+      if(window.toast) toast('取号失败：'+o2.luban_error,'error');
+    }
+    if(location.hash.indexOf('#/order/')===0 && window.route) route();
+  }).catch(function(e){ if(window.toast) toast('取号网络错误：'+e.message,'error'); });
+}
+function lubanStartCommon(orderNo, params){
+  var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
+  if(o.luban_phone){ lubanCommonPoll(orderNo, 0); return; }
+  if(window.toast) toast('正在请求号码…','info');
+  var p = {__orderNo: orderNo};
+  if(o.luban_country) p.country = o.luban_country;
+  if(o.luban_phone) p.phone = o.luban_phone;
+  if(o.luban_cardtype && o.luban_cardtype!=='全部') p.cardType = o.luban_cardtype;
+  if(o.luban_filter==='是') p.filter = '1';
+  __lubanFetch('common_request', p).then(function(d){
+    var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
+    if(d && d.code===0 && d.data){
+      o2.luban_phone = d.data.phone || d.data.phone_number || '';
+      o2.status = 'processing'; o2.submitted_at = now(); saveDB(db2);
+      if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
+      lubanCommonPoll(orderNo, 0);
+    } else {
+      o2.status = 'luban_error'; o2.luban_error = (d && (d.msg||d.message)) || '取号失败'; saveDB(db2);
+      if(window.toast) toast('取号失败：'+o2.luban_error,'error');
+    }
+    if(location.hash.indexOf('#/order/')===0 && window.route) route();
+  }).catch(function(e){ if(window.toast) toast('取号网络错误：'+e.message,'error'); });
+}
+function lubanPollSms(orderNo, attempt){
+  if(__lubanPollTimers[orderNo]) clearTimeout(__lubanPollTimers[orderNo]);
+  if(attempt > 40){ if(window.toast) toast('超时未收到验证码，请释放号码','error'); return; }
+  var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
+  if(!o.luban_request_id){ if(window.toast) toast('未取号','error'); return; }
+  __lubanFetch('get_sms', {request_id: o.luban_request_id, __orderNo: orderNo}).then(function(d){
+    var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
+    var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
+    if(d && d.code===0 && sms){
+      o2.luban_sms = String(sms);
+      o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); saveDB(db2);
+      if(window.toast) toast('收到验证码：'+o2.luban_sms,'success');
+      if(location.hash.indexOf('#/order/')===0 && window.route) route();
+      return;
+    }
+    __lubanPollTimers[orderNo] = setTimeout(function(){ lubanPollSms(orderNo, attempt+1); }, 15000);
+  }).catch(function(){
+    __lubanPollTimers[orderNo] = setTimeout(function(){ lubanPollSms(orderNo, attempt+1); }, 15000);
+  });
+}
+function lubanCommonPoll(orderNo, attempt){
+  if(__lubanPollTimers[orderNo]) clearTimeout(__lubanPollTimers[orderNo]);
+  if(attempt > 40){ if(window.toast) toast('超时未收到验证码，请释放号码','error'); return; }
+  var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
+  if(!o.luban_phone){ if(window.toast) toast('未取号','error'); return; }
+  __lubanFetch('common_get_sms', {phone: o.luban_phone, keyword: o.luban_keyword||'', __orderNo: orderNo}).then(function(d){
+    var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
+    var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
+    if(d && d.code===0 && sms){
+      o2.luban_sms = String(sms);
+      o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); saveDB(db2);
+      if(window.toast) toast('收到验证码：'+o2.luban_sms,'success');
+      if(location.hash.indexOf('#/order/')===0 && window.route) route();
+      return;
+    }
+    __lubanPollTimers[orderNo] = setTimeout(function(){ lubanCommonPoll(orderNo, attempt+1); }, 15000);
+  }).catch(function(){
+    __lubanPollTimers[orderNo] = setTimeout(function(){ lubanCommonPoll(orderNo, attempt+1); }, 15000);
+  });
+}
+function lubanRelease(orderNo){
+  if(!confirm('确定释放该号码？释放后无法继续接收验证码。')) return;
+  var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
+  if(o.luban_type==='common'){ __lubanFetch('common_release', {phone: o.luban_phone||'', __orderNo: orderNo}); }
+  else { __lubanFetch('change_status', {request_id: o.luban_request_id||'', status: 'reject', __orderNo: orderNo}); }
+  o.status = 'rejected'; o.luban_released = true; saveDB(db);
+  if(window.toast) toast('已释放号码','success');
+  if(__lubanPollTimers[orderNo]){ clearTimeout(__lubanPollTimers[orderNo]); delete __lubanPollTimers[orderNo]; }
+  if(location.hash.indexOf('#/order/')===0 && window.route) route();
+}
+function lubanManualCheck(orderNo){
+  var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
+  if(window.toast) toast('正在检查…','info');
+  if(o.luban_type==='common') lubanCommonPoll(orderNo, 0);
+  else lubanPollSms(orderNo, 0);
+}
   wrapPoll('lubanPollSms');
   wrapPoll('lubanCommonPoll');
   var origMC = window.lubanManualCheck;

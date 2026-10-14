@@ -2323,9 +2323,10 @@ function lubanSubmitClientBuy(serviceId){
   const orderNo = genOrderNo();
   const order = { order_no: orderNo, product_id: 0, product_name: `[接码] ${svc.service_name} · ${svc.country_name_zh || svc.country_name_en || ''}`, sku_id: 0, sku_name: '', category_id: 0, quantity: 1, amount: priceFen, balance_used: deduct, amount_due: due, secret, username: member ? member.username : '', status: 'pending', pay_method: payMethod, cards: [], note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放', created_at: now(), delivered_at: '', source: 'luban', luban_type: 'sms', luban_service_id: String(svc.service_id), luban_service_name: svc.service_name, luban_country: svc.country_name_zh || svc.country_name_en || '', usdt_rate: usdtRate() };
   if (payMethod === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
-  db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret); closeModal();
-  if (due === 0){ payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
-  else showPayModal('order', orderNo);
+  db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret);
+  window._submitting = false;
+  if (due === 0){ closeModal(); payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
+  else { closeModal(); setTimeout(function(){ showPayModal('order', orderNo); }, 60); }
 }
 function lubanCommonBuy(){
   const keyword = $('#luban-common-keyword').value.trim(); if (!keyword){ toast('请填写关键词','error'); $('#luban-common-keyword').focus(); return; }
@@ -2382,9 +2383,10 @@ function lubanCommonSubmit2(){
   const orderNo = genOrderNo();
   const order = { order_no: orderNo, product_id: 0, product_name: `[通用接码] ${keyword}`, sku_id: 0, sku_name: '', category_id: 0, quantity: 1, amount: priceFen, balance_used: deduct, amount_due: due, secret, username: member ? member.username : '', status: 'pending', pay_method: payMethod, cards: [], note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放', created_at: now(), delivered_at: '', source: 'luban', luban_type: 'common', luban_keyword: keyword, luban_country: country, luban_cardtype: cardType, luban_filter: filter, luban_phone: phone, usdt_rate: usdtRate() };
   if (payMethod === 'alipay') order.redpacket_code = genRedPacketCode(cfg.pay_alipay_redpacket_prefix);
-  db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret); closeModal();
-  if (due === 0){ payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
-  else showPayModal('order', orderNo);
+  db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret);
+  window._submitting = false;
+  if (due === 0){ closeModal(); payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
+  else { closeModal(); setTimeout(function(){ showPayModal('order', orderNo); }, 60); }
 }function smmApi(action, payload){ var __h={'Content-Type':'application/json'}; var __mt=localStorage.getItem('yunfaka_member_token')||''; var __at=sessionStorage.getItem('yunfaka_admin_token')||''; if(__mt)__h['X-Member-Token']=__mt; if(__at)__h['X-Admin-Token']=__at; return fetch('/api/smm', { method: 'POST', headers: __h, body: JSON.stringify(Object.assign({ action: action }, payload || {})) }).then(r => r.json()); }
 function smmIsPackage(p){ if (p.smm_type === 'Package') return true; var mn = parseInt(p.smm_min), mx = parseInt(p.smm_max); return (mn === 1 && mx === 1); }
 function smmMarkup(){ try { return Number((loadDB().config || {}).smm_markup) || 1.5; } catch(e){ return 1.5; } }
@@ -2597,6 +2599,7 @@ function smmBuy(id){
   var qtyEl = isPkg ? null : $('#smm-qty');
   function smmRefreshAmount(){ var q = isPkg ? 1 : (parseInt(qtyEl.value) || 0); var amountFen = smmCalcAmount(p, q); if ($('#smm-amount')) $('#smm-amount').textContent = usdt(amountFen) + ' USDT'; }
   if (qtyEl) qtyEl.addEventListener('input', smmRefreshAmount);
+  window.smmRefreshAmount = smmRefreshAmount; /* 挂到window，让smmAmountUnit包装生效，修复改数量金额不刷新 */
   var usdtEnabled = cfg.pay_usdt_enabled !== false;
   var alipayEnabled = cfg.pay_alipay_enabled !== false;
   $('#smm-pay-wrap').innerHTML = `<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">${usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="smm-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : ''}${alipayEnabled ? `<label class="pay-method ${!usdtEnabled?'active':''}" data-method="alipay"><input type="radio" name="smm-pay" value="alipay" ${!usdtEnabled?'checked':''}><span class="logo">💰</span> 支付宝</label>` : ''}</div></label>`;

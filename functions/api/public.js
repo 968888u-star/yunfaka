@@ -108,6 +108,10 @@ export async function onRequest(context) {
         luban_service_id: product.luban_service_id || '',
         luban_service_name: product.luban_service_name || '',
         luban_country: product.luban_country || '',
+        luban_keyword: String(body.luban_keyword || '').slice(0, 100),
+        luban_cardtype: String(body.luban_cardtype || '').slice(0, 50),
+        luban_filter: String(body.luban_filter || '').slice(0, 10),
+        luban_phone: String(body.luban_phone || '').slice(0, 30),
         smm_service_id: product.smm_service_id || '',
         smm_link: String(body.smm_link || '').slice(0, 500),
         usdt_rate: rate

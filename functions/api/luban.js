@@ -42,6 +42,25 @@ export async function onRequest(context) {
     const r = await fetch(buildUrl(pathMap[action], {}));
     return jsonOk(await r.json(), env, request);
   }
+  // 轮询短信（只读不扣钱）：只要求订单存在，不要求会员归属（游客订单也能轮询）
+  if (action === 'get_sms' || action === 'common_get_sms') {
+    const orderNo = url.searchParams.get('order_no') || '';
+    if (!orderNo) return jsonError('缺少 order_no', 400, env, request);
+    const order = await findOrder(env, orderNo);
+    if (!order) return jsonError('订单不存在', 404, env, request);
+    if (action === 'get_sms') {
+      const requestId = url.searchParams.get('request_id') || order.luban_request_id || '';
+      if (!requestId) return jsonError('缺少 request_id', 400, env, request);
+      const r = await fetch(buildUrl('getSms', { request_id: requestId }));
+      return jsonOk(await r.json(), env, request);
+    } else {
+      const phone = url.searchParams.get('phone') || order.luban_phone || '';
+      const keyword = url.searchParams.get('keyword') || order.luban_keyword || '';
+      if (!phone) return jsonError('缺少 phone', 400, env, request);
+      const r = await fetch(buildUrl('getKeywordSms', { phone, keyword }));
+      return jsonOk(await r.json(), env, request);
+    }
+  }
   if (action === 'services' || action === 'client_services') {
     const params = { language: url.searchParams.get('language') || 'zh', page: url.searchParams.get('page') || '1' };
     if (url.searchParams.get('countryName')) params.country = url.searchParams.get('countryName');

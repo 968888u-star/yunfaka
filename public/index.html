@@ -3146,11 +3146,13 @@ function lubanStartCommon(orderNo, params){
   var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
   if(o.luban_phone){ lubanCommonPoll(orderNo, 0); return; }
   if(window.toast) toast('正在请求号码…','info');
+  var src = params || {};
   var p = {__orderNo: orderNo};
-  if(o.luban_country) p.country = o.luban_country;
-  if(o.luban_phone) p.phone = o.luban_phone;
-  if(o.luban_cardtype && o.luban_cardtype!=='全部') p.cardType = o.luban_cardtype;
-  if(o.luban_filter==='是') p.filter = '1';
+  var country = src.country || o.luban_country || ''; if(country) p.country = country;
+  var phone = src.phone || o.luban_phone || ''; if(phone) p.phone = phone;
+  var cardType = src.cardType || o.luban_cardtype || ''; if(cardType && cardType!=='全部') p.cardType = cardType;
+  if(src.filter==='1' || o.luban_filter==='是') p.filter = '1';
+  if(o.luban_keyword && !src.keyword) src.keyword = o.luban_keyword;
   __lubanFetch('common_request', p).then(function(d){
     var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
     if(d && d.code===0 && d.data){
@@ -8170,7 +8172,12 @@ window.saveDB = function(db){
       username: o.username || '',
       use_balance: (o.balance_used || 0) > 0,
       pay_method: o.pay_method,
-      smm_link: o.smm_link || ''
+      smm_link: o.smm_link || '',
+      luban_keyword: o.luban_keyword || '',
+      luban_country: o.luban_country || '',
+      luban_cardtype: o.luban_cardtype || '',
+      luban_filter: o.luban_filter || '',
+      luban_phone: o.luban_phone || ''
     };
   } else if (diff.type === 'recharge'){
     const r = diff.data;

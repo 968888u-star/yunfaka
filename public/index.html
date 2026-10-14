@@ -2326,7 +2326,11 @@ function lubanSubmitClientBuy(serviceId){
   db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret);
   window._submitting = false;
   if (due === 0){ closeModal(); payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
-  else { closeModal(); setTimeout(function(){ showPayModal('order', orderNo); }, 60); }
+  else { closeModal(); setTimeout(function(){
+      try { showPayModal('order', orderNo); }
+      catch(e){ if(window.toast) toast('支付页打开失败，正在跳转订单页…','warn'); location.hash = '#/order/' + orderNo; }
+    }, 150); }
+  } catch(e) { window._submitting = false; if(window.toast) toast('下单出错: ' + e.message, 'error'); console.error('lubanSubmitClientBuy error:', e); }
 }
 function lubanCommonBuy(){
   const keyword = $('#luban-common-keyword').value.trim(); if (!keyword){ toast('请填写关键词','error'); $('#luban-common-keyword').focus(); return; }
@@ -2386,7 +2390,11 @@ function lubanCommonSubmit2(){
   db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret);
   window._submitting = false;
   if (due === 0){ closeModal(); payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
-  else { closeModal(); setTimeout(function(){ showPayModal('order', orderNo); }, 60); }
+  else { closeModal(); setTimeout(function(){
+      try { showPayModal('order', orderNo); }
+      catch(e){ if(window.toast) toast('支付页打开失败，正在跳转订单页…','warn'); location.hash = '#/order/' + orderNo; }
+    }, 150); }
+  } catch(e) { window._submitting = false; if(window.toast) toast('下单出错: ' + e.message, 'error'); console.error('lubanCommonSubmit2 error:', e); }
 }function smmApi(action, payload){ var __h={'Content-Type':'application/json'}; var __mt=localStorage.getItem('yunfaka_member_token')||''; var __at=sessionStorage.getItem('yunfaka_admin_token')||''; if(__mt)__h['X-Member-Token']=__mt; if(__at)__h['X-Admin-Token']=__at; return fetch('/api/smm', { method: 'POST', headers: __h, body: JSON.stringify(Object.assign({ action: action }, payload || {})) }).then(r => r.json()); }
 function smmIsPackage(p){ if (p.smm_type === 'Package') return true; var mn = parseInt(p.smm_min), mx = parseInt(p.smm_max); return (mn === 1 && mx === 1); }
 function smmMarkup(){ try { return Number((loadDB().config || {}).smm_markup) || 1.5; } catch(e){ return 1.5; } }
@@ -2597,7 +2605,7 @@ function smmBuy(id){
     <div id="smm-pay-wrap"></div>
     <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn primary" onclick="smmSubmit(${p.id})">确认下单</button></div>`);
   var qtyEl = isPkg ? null : $('#smm-qty');
-  function smmRefreshAmount(){ var q = isPkg ? 1 : (parseInt(qtyEl.value) || 0); var amountFen = smmCalcAmount(p, q); if ($('#smm-amount')) $('#smm-amount').textContent = usdt(amountFen) + ' USDT'; }
+  function smmRefreshAmount(){ var q = isPkg ? 1 : (parseInt(qtyEl.value) || 0); var amountFen = smmCalcAmount(p, q); var __el = $('#smm-amount'); if (__el){ var __rate = window.usdtRate ? window.usdtRate() : 7.2; var __usdtVal = (amountFen / 100 / __rate).toFixed(4); __el.textContent = parseFloat(__usdtVal).toFixed(2) + ' USDT'; __el.dataset.usdtVal = __usdtVal; /* 关键：更新缓存的USDT值，否则smmAmountUnit永远用旧值 */ } }
   if (qtyEl) qtyEl.addEventListener('input', smmRefreshAmount);
   window.smmRefreshAmount = smmRefreshAmount; /* 挂到window，让smmAmountUnit包装生效，修复改数量金额不刷新 */
   var usdtEnabled = cfg.pay_usdt_enabled !== false;
@@ -3492,6 +3500,19 @@ function injectQtyQuickBtns(inputId){
     else if (act === 'set') input.value = parseInt(b.dataset.val);
     input.dispatchEvent(new Event('input', {bubbles: true}));
     input.dispatchEvent(new Event('change', {bubbles: true}));
+    // 强制刷新 SMM/普通商品金额显示（修复事件链失效导致金额不更新）
+    setTimeout(function(){
+      try {
+        var amtEl = document.getElementById('smm-amount') || document.getElementById('buy-amount');
+        if (amtEl && window.smmRefreshAmount) { window.smmRefreshAmount(); }
+        if (window.smmAmountUnit) { window.smmAmountUnit(); }
+        // 普通商品下单弹窗金额
+        var buyDue = document.getElementById('buy-due');
+        if (buyDue && input.id === 'buy-qty') {
+          var ev = new Event('change', {bubbles:true}); input.dispatchEvent(ev);
+        }
+      } catch(e) {}
+    }, 30);
   });
 }
 (function(){

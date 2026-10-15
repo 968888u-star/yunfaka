@@ -2262,7 +2262,21 @@ function loadLubanPage(country, service, page){
 }
 function finishSearch(serviceRaw, tryList){
   if (_lubanResults.length === 0){
-    if (_lubanApiErr){ $('#luban-c-results').innerHTML = `<div class="empty" style="color:#b91c1c;line-height:1.8">⚠️ 上游接码服务暂不可用<br><span style="font-size:13px">${esc(_lubanApiErr)}</span><br><span class="muted" style="font-size:12px">请稍后重试，或联系店主确认上游配置</span></div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return; }
+    if (_lubanApiErr){
+      try {
+        var __db = loadDB();
+        var __local = (__db.products||[]).filter(function(p){ return p.source==='luban' && p.active; });
+        var __kw = (serviceRaw||'').toLowerCase();
+        var __matched = __kw ? __local.filter(function(p){ return ((p.luban_service_name||'')+' '+(p.luban_country||'')).toLowerCase().indexOf(__kw)>=0; }) : __local;
+        if (__matched.length){
+          _lubanResults = __matched.map(function(p){ return { service_id: p.luban_service_id, service_name: p.luban_service_name, country_name_zh: p.luban_country, price_cny: p.price }; });
+          renderLubanResults();
+          $('#luban-c-count').textContent = '共 ' + _lubanResults.length + ' 个（本地缓存）';
+          $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px;color:#b45309;text-align:center;padding:8px">⚠️ 上游接码服务暂不可用（' + esc(_lubanApiErr) + '），当前显示店主已同步的本地缓存商品，下单后取号可能延迟</div>';
+          return;
+        }
+      } catch(e){}
+      $('#luban-c-results').innerHTML = `<div class="empty" style="color:#b91c1c;line-height:1.8">⚠️ 上游接码服务暂不可用<br><span style="font-size:13px">${esc(_lubanApiErr)}</span><br><span class="muted" style="font-size:12px">请稍后重试，或联系店主确认上游配置</span></div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return; }
     const hint = (serviceRaw && tryList.length > 1) ? `（已尝试用「${tryList.join('」「')}」搜索）` : '';
     $('#luban-c-results').innerHTML = `<div class="empty">没有找到匹配的服务 ${hint}</div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return;
   }

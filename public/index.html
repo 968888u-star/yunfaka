@@ -2168,7 +2168,7 @@ function lubanToggleProduct(id){ const db = loadDB(); const p = db.products.find
 
 const LUBAN_COUNTRIES = [['中国','CN'],['美国','US'],['英国','GB'],['俄罗斯','RU'],['印度','IN'],['印度尼西亚','ID'],['菲律宾','PH'],['越南','VN'],['泰国','TH'],['马来西亚','MY'],['新加坡','SG'],['日本','JP'],['韩国','KR'],['中国香港','HK'],['中国台湾','TW'],['中国澳门','MO'],['德国','DE'],['法国','FR'],['意大利','IT'],['西班牙','ES'],['荷兰','NL'],['波兰','PL'],['乌克兰','UA'],['罗马尼亚','RO'],['捷克','CZ'],['土耳其','TR'],['以色列','IL'],['沙特阿拉伯','SA'],['阿联酋','AE'],['哈萨克斯坦','KZ'],['加拿大','CA'],['墨西哥','MX'],['巴西','BR'],['阿根廷','AR'],['智利','CL'],['澳大利亚','AU'],['新西兰','NZ'],['南非','ZA'],['埃及','EG'],['尼日利亚','NG'],['肯尼亚','KE'],['摩洛哥','MA']];
 const LUBAN_SERVICE_ALIAS = {'豆包':'doubao','微信':'weixin','拼多多':'pinduoduo','淘宝':'taobao','支付宝':'alipay','抖音':'douyin','小红书':'xiaohongshu','哔哩哔哩':'bilibili','b站':'bilibili','快手':'kuaishou','知乎':'zhihu','微博':'weibo','百度':'baidu','京东':'jd','美团':'meituan','滴滴':'didi','腾讯':'tencent','网易':'netease','小米':'xiaomi','华为':'huawei','抖音国际版':'tiktok','油管':'youtube','脸书':'facebook','推特':'twitter','电报':'telegram','飞机':'telegram'};
-let _lubanResults = [];
+let _lubanResults = []; let _lubanApiErr = null;
 function buildCountryOptions(defaultChina){ return LUBAN_COUNTRIES.map(([name, code]) => `<option value="${name}"${defaultChina && name === '中国' ? ' selected' : ''}>${name}（${code}）</option>`).join(''); }
 
 function renderLubanClient(){
@@ -2221,7 +2221,7 @@ function lubanClientSearch(page){
   const country = ($('#luban-c-country') && $('#luban-c-country').value) || '';
   const serviceRaw = ($('#luban-c-service') && $('#luban-c-service').value.trim()) || '';
   if (page !== 1){ loadLubanPage(country, serviceRaw, page); return; }
-  _lubanResults = []; $('#luban-c-results').innerHTML = '<div class="loading">正在搜索…</div>'; $('#luban-c-loadmore').innerHTML = ''; $('#luban-c-count').textContent = '';
+  _lubanResults = []; _lubanApiErr = null; $('#luban-c-results').innerHTML = '<div class="loading">正在搜索…</div>'; $('#luban-c-loadmore').innerHTML = ''; $('#luban-c-count').textContent = '';
   const tryList = [serviceRaw]; const lower = serviceRaw.toLowerCase();
   if (LUBAN_SERVICE_ALIAS[lower]) tryList.push(LUBAN_SERVICE_ALIAS[lower]);
   else if (LUBAN_SERVICE_ALIAS[serviceRaw]) tryList.push(LUBAN_SERVICE_ALIAS[serviceRaw]);
@@ -2234,12 +2234,13 @@ function lubanClientSearch(page){
     if (country) url += '&countryName=' + encodeURIComponent(country);
     if (kw) url += '&service=' + encodeURIComponent(kw);
     fetch(url).then(r => r.json()).then(d => {
+      if (d && d.ok === false) _lubanApiErr = d.msg || '上游服务异常';
       if (d.code === 0 && Array.isArray(d.msg) && d.msg.length > 0){
         const existSet = {}; _lubanResults.forEach(x => { existSet[String(x.service_id)] = true; });
         d.msg.forEach(x => { const sid = String(x.service_id); if (!existSet[sid]){ existSet[sid] = true; _lubanResults.push(x); } });
       }
       tryNext(idx + 1);
-    }).catch(() => tryNext(idx + 1));
+    }).catch(() => { _lubanApiErr = _lubanApiErr || '网络错误'; tryNext(idx + 1); });
   }
   tryNext(0);
 }
@@ -2261,6 +2262,7 @@ function loadLubanPage(country, service, page){
 }
 function finishSearch(serviceRaw, tryList){
   if (_lubanResults.length === 0){
+    if (_lubanApiErr){ $('#luban-c-results').innerHTML = `<div class="empty" style="color:#b91c1c;line-height:1.8">⚠️ 上游接码服务暂不可用<br><span style="font-size:13px">${esc(_lubanApiErr)}</span><br><span class="muted" style="font-size:12px">请稍后重试，或联系店主确认上游配置</span></div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return; }
     const hint = (serviceRaw && tryList.length > 1) ? `（已尝试用「${tryList.join('」「')}」搜索）` : '';
     $('#luban-c-results').innerHTML = `<div class="empty">没有找到匹配的服务 ${hint}</div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return;
   }

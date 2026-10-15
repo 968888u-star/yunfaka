@@ -578,8 +578,8 @@ function notifyTg(orderNo){
     .catch(e => console.warn('TG 通知异常:', e));
 }
 
-const STATUS_TEXT = {pending:'待支付', pending_review:'待审核', processing:'处理中', waiting_sms:'等待接码', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回', luban_error:'接码失败'};
-const STATUS_CLASS = {pending:'gray', pending_review:'warn', processing:'warn', waiting_sms:'warn', delivered:'ok', out_of_stock:'no', rejected:'no', luban_error:'no'};
+const STATUS_TEXT = {pending:'待支付', pending_review:'待审核', processing:'处理中', waiting_sms:'等待接码', delivered:'已发货', out_of_stock:'缺货待补发', rejected:'已驳回', luban_error:'接码失败', smm_error:'提交失败'};
+const STATUS_CLASS = {pending:'gray', pending_review:'warn', processing:'warn', waiting_sms:'warn', delivered:'ok', out_of_stock:'no', rejected:'no', luban_error:'no', smm_error:'no'};
 const RECHARGE_TEXT = {pending:'待支付', pending_review:'待审核', success:'已到账'};
 const RECHARGE_CLASS = {pending:'gray', pending_review:'warn', success:'ok'};
 
@@ -873,7 +873,7 @@ function submitBuy(id){
   const isLuban = p.source === 'luban';
   const hasSku = hasSkus(p);
   const secret = $('#buy-secret').value.trim();
-  if (!secret){ toast('请输入暗号','error'); return; }
+  if (!secret){ toast('请输入暗号','error'); window._submitting = false; return; }
   const sku = hasSku ? getSkuById(p, __buySkuId) : null;
   if (hasSku && !sku){ toast('请选择规格','error'); return; }
   const price = hasSku ? sku.price : p.price;
@@ -898,7 +898,7 @@ function submitBuy(id){
   let payMethod = 'balance';
   if (due > 0){
     const radio = document.querySelector('input[name="pay-method"]:checked');
-    if (!radio){ toast('请选择支付方式','error'); return; }
+    if (!radio){ toast('请选择支付方式','error'); window._submitting = false; return; }
     payMethod = radio.value;
   }
   const orderNo = genOrderNo();
@@ -1188,13 +1188,13 @@ function payOrder(orderNo){
           o2.smm_order_id = String(r.data.order); o2.smm_state = 'In progress'; saveDB(db2);
           toast('已提交到上游，订单号：' + r.data.order, 'success'); startPoll(orderNo);
         } else {
-          o2.status = 'luban_error'; o2.luban_error = (r.data && r.data.error) || '提交失败'; saveDB(db2);
+          o2.status = 'smm_error'; o2.smm_error = (r.data && r.data.error) || '提交失败'; saveDB(db2);
           toast('提交失败：' + o2.luban_error, 'error');
         }
         if (location.hash === '#/order/' + orderNo) route();
       }).catch(e => {
         var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo);
-        if (o2){ o2.status = 'luban_error'; o2.luban_error = '网络错误：' + e.message; saveDB(db2); }
+        if (o2){ o2.status = 'smm_error'; o2.smm_error = '网络错误：' + e.message; saveDB(db2); }
       });
     return;
   }
@@ -1504,7 +1504,7 @@ function submitRecharge(){
   const min = cfg.recharge_min || 1000;
   if (!(amount >= min)){ toast('最低充值 ' + yuan(min) + ' 元（≈' + usdt(min) + ' USDT）','error'); return; }
   const radio = document.querySelector('input[name="rc-method"]:checked');
-  if (!radio){ toast('请选择支付方式','error'); return; }
+  if (!radio){ toast('请选择支付方式','error'); window._submitting = false; return; }
   const id = genRechargeId();
   const rc = { id, username: member.username, secret: member.secret || '', amount, method: radio.value, status: 'pending', created_at: now(), completed_at: '', usdt_rate: usdtRate() };
   if (radio.value === 'alipay') rc.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
@@ -1577,6 +1577,9 @@ function renderOrderView(orderNo, secret){
         <button class="btn primary" onclick="smmManualCheck('${esc(o.order_no)}')">立即查询</button>
       </div>
     </div>`;
+  } else if (o.source === 'smm' && o.status === 'smm_error') {
+    body = `<div class="card panel" style="background:#fee2e2;border-color:#fca5a5"><b>❌ 推广提交失败</b><p class="muted" style="font-size:13px;margin:6px 0 0">${esc(o.smm_error || '上游提交失败，请联系店主处理或重新下单')}</p>
+      <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn primary" onclick="smmManualCheck('${esc(o.order_no)}')">重试查询</button></div></div>`;
   } else if (o.status === 'delivered' && o.cards.length){
     const cardsHtml = o.cards.map(c => `<div class="codebox"><span class="mono">${esc(c)}</span><button data-v="${esc(c)}" onclick="copyText(this.dataset.v,this)">复制</button></div>`).join('');
     const noteHtml = o.note ? `<p class="muted" style="font-size:13px;margin-top:14px">📌 ${esc(o.note)}</p>` : '';
@@ -1641,7 +1644,7 @@ function doQuery(){
   const no = ($('#q-no') ? $('#q-no').value : '').trim();
   const secret = ($('#q-secret') ? $('#q-secret').value : '').trim();
   if (!no){ toast('请输入订单号','error'); return; }
-  if (!secret){ toast('请输入暗号','error'); return; }
+  if (!secret){ toast('请输入暗号','error'); window._submitting = false; return; }
   saveMyOrder(no, secret); renderOrderView(no, secret);
 }
 function yfRecoverOrder(){
@@ -2311,15 +2314,15 @@ function lubanSubmitClientBuy(serviceId){
   if (window._submitting){ toast('正在处理，请勿重复提交','warn'); return; } window._submitting = true; setTimeout(function(){window._submitting=false;}, 5000);
   const svc = _lubanResults.find(x => String(x.service_id) === String(serviceId)); if (!svc){ toast('服务不存在','error'); window._submitting=false; return; }
   const priceFen = svc.price_cny || 0; const secret = $('#luban-buy-secret').value.trim();
-  if (!secret){ toast('请输入暗号','error'); return; }
+  if (!secret){ toast('请输入暗号','error'); window._submitting = false; return; }
   const db = loadDB(); const cfg = getConfig(db); const member = getCurrentMember(db); const balanceEnabled = cfg.balance_enabled !== false;
   const cb = $('#luban-use-balance'); const useBalance = cb && cb.checked && balanceEnabled && member;
   let deduct = useBalance ? Math.min(member ? (member.balance || 0) : 0, priceFen) : 0;
   var _payRadio = document.querySelector('input[name="luban-pay"]:checked');
-  if (_payRadio && _payRadio.value === 'balance'){ if (!member){ toast('请先登录会员','error'); return; } if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); return; } deduct = priceFen; }
+  if (_payRadio && _payRadio.value === 'balance'){ if (!member){ toast('请先登录会员','error'); return; } if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); window._submitting = false; return; } deduct = priceFen; }
   const due = priceFen - deduct; let payMethod = 'balance';
-  if (due > 0){ const radio = document.querySelector('input[name="luban-pay"]:checked'); if (!radio){ toast('请选择支付方式','error'); return; } payMethod = radio.value; }
-  if (deduct > 0){ if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); return; } }
+  if (due > 0){ const radio = document.querySelector('input[name="luban-pay"]:checked'); if (!radio){ toast('请选择支付方式','error'); window._submitting = false; return; } payMethod = radio.value; }
+  if (deduct > 0){ if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); window._submitting = false; return; } }
   const orderNo = genOrderNo();
   const order = { order_no: orderNo, product_id: 0, product_name: `[接码] ${svc.service_name} · ${svc.country_name_zh || svc.country_name_en || ''}`, sku_id: 0, sku_name: '', category_id: 0, quantity: 1, amount: priceFen, balance_used: deduct, amount_due: due, secret, username: member ? member.username : '', status: 'pending', pay_method: payMethod, cards: [], note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放', created_at: now(), delivered_at: '', source: 'luban', luban_type: 'sms', luban_service_id: String(svc.service_id), luban_service_name: svc.service_name, luban_country: svc.country_name_zh || svc.country_name_en || '', usdt_rate: usdtRate() };
   if (payMethod === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
@@ -2372,14 +2375,14 @@ function lubanCommonSubmit2(){
   const keyword = $('#luban-common-keyword').value.trim(); if (!keyword){ toast('请填写关键词','error'); window._submitting=false; return; }
   const country = $('#luban-common-country').value || ''; const phone = $('#luban-common-phone').value.trim() || ''; const cardType = $('#luban-common-cardtype').value || '全部'; const filter = $('#luban-common-filter').value || '否';
   const db = loadDB(); const cfg = getConfig(db); const priceFen = lubanCommonPriceFen(cfg); const member = getCurrentMember(db);
-  const secret = $('#luban-common-secret').value.trim(); if (!secret){ toast('请输入暗号','error'); return; }
+  const secret = $('#luban-common-secret').value.trim(); if (!secret){ toast('请输入暗号','error'); window._submitting = false; return; }
   const balanceEnabled = cfg.balance_enabled !== false; const cb = $('#luban-common-use-balance'); const useBalance = cb && cb.checked && balanceEnabled && member;
   let deduct = useBalance ? Math.min(member ? (member.balance || 0) : 0, priceFen) : 0;
   var _payRadio = document.querySelector('input[name="luban-common-pay"]:checked');
-  if (_payRadio && _payRadio.value === 'balance'){ if (!member){ toast('请先登录会员','error'); return; } if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); return; } deduct = priceFen; }
+  if (_payRadio && _payRadio.value === 'balance'){ if (!member){ toast('请先登录会员','error'); return; } if ((member.balance||0) < priceFen){ toast('余额不足，请充值或换其他支付方式','error'); window._submitting = false; return; } deduct = priceFen; }
   const due = priceFen - deduct; let payMethod = 'balance';
-  if (due > 0){ const radio = document.querySelector('input[name="luban-common-pay"]:checked'); if (!radio){ toast('请选择支付方式','error'); return; } payMethod = radio.value; }
-  if (deduct > 0){ if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); return; } }
+  if (due > 0){ const radio = document.querySelector('input[name="luban-common-pay"]:checked'); if (!radio){ toast('请选择支付方式','error'); window._submitting = false; return; } payMethod = radio.value; }
+  if (deduct > 0){ if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); window._submitting = false; return; } }
   const orderNo = genOrderNo();
   const order = { order_no: orderNo, product_id: 0, product_name: `[通用接码] ${keyword}`, sku_id: 0, sku_name: '', category_id: 0, quantity: 1, amount: priceFen, balance_used: deduct, amount_due: due, secret, username: member ? member.username : '', status: 'pending', pay_method: payMethod, cards: [], note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放', created_at: now(), delivered_at: '', source: 'luban', luban_type: 'common', luban_keyword: keyword, luban_country: country, luban_cardtype: cardType, luban_filter: filter, luban_phone: phone, usdt_rate: usdtRate() };
   if (payMethod === 'alipay') order.redpacket_code = genRedPacketCode(cfg.pay_alipay_redpacket_prefix);
@@ -2602,7 +2605,16 @@ function smmBuy(id){
   window.smmRefreshAmount = smmRefreshAmount; /* 挂到window，让smmAmountUnit包装生效，修复改数量金额不刷新 */
   var usdtEnabled = cfg.pay_usdt_enabled !== false;
   var alipayEnabled = cfg.pay_alipay_enabled !== false;
-  $('#smm-pay-wrap').innerHTML = `<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">${usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="smm-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : ''}${alipayEnabled ? `<label class="pay-method ${!usdtEnabled?'active':''}" data-method="alipay"><input type="radio" name="smm-pay" value="alipay" ${!usdtEnabled?'checked':''}><span class="logo">💰</span> 支付宝</label>` : ''}</div></label>`;
+  var balanceEnabled = cfg.balance_enabled !== false;
+  var bal = member ? (member.balance || 0) : 0;
+  var useBal = !!(member && balanceEnabled && bal > 0);
+  var balHtml = '';
+  if (balanceEnabled){
+    if (member && bal > 0){ balHtml = '<div class="balance-row"><div class="lbl">💎 会员「'+esc(member.username)+'」余额 '+usdt(bal)+' USDT</div><label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#92400e;font-weight:600;font-size:13px"><input type="checkbox" id="smm-use-balance" checked> 使用余额抵扣</label></div>'; }
+    else if (member){ balHtml = '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 会员余额为 0，充值后可用余额支付</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去充值 →</a></div>'; }
+    else { balHtml = '<div class="balance-row" style="background:#f1f5f9;border-color:#cbd5e1;color:#475569"><div class="lbl" style="color:#475569">💎 登录会员可用余额抵扣</div><a href="#/member" onclick="closeModal()" style="font-size:13px;color:#6366f1;font-weight:600">去登录 / 注册 →</a></div>'; }
+  }
+  $('#smm-pay-wrap').innerHTML = balHtml + `<label class="field"><span>支付方式</span><div class="pay-methods" id="smm-pay-methods">${usdtEnabled ? '<label class="pay-method active" data-method="usdt"><input type="radio" name="smm-pay" value="usdt" checked><span class="logo">🪙</span> USDT</label>' : ''}${alipayEnabled ? `<label class="pay-method ${!usdtEnabled?'active':''}" data-method="alipay"><input type="radio" name="smm-pay" value="alipay" ${!usdtEnabled?'checked':''}><span class="logo">💰</span> 支付宝</label>` : ''}${useBal?'<label class="pay-method" data-method="balance"><input type="radio" name="smm-pay" value="balance"><span class="logo">💎</span> 余额支付('+usdt(bal)+')</label>':''}</div></label>`;
   document.querySelectorAll('#smm-pay-methods .pay-method').forEach(el => { el.addEventListener('click', () => { document.querySelectorAll('#smm-pay-methods .pay-method').forEach(x => x.classList.remove('active')); el.classList.add('active'); var r = el.querySelector('input[type=radio]'); if (r) r.checked = true; }); });
 }
 
@@ -2656,10 +2668,17 @@ function smmSubmit(id){
   if (qty < (p.smm_min || 1) || qty > (p.smm_max || 100000)){ toast('数量超范围','error'); window._submitting = false; return; }
 
   var amount = smmCalcAmount(p, qty);
-  var radio = document.querySelector('input[name="smm-pay"]:checked');
-  if (!radio){ toast('请选择支付方式','error'); window._submitting = false; return; }
-
   var member = getCurrentMember(db);
+  var balanceEnabled = cfg.balance_enabled !== false;
+  var balCb = document.getElementById('smm-use-balance');
+  var useBalance = balCb && balCb.checked && balanceEnabled && member;
+  var deduct = useBalance ? Math.min(member ? (member.balance || 0) : 0, amount) : 0;
+  var radio = document.querySelector('input[name="smm-pay"]:checked');
+  if (radio && radio.value === 'balance'){ if (!member){ toast('请先登录会员','error'); window._submitting = false; return; } if ((member.balance||0) < amount){ toast('余额不足，请充值或换其他支付方式','error'); window._submitting = false; return; } deduct = amount; }
+  var due = amount - deduct;
+  var payMethod = 'balance';
+  if (due > 0){ if (!radio){ toast('请选择支付方式','error'); window._submitting = false; return; } payMethod = radio.value; }
+  if (deduct > 0){ if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); window._submitting = false; return; } }
   var orderNo = genOrderNo();
   var order = {
     order_no: orderNo,
@@ -2670,12 +2689,12 @@ function smmSubmit(id){
     category_id: 0,
     quantity: qty,
     amount: amount,
-    balance_used: 0,
-    amount_due: amount,
+    balance_used: deduct,
+    amount_due: due,
     secret: secret,
     username: member ? member.username : '',
     status: 'pending',
-    pay_method: radio.value,
+    pay_method: payMethod,
     cards: [],
     note: p.note || '',
     created_at: now(),
@@ -2692,17 +2711,18 @@ function smmSubmit(id){
   saveDB(db);
   saveMyOrder(orderNo, secret);
   localStorage.setItem(LS_SECRET, secret);
-  closeModal();
-  showPayModal('order', orderNo);
+  window._submitting = false;
+  if (due === 0){ closeModal(); payOrder(orderNo); toast('支付成功，已提交上游…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
+  else { closeModal(); showPayModal('order', orderNo); }
 }
 var _smmTimers = {};
 function startPoll(orderNo){
   if (_smmTimers[orderNo]) clearInterval(_smmTimers[orderNo]);
   function check(){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id || o.status === 'delivered' || o.status === 'rejected'){ clearInterval(_smmTimers[orderNo]); delete _smmTimers[orderNo]; return; }
-    smmApi('status', { order: o.smm_order_id }).then(r => { if (!r.ok || !r.data) return; var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return; var d = r.data; o2.smm_state = d.status || ''; o2.smm_remains = d.remains || ''; if (/Canceled|Refunded/i.test(o2.smm_state)) o2.status = 'rejected'; else if (/Completed/i.test(o2.smm_state)){ o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); } saveDB(db2); if (location.hash === '#/order/' + orderNo) route(); }).catch(() => {}); }
+    smmApi('status', { order: o.smm_order_id }).then(r => { if (!r.ok || !r.data) return; var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return; var d = r.data; o2.smm_state = d.status || ''; o2.smm_remains = d.remains || ''; if (/Canceled|Refunded/i.test(o2.smm_state)){ o2.status = 'rejected'; if (o2.balance_used > 0 && o2.username){ addBalance(db2, o2.username, o2.balance_used); o2.refunded_amount = o2.balance_used; o2.balance_used = 0; } } else if (/Completed/i.test(o2.smm_state)){ o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); } saveDB(db2); if (location.hash === '#/order/' + orderNo) route(); }).catch(() => {}); }
   check(); _smmTimers[orderNo] = setInterval(check, 60000);
 }
-function smmManualCheck(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; smmApi('status', { order: o.smm_order_id }).then(r => { if (r.ok && r.data){ var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); o2.smm_state = r.data.status || ''; saveDB(db2); toast('状态：' + o2.smm_state, 'success'); if (location.hash === '#/order/' + orderNo) route(); } }); }
+function smmManualCheck(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; smmApi('status', { order: o.smm_order_id }).then(r => { if (r.ok && r.data){ var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); if(!o2) return; o2.smm_state = r.data.status || ''; o2.smm_remains = r.data.remains || ''; if (/Canceled|Refunded/i.test(o2.smm_state)){ o2.status = 'rejected'; if (o2.balance_used > 0 && o2.username){ addBalance(db2, o2.username, o2.balance_used); o2.refunded_amount = o2.balance_used; o2.balance_used = 0; } } else if (/Completed/i.test(o2.smm_state)){ o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); } saveDB(db2); toast('状态：' + o2.smm_state, 'success'); if (location.hash === '#/order/' + orderNo) route(); } }); }
 function smmRefill(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定补单？')) return; smmApi('refill', { order_no: orderNo, order: o.smm_order_id }).then(r => { if (r.ok && r.data && r.data.refill){ var db2 = loadDB(); db2.orders.find(x => x.order_no === orderNo).smm_refill_id = String(r.data.refill); saveDB(db2); toast('补单已提交','success'); } else toast('补单失败','error'); }); }
 function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定取消？')) return; smmApi('cancel', { order_no: orderNo, orders: o.smm_order_id }).then(r => { toast('取消请求已提交','success'); setTimeout(() => smmManualCheck(orderNo), 3000); }); }(function(){
   var CS_KEY = 'yunfaka_chat_session';
@@ -3135,6 +3155,7 @@ function lubanStartSession(orderNo){
     if(d && d.code===0 && d.data){
       o2.luban_request_id = d.data.request_id || d.data.id || '';
       o2.luban_phone = d.data.phone_number || d.data.phone || '';
+      o2.luban_number = o2.luban_phone;
       o2.status = 'processing'; o2.submitted_at = now(); saveDB(db2);
       if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
       lubanPollSms(orderNo, 0);
@@ -3160,6 +3181,7 @@ function lubanStartCommon(orderNo, params){
     var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
     if(d && d.code===0 && d.data){
       o2.luban_phone = d.data.phone || d.data.phone_number || '';
+      o2.luban_number = o2.luban_phone;
       o2.status = 'processing'; o2.submitted_at = now(); saveDB(db2);
       if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
       lubanCommonPoll(orderNo, 0);
@@ -3180,6 +3202,7 @@ function lubanPollSms(orderNo, attempt){
     var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
     if(d && d.code===0 && sms){
       o2.luban_sms = String(sms);
+      o2.luban_code = o2.luban_sms;
       o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); saveDB(db2);
       if(window.toast) toast('收到验证码：'+o2.luban_sms,'success');
       if(location.hash.indexOf('#/order/')===0 && window.route) route();
@@ -3200,6 +3223,7 @@ function lubanCommonPoll(orderNo, attempt){
     var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
     if(d && d.code===0 && sms){
       o2.luban_sms = String(sms);
+      o2.luban_code = o2.luban_sms;
       o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); saveDB(db2);
       if(window.toast) toast('收到验证码：'+o2.luban_sms,'success');
       if(location.hash.indexOf('#/order/')===0 && window.route) route();

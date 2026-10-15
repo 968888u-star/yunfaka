@@ -406,8 +406,8 @@ const DEFAULT_CONFIG = {
   pay_usdt_network: 'TRC20', pay_usdt_rate: 7.2, pay_usdt_note: '请使用 TRC20 网络转账，到账后自动发货',
   pay_usdt_qr: '', balance_enabled: true, recharge_min: 1000,
   luban_common_price: 200, hero_subtitle: '7×24 小时全自动发货 · 支持卡密 / 接码 / 会员余额',
-  smm_hero_title: '社交媒体推广', smm_hero_subtitle: '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理',
-  smm_usage_text: '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后自动提交到上游处理<br>4. 处理需几分钟到几小时，订单详情查看进度',
+  smm_hero_title: '社交媒体推广', smm_hero_subtitle: '关注 / 点赞 / 播放 / 评论 · 下单后自动处理',
+  smm_usage_text: '1. 选择服务，填写目标链接<br>2. 填写数量（有起订量和上限）<br>3. 提交后系统自动处理<br>4. 处理需几分钟到几小时，订单详情查看进度',
   smm_categories: 'Telegram\nInstagram\nYouTube\nTikTok\nFacebook\nTwitter/X\nAI/ChatGPT\nNetflix\nSpotify\nDiscord\nGoogle\nApple\n腾讯/微信\n抖音\nB站\n小红书\n微博\n快手\n其他',
   home_entry_member_title: '注册会员，享余额支付', home_entry_member_sub: '支持余额抵扣、充值优惠，购物更便捷',
   home_entry_luban_title: '全球接码', home_entry_luban_sub: '实时搜索 · 自动分配号码',
@@ -1186,9 +1186,9 @@ function payOrder(orderNo){
         var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return;
         if (r.ok && r.data && r.data.order) {
           o2.smm_order_id = String(r.data.order); o2.smm_state = 'In progress'; saveDB(db2);
-          toast('已提交到上游，订单号：' + r.data.order, 'success'); startPoll(orderNo);
+          toast('已提交，服务单号：' + r.data.order, 'success'); startPoll(orderNo);
         } else {
-          o2.status = 'smm_error'; o2.smm_error = (r.data && r.data.error) || '提交失败'; saveDB(db2);
+          o2.status = 'smm_error'; o2.smm_error = '提交失败，请稍后重试或联系客服'; saveDB(db2);
           toast('提交失败：' + o2.luban_error, 'error');
         }
         if (location.hash === '#/order/' + orderNo) route();
@@ -1568,8 +1568,8 @@ function renderOrderView(orderNo, secret){
     body = `<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:20px">
       <div class="spread"><h3 style="margin:0;font-size:15px">📈 推广进度</h3><span class="badge warn">处理中</span></div>
       <div class="kv"><span class="k">目标链接</span><span class="v mono" style="font-size:12px;word-break:break-all">${esc(o.smm_link||'-')}</span></div>
-      <div class="kv"><span class="k">上游订单号</span><span class="v mono">${esc(o.smm_order_id||'待分配')}</span></div>
-      <div class="kv"><span class="k">上游状态</span><span class="v">${esc(o.smm_state||'等待上游处理')}</span></div>
+      <div class="kv"><span class="k">服务单号</span><span class="v mono">${esc(o.smm_order_id||'待分配')}</span></div>
+      <div class="kv"><span class="k">处理状态</span><span class="v">${esc(smmStatusText(o.smm_state||''))}</span></div>
       ${o.smm_remains?`<div class="kv"><span class="k">剩余未完成</span><span class="v">${esc(o.smm_remains)}</span></div>`:''}
       <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap">
         <button class="btn ghost" onclick="smmRefill('${esc(o.order_no)}')">🔄 补单</button>
@@ -1578,7 +1578,7 @@ function renderOrderView(orderNo, secret){
       </div>
     </div>`;
   } else if (o.source === 'smm' && o.status === 'smm_error') {
-    body = `<div class="card panel" style="background:#fee2e2;border-color:#fca5a5"><b>❌ 推广提交失败</b><p class="muted" style="font-size:13px;margin:6px 0 0">${esc(o.smm_error || '上游提交失败，请联系店主处理或重新下单')}</p>
+    body = `<div class="card panel" style="background:#fee2e2;border-color:#fca5a5"><b>❌ 推广提交失败</b><p class="muted" style="font-size:13px;margin:6px 0 0">${esc(o.smm_error || '提交失败，请联系客服处理或重新下单')}</p>
       <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn primary" onclick="smmManualCheck('${esc(o.order_no)}')">重试查询</button></div></div>`;
   } else if (o.status === 'delivered' && o.cards.length){
     const cardsHtml = o.cards.map(c => `<div class="codebox"><span class="mono">${esc(c)}</span><button data-v="${esc(c)}" onclick="copyText(this.dataset.v,this)">复制</button></div>`).join('');
@@ -1694,8 +1694,8 @@ function renderAdminPanel(){
       <button data-tab="cards" onclick="switchTab('cards')">卡密</button>
       <button data-tab="orders" onclick="switchTab('orders')">订单</button>
       <button data-tab="members" onclick="switchTab('members')">会员</button>
-      <button data-tab="luban" onclick="switchTab('luban')">Luban接码</button>
-      <button data-tab="smm" onclick="switchTab('smm')">SMM推广</button>
+      <button data-tab="luban" onclick="switchTab('luban')">全球接码</button>
+      <button data-tab="smm" onclick="switchTab('smm')">推广服务</button>
       <button data-tab="settings" onclick="switchTab('settings')">设置</button>
     </div>
     <div id="tab-body"><div class="loading">加载中…</div></div>`;
@@ -2234,7 +2234,7 @@ function lubanClientSearch(page){
     if (country) url += '&countryName=' + encodeURIComponent(country);
     if (kw) url += '&service=' + encodeURIComponent(kw);
     fetch(url).then(r => r.json()).then(d => {
-      if (d && d.ok === false) _lubanApiErr = d.msg || '上游服务异常';
+      if (d && d.ok === false) _lubanApiErr = d.msg || '服务暂不可用';
       if (d.code === 0 && Array.isArray(d.msg) && d.msg.length > 0){
         const existSet = {}; _lubanResults.forEach(x => { existSet[String(x.service_id)] = true; });
         d.msg.forEach(x => { const sid = String(x.service_id); if (!existSet[sid]){ existSet[sid] = true; _lubanResults.push(x); } });
@@ -2272,11 +2272,11 @@ function finishSearch(serviceRaw, tryList){
           _lubanResults = __matched.map(function(p){ return { service_id: p.luban_service_id, service_name: p.luban_service_name, country_name_zh: p.luban_country, price_cny: p.price }; });
           renderLubanResults();
           $('#luban-c-count').textContent = '共 ' + _lubanResults.length + ' 个（本地缓存）';
-          $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px;color:#b45309;text-align:center;padding:8px">⚠️ 上游接码服务暂不可用（' + esc(_lubanApiErr) + '），当前显示店主已同步的本地缓存商品，下单后取号可能延迟</div>';
+          $('#luban-c-loadmore').innerHTML = '<div class="muted" style="font-size:12px;color:#b45309;text-align:center;padding:8px">⚠️ 接码服务繁忙（' + esc(_lubanApiErr) + '），当前显示缓存商品，下单后取号可能延迟</div>';
           return;
         }
       } catch(e){}
-      $('#luban-c-results').innerHTML = `<div class="empty" style="color:#b91c1c;line-height:1.8">⚠️ 上游接码服务暂不可用<br><span style="font-size:13px">${esc(_lubanApiErr)}</span><br><span class="muted" style="font-size:12px">请稍后重试，或联系店主确认上游配置</span></div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return; }
+      $('#luban-c-results').innerHTML = `<div class="empty" style="color:#b91c1c;line-height:1.8">⚠️ 接码服务暂不可用<br><span style="font-size:13px">${esc(_lubanApiErr)}</span><br><span class="muted" style="font-size:12px">请稍后重试，或联系客服</span></div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return; }
     const hint = (serviceRaw && tryList.length > 1) ? `（已尝试用「${tryList.join('」「')}」搜索）` : '';
     $('#luban-c-results').innerHTML = `<div class="empty">没有找到匹配的服务 ${hint}</div>`; $('#luban-c-count').textContent = ''; $('#luban-c-loadmore').innerHTML = ''; return;
   }
@@ -2401,12 +2401,13 @@ function lubanCommonSubmit2(){
   if (deduct > 0){ if (!deductBalance(db, member.username, deduct)){ toast('余额扣除失败','error'); window._submitting = false; return; } }
   const orderNo = genOrderNo();
   const order = { order_no: orderNo, product_id: 0, product_name: `[通用接码] ${keyword}`, sku_id: 0, sku_name: '', category_id: 0, quantity: 1, amount: priceFen, balance_used: deduct, amount_due: due, secret, username: member ? member.username : '', status: 'pending', pay_method: payMethod, cards: [], note: '请在 20 分钟内完成目标平台注册，超时号码将自动释放', created_at: now(), delivered_at: '', source: 'luban', luban_type: 'common', luban_keyword: keyword, luban_country: country, luban_cardtype: cardType, luban_filter: filter, luban_phone: phone, usdt_rate: usdtRate() };
-  if (payMethod === 'alipay') order.redpacket_code = genRedPacketCode(cfg.pay_alipay_redpacket_prefix);
+  if (payMethod === 'alipay') order.redpacket_code = genRedpacketCode(cfg.pay_alipay_redpacket_prefix);
   db.orders.unshift(order); saveDB(db); saveMyOrder(orderNo, secret); localStorage.setItem(LS_SECRET, secret);
   window._submitting = false;
   if (due === 0){ closeModal(); payOrder(orderNo); toast('支付成功，正在分配号码…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
   else { closeModal(); setTimeout(function(){ showPayModal('order', orderNo); }, 60); }
 }function smmApi(action, payload){ var __h={'Content-Type':'application/json'}; var __mt=localStorage.getItem('yunfaka_member_token')||''; var __at=sessionStorage.getItem('yunfaka_admin_token')||''; if(__mt)__h['X-Member-Token']=__mt; if(__at)__h['X-Admin-Token']=__at; return fetch('/api/smm', { method: 'POST', headers: __h, body: JSON.stringify(Object.assign({ action: action }, payload || {})) }).then(r => r.json()); }
+function smmStatusText(s){ s = String(s||'').toLowerCase(); if(!s) return '处理中'; if(/complete/i.test(s)) return '已完成'; if(/cancel/i.test(s)) return '已取消'; if(/refund/i.test(s)) return '已退款'; if(/partial/i.test(s)) return '部分完成'; if(/processing|progress|pending|waiting/i.test(s)) return '处理中'; return '处理中'; }
 function smmIsPackage(p){ if (p.smm_type === 'Package') return true; var mn = parseInt(p.smm_min), mx = parseInt(p.smm_max); return (mn === 1 && mx === 1); }
 function smmMarkup(){ try { return Number((loadDB().config || {}).smm_markup) || 1.5; } catch(e){ return 1.5; } }
 function smmUsdtOf(p){ return (parseFloat(p && p.smm_rate_usd || 0) * smmMarkup()).toFixed(2); }
@@ -2554,7 +2555,7 @@ function smmSyncCore(silent){
     list.forEach(s => { var serviceId = String(s.service || ''); if (!serviceId) return; var rateUsd = parseFloat(s.rate) || 0; var priceFen = smmPriceFen(rateUsd, markup);
       var exist = db.products.find(p => p.source === 'smm' && String(p.smm_service_id) === serviceId);
       if (exist){ exist.name = '[推广] ' + (s.name || ''); exist.smm_rate_usd = rateUsd.toFixed(4); if (!exist.smm_custom_price) exist.price = priceFen; updated++; }
-      else { db.seq.product++; db.products.push({ id: db.seq.product, name: '[推广] ' + (s.name || ''), price: priceFen, description: '类别：' + (s.category || ''), note: '下单后自动提交上游', category_id: 0, active: true, created_at: now(), skus: [], source: 'smm', smm_service_id: serviceId, smm_service_name: s.name || '', smm_rate_usd: rateUsd.toFixed(4), smm_min: parseInt(s.min)||1, smm_max: parseInt(s.max)||100000, smm_refill: !!s.refill, smm_cancel: !!s.cancel }); added++; }
+      else { db.seq.product++; db.products.push({ id: db.seq.product, name: '[推广] ' + (s.name || ''), price: priceFen, description: '类别：' + (s.category || ''), note: '下单后系统自动处理', category_id: 0, active: true, created_at: now(), skus: [], source: 'smm', smm_service_id: serviceId, smm_service_name: s.name || '', smm_rate_usd: rateUsd.toFixed(4), smm_min: parseInt(s.min)||1, smm_max: parseInt(s.max)||100000, smm_refill: !!s.refill, smm_cancel: !!s.cancel }); added++; }
     });
     saveDB(db); if (!silent) toast('同步完成：新增 ' + added + '，更新 ' + updated, 'success'); renderSmmTab();
   }).catch(e => { if (!silent) toast('网络错误：' + e.message, 'error'); });
@@ -2570,7 +2571,7 @@ function renderSmmClient(){
   var catTabs = '<button class="cat-tab ' + (smmCatFilter==='all'?'active':'') + '" onclick="smmSetCat(\'all\')">全部<span class="n">' + items.length + '</span></button>' + catOrder.map(c => '<button class="cat-tab ' + (smmCatFilter===c?'active':'') + '" onclick="smmSetCat(\'' + c + '\')">' + c + '<span class="n">' + (catCount[c] || 0) + '</span></button>').join('');
   var showCount = Math.min(smmLoadedCount, filtered.length); var showItems = filtered.slice(0, showCount); var hasMore = filtered.length > showCount;
   var cards = showItems.length ? showItems.map(p => `<div class="card product"><div class="p-name" style="font-size:14px">${esc(p.smm_service_name || p.name)}</div><div class="p-desc">${esc(p.description || '')}</div><div class="row" style="gap:6px"><span class="badge cat">${smmCatOf(p.smm_service_name || p.name, p)}</span></div><div class="spread" style="margin-top:auto"><div class="p-price"><small>USDT </small>${usdt(p.price)}<span class="from">/${smmIsPackage(p)?'份':'1000'}</span></div><div class="muted" style="font-size:12px">起订 ${esc(p.smm_min)}</div></div><button class="btn primary" onclick="smmBuy(${p.id})">立即下单</button></div>`).join('') : '<div class="empty" style="grid-column:1/-1">该分类下暂无服务</div>';
-  $('#app').innerHTML = `<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 ${esc(cfg.smm_hero_title || '社交媒体推广')}</h1><p>${esc(cfg.smm_hero_subtitle || '关注 / 点赞 / 播放 / 评论 · 下单后自动提交上游处理')}</p></div>
+  $('#app').innerHTML = `<div class="hero" style="background:linear-gradient(135deg,#10b981,#059669)"><div class="blob"></div><h1>📈 ${esc(cfg.smm_hero_title || '社交媒体推广')}</h1><p>${esc(cfg.smm_hero_subtitle || '关注 / 点赞 / 播放 / 评论 · 下单后自动处理')}</p></div>
     <div class="card panel" style="background:#f0fdf4;border-color:#86efac;font-size:13px;color:#15803d;line-height:1.8;margin-bottom:16px">📌 <b>使用说明：</b><br>${cfg.smm_usage_text || ''}</div>
     <div style="margin-bottom:12px;display:flex;gap:8px"><input id="smm-search-input" placeholder="🔍 输入关键词搜索服务" value="${esc(smmKeyword)}" style="flex:1" onkeydown="if(event.key==='Enter')smmDoSearch(this.value)"><button onclick="smmDoSearch(document.getElementById('smm-search-input').value)" style="flex-shrink:0;padding:0 18px;background:#6366f1;color:#fff;border:0;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">搜索</button>${smmKeyword ? '<button onclick="smmClearSearch()" style="flex-shrink:0;padding:0 14px;background:#eef0f6;border:0;border-radius:10px;font-size:13px;cursor:pointer">清除</button>' : ''}</div>
     <div class="cats" style="margin-bottom:16px">${catTabs}</div>
@@ -2728,7 +2729,7 @@ function smmSubmit(id){
   saveMyOrder(orderNo, secret);
   localStorage.setItem(LS_SECRET, secret);
   window._submitting = false;
-  if (due === 0){ closeModal(); payOrder(orderNo); toast('支付成功，已提交上游…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
+  if (due === 0){ closeModal(); payOrder(orderNo); toast('支付成功，已提交处理…','success'); if (location.hash === '#/order/' + orderNo) route(); else location.hash = '#/order/' + orderNo; }
   else { closeModal(); showPayModal('order', orderNo); }
 }
 var _smmTimers = {};
@@ -2738,7 +2739,7 @@ function startPoll(orderNo){
     smmApi('status', { order: o.smm_order_id }).then(r => { if (!r.ok || !r.data) return; var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); if (!o2) return; var d = r.data; o2.smm_state = d.status || ''; o2.smm_remains = d.remains || ''; if (/Canceled|Refunded/i.test(o2.smm_state)){ o2.status = 'rejected'; if (o2.balance_used > 0 && o2.username){ addBalance(db2, o2.username, o2.balance_used); o2.refunded_amount = o2.balance_used; o2.balance_used = 0; } } else if (/Completed/i.test(o2.smm_state)){ o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); } saveDB(db2); if (location.hash === '#/order/' + orderNo) route(); }).catch(() => {}); }
   check(); _smmTimers[orderNo] = setInterval(check, 60000);
 }
-function smmManualCheck(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; smmApi('status', { order: o.smm_order_id }).then(r => { if (r.ok && r.data){ var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); if(!o2) return; o2.smm_state = r.data.status || ''; o2.smm_remains = r.data.remains || ''; if (/Canceled|Refunded/i.test(o2.smm_state)){ o2.status = 'rejected'; if (o2.balance_used > 0 && o2.username){ addBalance(db2, o2.username, o2.balance_used); o2.refunded_amount = o2.balance_used; o2.balance_used = 0; } } else if (/Completed/i.test(o2.smm_state)){ o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); } saveDB(db2); toast('状态：' + o2.smm_state, 'success'); if (location.hash === '#/order/' + orderNo) route(); } }); }
+function smmManualCheck(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; smmApi('status', { order: o.smm_order_id }).then(r => { if (r.ok && r.data){ var db2 = loadDB(); var o2 = db2.orders.find(x => x.order_no === orderNo); if(!o2) return; o2.smm_state = r.data.status || ''; o2.smm_remains = r.data.remains || ''; if (/Canceled|Refunded/i.test(o2.smm_state)){ o2.status = 'rejected'; if (o2.balance_used > 0 && o2.username){ addBalance(db2, o2.username, o2.balance_used); o2.refunded_amount = o2.balance_used; o2.balance_used = 0; } } else if (/Completed/i.test(o2.smm_state)){ o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); } saveDB(db2); toast('状态：' + smmStatusText(o2.smm_state), 'success'); if (location.hash === '#/order/' + orderNo) route(); } }); }
 function smmRefill(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定补单？')) return; smmApi('refill', { order_no: orderNo, order: o.smm_order_id }).then(r => { if (r.ok && r.data && r.data.refill){ var db2 = loadDB(); db2.orders.find(x => x.order_no === orderNo).smm_refill_id = String(r.data.refill); saveDB(db2); toast('补单已提交','success'); } else toast('补单失败','error'); }); }
 function smmCancel(orderNo){ var db = loadDB(); var o = db.orders.find(x => x.order_no === orderNo); if (!o || !o.smm_order_id) return; if (!confirm('确定取消？')) return; smmApi('cancel', { order_no: orderNo, orders: o.smm_order_id }).then(r => { toast('取消请求已提交','success'); setTimeout(() => smmManualCheck(orderNo), 3000); }); }(function(){
   var CS_KEY = 'yunfaka_chat_session';
@@ -3176,7 +3177,7 @@ function lubanStartSession(orderNo){
       if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
       lubanPollSms(orderNo, 0);
     } else {
-      o2.status = 'luban_error'; o2.luban_error = (d && (d.msg||d.message)) || '取号失败'; saveDB(db2);
+      o2.status = 'luban_error'; o2.luban_error = '取号失败，请稍后重试或联系客服'; saveDB(db2);
       if(window.toast) toast('取号失败：'+o2.luban_error,'error');
     }
     if(location.hash.indexOf('#/order/')===0 && window.route) route();
@@ -3202,7 +3203,7 @@ function lubanStartCommon(orderNo, params){
       if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
       lubanCommonPoll(orderNo, 0);
     } else {
-      o2.status = 'luban_error'; o2.luban_error = (d && (d.msg||d.message)) || '取号失败'; saveDB(db2);
+      o2.status = 'luban_error'; o2.luban_error = '取号失败，请稍后重试或联系客服'; saveDB(db2);
       if(window.toast) toast('取号失败：'+o2.luban_error,'error');
     }
     if(location.hash.indexOf('#/order/')===0 && window.route) route();

@@ -39,8 +39,12 @@ export async function onRequest(context) {
   // ========== 只读操作（公开） ==========
   if (action === 'balance' || action === 'countries') {
     const pathMap = { balance: 'getBalance', countries: 'countries' };
-    const r = await fetch(buildUrl(pathMap[action], {}));
-    return jsonOk(await r.json(), env, request);
+    try {
+      const r = await fetch(buildUrl(pathMap[action], {}));
+      const text = await r.text();
+      let d; try { d = JSON.parse(text); } catch (e) { return jsonError('上游返回异常', 502, env, request); }
+      return jsonOk(d, env, request);
+    } catch (e) { return jsonError('上游服务暂不可用', 502, env, request, e); }
   }
   // 轮询短信（只读不扣钱）：只要求订单存在，不要求会员归属（游客订单也能轮询）
   if (action === 'get_sms' || action === 'common_get_sms') {
@@ -65,26 +69,29 @@ export async function onRequest(context) {
     const params = { language: url.searchParams.get('language') || 'zh', page: url.searchParams.get('page') || '1' };
     if (url.searchParams.get('countryName')) params.country = url.searchParams.get('countryName');
     if (url.searchParams.get('service')) params.service = url.searchParams.get('service');
-    const r = await fetch(buildUrl('List', params));
-    const d = await r.json();
-    if (d.code === 0 && Array.isArray(d.msg)) {
-      d.msg = d.msg.map(item => {
-        if (item.cost !== undefined) {
+    try {
+      const r = await fetch(buildUrl('List', params));
+      const text = await r.text();
+      let d;
+      try { d = JSON.parse(text); } catch (e) { return jsonError('上游返回异常（' + text.slice(0, 80).replace(/[<>&"']/g, '') + '）', 502, env, request); }
+      if (d.code === 0 && Array.isArray(d.msg)) {
+        d.msg = d.msg.map(item => {
+          // 修复：上游数组可能含 null/非对象元素，直接访问 item.cost 会抛 TypeError 导致 1101
+          if (!item || typeof item !== 'object' || item.cost === undefined) return item;
           const originUsd = parseFloat(item.cost) || 0;
           if (action === 'services') {
             item.cost = Math.round(originUsd * MARKUP * 100) / 100;
-            // 安全修复：不再返回 origin_cost（泄露上游真实成本）
             delete item.origin_cost;
           } else {
             item.price_cny = Math.round(originUsd * MARKUP * USD_TO_CNY * 100);
             delete item.cost;
             delete item.origin_cost;
           }
-        }
-        return item;
-      });
-    }
-    return jsonOk(d, env, request);
+          return item;
+        });
+      }
+      return jsonOk(d, env, request);
+    } catch (e) { return jsonError('上游服务暂不可用，请稍后重试', 502, env, request, e); }
   }
 
   // ========== 写操作（必须绑定订单） ==========

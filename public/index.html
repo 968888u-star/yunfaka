@@ -9280,5 +9280,230 @@ console.log('%c[P31] ✅ SMM 分类管理增强：⤒ 置顶 / 多选批量操�
   'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P32 · SMM/Luban 下单全流程修复
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB || !window.saveDB){ console.warn('[P32] 核心未就绪'); return; }
+
+var _toast = function(m,t){ try{ window.toast(m, t||''); }catch(e){ console.log('[P32]', m); } };
+var TG_CATS = ['TG会员','TG在线活人','TG频道上粉','TG群组上粉','TG上粉',
+               'TG频道浏览','TG帖子浏览','TG点赞反应','TG转发','TG评论','TG投票',
+               'TG频道其他','TG综合服务'];
+
+/* ---------- 1. 修复 smmSubmit：TG 精细分类 → Telegram + radio 判空 ---------- */
+var _origSmmSubmit = window.smmSubmit;
+if (typeof _origSmmSubmit === 'function'){
+  window.smmSubmit = function(id){
+    var db = window.loadDB();
+    var p = db.products.find(function(x){ return x.id === id; });
+    if (!p) return _origSmmSubmit.apply(this, arguments);
+
+    var orig = p.smm_platform;
+    if (TG_CATS.indexOf(orig) >= 0) p.smm_platform = 'Telegram';
+    try {
+      return _origSmmSubmit.apply(this, arguments);
+    } finally {
+      p.smm_platform = orig;
+    }
+  };
+}
+
+/* ---------- 2. 修复 smmBuy：placeholder 按 TG 分类显示 ---------- */
+var _origSmmBuy = window.smmBuy;
+if (typeof _origSmmBuy === 'function'){
+  window.smmBuy = function(id){
+    var db = window.loadDB();
+    var p = db.products.find(function(x){ return x.id === id; });
+    if (p){
+      var orig = p.smm_platform;
+      if (TG_CATS.indexOf(orig) >= 0) p.smm_platform = 'Telegram';
+      try { return _origSmmBuy.apply(this, arguments); }
+      finally { p.smm_platform = orig; }
+    }
+    return _origSmmBuy.apply(this, arguments);
+  };
+}
+
+/* ---------- 3. 修复 P28 /api/public 字段缺失 ---------- */
+var _origFetch = window.fetch;
+window.fetch = function(url, opts){
+  var u = String(url || '');
+  if (u.indexOf('/api/public') >= 0 && opts && typeof opts.body === 'string'){
+    try {
+      var body = JSON.parse(opts.body);
+      if (body.action === 'create_order'){
+        var db = window.loadDB();
+        var o = (db.orders || []).find(function(x){ return x.order_no === body.order_no; });
+        if (o){
+          body.luban_service_id    = body.luban_service_id    || o.luban_service_id    || '';
+          body.luban_service_name  = body.luban_service_name  || o.luban_service_name  || '';
+          body.luban_type          = body.luban_type          || o.luban_type          || '';
+          body.smm_service_id      = body.smm_service_id      || o.smm_service_id      || '';
+          body.smm_service_name    = body.smm_service_name    || o.smm_service_name    || '';
+          body.product_name        = body.product_name        || o.product_name        || '';
+          body.amount              = (body.amount != null) ? body.amount : (o.amount || 0);
+          body.amount_due          = (body.amount_due != null) ? body.amount_due : (o.amount_due || 0);
+          body.balance_used        = (body.balance_used != null) ? body.balance_used : (o.balance_used || 0);
+          body.redpacket_code      = body.redpacket_code      || o.redpacket_code      || '';
+          body.source              = body.source              || o.source              || '';
+          opts.body = JSON.stringify(body);
+          console.log('[P32] create_order 已补全字段', {
+            luban_service_id: body.luban_service_id,
+            luban_type: body.luban_type,
+            smm_service_id: body.smm_service_id,
+            amount: body.amount
+          });
+        }
+      }
+    } catch(e){ console.warn('[P32] 补字段失败:', e); }
+  }
+  return _origFetch.apply(this, arguments);
+};
+
+/* ---------- 4. 修复 showPayModal：USDT 唯一尾数 ---------- */
+function ensureExpectedUsdt(o, rate){
+  if (!o || o.expected_usdt_exact) return;
+  if (!o.amount_due || o.amount_due <= 0) return;
+  var r = Number(rate) || Number(o.usdt_rate) || 7.2;
+  var base = o.amount_due / 100 / r;
+  // 用单号后 4 位生成 0~99 的尾数（单位 0.000001）
+  var suffix = parseInt(String(o.order_no || o.id || '0').slice(-4), 10) || 0;
+  var exact = Math.floor(base * 1000000) / 1000000 + (suffix % 100) / 1000000;
+  o.expected_usdt_exact = Number(exact.toFixed(6));
+}
+
+var _origShowPayModal = window.showPayModal;
+if (typeof _origShowPayModal === 'function'){
+  window.showPayModal = function(type, id){
+    var db = window.loadDB();
+    if (type === 'order'){
+      var o = (db.orders || []).find(function(x){ return x.order_no === id; });
+      if (o && o.pay_method === 'usdt') ensureExpectedUsdt(o, o.usdt_rate);
+    } else if (type === 'recharge'){
+      var r = (db.recharges || []).find(function(x){ return x.id === id; });
+      if (r && r.method === 'usdt') ensureExpectedUsdt(r, r.usdt_rate);
+    }
+    return _origShowPayModal.apply(this, arguments);
+  };
+}
+
+/* ---------- 5. 路由切换时清理 Luban 轮询 ---------- */
+function clearLubanTimers(){
+  if (window.__lubanPollTimers){
+    Object.keys(window.__lubanPollTimers).forEach(function(k){
+      try { clearTimeout(window.__lubanPollTimers[k]); } catch(e){}
+      delete window.__lubanPollTimers[k];
+    });
+  }
+  if (window.__p32LubanTimers){
+    Object.keys(window.__p32LubanTimers).forEach(function(k){
+      try { clearTimeout(window.__p32LubanTimers[k]); } catch(e){}
+      delete window.__p32LubanTimers[k];
+    });
+  }
+}
+
+var _origRoute = window.route;
+window.route = function(){
+  if (location.hash.indexOf('#/order/') !== 0) clearLubanTimers();
+  return _origRoute.apply(this, arguments);
+};
+
+var _origRenderOrderView = window.renderOrderView;
+if (typeof _origRenderOrderView === 'function'){
+  window.renderOrderView = function(){
+    clearLubanTimers();
+    return _origRenderOrderView.apply(this, arguments);
+  };
+}
+
+/* ---------- 6. 状态变化推送客户 TG（P28 后 P1 hook 失效） ---------- */
+var _lastStatus = {};
+function checkStatusChange(db){
+  if (!db || !db.orders) return;
+  db.orders.forEach(function(o){
+    var prev = _lastStatus[o.order_no];
+    if (prev && prev !== o.status){
+      var t = window.yfNotifyCustomer;
+      if (typeof t === 'function'){
+        if (o.status === 'delivered'){
+          var info = o.cards && o.cards.length ? ('\n卡密：\n' + o.cards.join('\n')) : '';
+          t(o.order_no, '✅ 已发货' + info);
+        } else if (o.status === 'rejected') t(o.order_no, '❌ 订单被驳回');
+        else if (o.status === 'out_of_stock') t(o.order_no, '⚠️ 库存不足，暂未发货');
+        else if (o.status === 'luban_error') t(o.order_no, '❌ 接码失败');
+      }
+    }
+    _lastStatus[o.order_no] = o.status;
+  });
+}
+setInterval(function(){
+  try { checkStatusChange(window.__DB || (window.loadDB && window.loadDB())); } catch(e){}
+}, 5000);
+
+/* ---------- 7. 修复 smmSubmit 的 radio 判空（兜底） ---------- */
+// 原代码 if (radio.value === 'alipay') 无判空，劫持 document.querySelector 代价太大
+// 改为在 smmSubmit 调用前确保有默认选中项
+var _origSmmSubmit2 = window.smmSubmit;
+window.smmSubmit = function(){
+  // 如果 pay-methods 存在但没有任何 radio 被选中，默认选第一个
+  var checked = document.querySelector('input[name="smm-pay"]:checked');
+  if (!checked){
+    var first = document.querySelector('input[name="smm-pay"]');
+    if (first) first.checked = true;
+  }
+  return _origSmmSubmit2.apply(this, arguments);
+};
+
+/* ---------- 8. Luban 订单页：只拉数据不再前端轮询上游 ---------- */
+// renderOrderView 里 setTimeout 调 lubanPollSms，若 luban_request_id 为空会 toast 报错
+// 这里改为：进入订单页后每 8 秒拉一次 /api/state，让后端处理
+var _p32OrderPullTimer = null;
+function startOrderPull(orderNo){
+  if (_p32OrderPullTimer) clearInterval(_p32OrderPullTimer);
+  var tries = 0;
+  _p32OrderPullTimer = setInterval(function(){
+    tries++;
+    if (tries > 40){ clearInterval(_p32OrderPullTimer); _p32OrderPullTimer = null; return; }
+    if (document.hidden) return;
+    fetch('/api/state?t=' + Date.now(), { cache:'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d || !d.ok || !d.db) return;
+        window.__DB = d.db;
+        var o = (d.db.orders || []).find(function(x){ return x.order_no === orderNo; });
+        if (o && (o.status === 'delivered' || o.status === 'rejected' || o.status === 'luban_error' || o.status === 'smm_error')){
+          clearInterval(_p32OrderPullTimer); _p32OrderPullTimer = null;
+          if (window.route) window.route();
+        }
+      })
+      .catch(function(){});
+  }, 8000);
+}
+
+var _origRenderOrderView2 = window.renderOrderView;
+if (typeof _origRenderOrderView2 === 'function'){
+  window.renderOrderView = function(orderNo, secret){
+    var ret = _origRenderOrderView2.apply(this, arguments);
+    try {
+      var db = window.loadDB();
+      var o = (db.orders || []).find(function(x){ return x.order_no === orderNo; });
+      if (o && (o.source === 'luban' || o.source === 'smm') &&
+          (o.status === 'processing' || o.status === 'pending' || o.status === 'pending_review')){
+        startOrderPull(orderNo);
+      }
+    } catch(e){}
+    return ret;
+  };
+}
+
+console.log('%c[P32] ✅ SMM/Luban 下单全流程修复已加载', 'color:#10b981;font-weight:bold;font-size:13px');
+console.log('%c  修复：TG分类解析 / publicBody缺字段 / USDT尾数 / 轮询泄漏 / 状态通知 / 订单轮询',
+  'color:#6b7280;font-size:12px');
+})();
+</script>
 </body>
 </html>

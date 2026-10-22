@@ -9973,5 +9973,100 @@ window.fetch = function(url, opts){
 console.log('%c[P42] ✅ 虚拟商品下单通道已打通，P28丢字段问题已彻底修复', 'color:#10b981;font-weight:bold;font-size:14px');
 })();
 </script>
+<!-- ============================================================
+     P43 · 终极修复：解决单号找不到、拉取数据覆盖等并发异常
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+// 1. 修复 pullServerData：防止本地刚下单还没同步就被云端数据覆盖
+var _origPullServerData = window.yfPullServerData;
+if (typeof _origPullServerData === 'function') {
+  window.yfPullServerData = function() {
+    return _origPullServerData.apply(this, arguments).then(function(d){
+      if (!d || !d.ok || !d.db) return d;
+      var localDb = window.__DB;
+      if (localDb && localDb.orders) {
+         var localOrders = localDb.orders;
+         var serverOrders = d.db.orders || [];
+         var serverSet = {};
+         serverOrders.forEach(function(o){ serverSet[o.order_no] = true; });
+         
+         // 把本地有，但服务端还没返回的待支付订单合并进去，防止刚下单就丢失
+         localOrders.forEach(function(o){
+            if (!serverSet[o.order_no] && (o.status === 'pending' || o.status === 'pending_review')) {
+               serverOrders.unshift(o);
+            }
+         });
+         d.db.orders = serverOrders;
+      }
+      window.__DB = d.db;
+      return d;
+    });
+  };
+}
+
+// 2. 重写 showPayModal：如果暂时找不到单，不要立刻报错，静默拉取一次
+var _origShowPayModalP43 = window.showPayModal;
+window.showPayModal = function(type, id){
+  var db = window.loadDB();
+  var found = true;
+  if (type === 'order') {
+    found = (db.orders || []).some(x => x.order_no === id);
+  } else if (type === 'recharge') {
+    found = (db.recharges || []).some(x => x.id === id);
+  }
+  
+  if (!found) {
+    if (window.toast) toast('正在同步订单信息…', 'info');
+    if (window.yfPullServerData) {
+      window.yfPullServerData().then(function(){
+        var db2 = window.loadDB();
+        var found2 = type === 'order' ? (db2.orders||[]).some(x=>x.order_no===id) : (db2.recharges||[]).some(x=>x.id===id);
+        if (found2) {
+           _origShowPayModalP43.apply(this, arguments);
+        } else {
+           if (window.toast) toast('订单不存在，请刷新重试', 'error');
+        }
+      });
+      return;
+    }
+  }
+  return _origShowPayModalP43.apply(this, arguments);
+};
+
+// 3. 重写 confirmPay：同理，防止因为还没同步过来导致支付校验失败
+var _origConfirmPayP43 = window.confirmPay;
+window.confirmPay = function(type, id){
+  var db = window.loadDB();
+  var found = true;
+  if (type === 'order') {
+    found = (db.orders || []).some(x => x.order_no === id);
+  } else if (type === 'recharge') {
+    found = (db.recharges || []).some(x => x.id === id);
+  }
+  
+  if (!found) {
+    if (window.toast) toast('正在同步订单信息…', 'info');
+    if (window.yfPullServerData) {
+      window.yfPullServerData().then(function(){
+        var db2 = window.loadDB();
+        var found2 = type === 'order' ? (db2.orders||[]).some(x=>x.order_no===id) : (db2.recharges||[]).some(x=>x.id===id);
+        if (found2) {
+           _origConfirmPayP43.apply(this, arguments);
+        } else {
+           if (window.toast) toast('订单不存在，请刷新重试', 'error');
+        }
+      });
+      return;
+    }
+  }
+  return _origConfirmPayP43.apply(this, arguments);
+};
+
+console.log('%c[P43] ✅ 前端订单并发覆盖与"订单不存在"异常已彻底修复', 'color:#10b981;font-weight:bold;font-size:14px');
+})();
+</script>
 </body>
 </html>

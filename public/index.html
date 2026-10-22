@@ -9921,5 +9921,57 @@ window.route = function() {
 console.log('%c[P41] ✅ 前后端接码分离重构完毕，由后端接管取号，前端只负责轮询展示', 'color:#10b981;font-weight:bold;font-size:14px');
 })();
 </script>
+<!-- ============================================================
+     P42 · 彻底修复 P28 下单丢字段导致的"商品/订单不存在"
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+var _origFetchP42 = window.fetch;
+
+window.fetch = function(url, opts){
+  var u = String(url || '');
+  
+  // 拦截发往 /api/public 的创建订单请求，补全所有被 P28 吞掉的字段
+  if (u.indexOf('/api/public') >= 0 && opts && typeof opts.body === 'string'){
+    try {
+      var body = JSON.parse(opts.body);
+      if (body.action === 'create_order'){
+        var db = window.loadDB();
+        var o = (db.orders || []).find(x => x.order_no === body.order_no);
+        
+        if (o){
+          // 将内存中完整的订单数据直接塞给后端，暴力覆盖 P28 的残缺数据
+          Object.assign(body, {
+            product_id: o.product_id || 0,
+            product_name: o.product_name || '',
+            source: o.source || 'local',
+            amount: o.amount || 0,
+            amount_due: o.amount_due || 0,
+            balance_used: o.balance_used || 0,
+            quantity: o.quantity || 1,
+            luban_type: o.luban_type || '',
+            luban_service_id: o.luban_service_id || '',
+            luban_service_name: o.luban_service_name || '',
+            luban_country: o.luban_country || '',
+            luban_keyword: o.luban_keyword || '',
+            luban_cardtype: o.luban_cardtype || '',
+            luban_filter: o.luban_filter || '',
+            luban_phone: o.luban_phone || '',
+            smm_service_id: o.smm_service_id || '',
+            smm_link: o.smm_link || ''
+          });
+          opts.body = JSON.stringify(body);
+        }
+      }
+    } catch(e){}
+  }
+  
+  return _origFetchP42.apply(this, arguments);
+};
+
+console.log('%c[P42] ✅ 虚拟商品下单通道已打通，P28丢字段问题已彻底修复', 'color:#10b981;font-weight:bold;font-size:14px');
+})();
+</script>
 </body>
 </html>

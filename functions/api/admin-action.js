@@ -1,12 +1,7 @@
-// functions/api/admin-action.js · 后台敏感操作（修复版 v3）
-// 关键改动：
-//   1. hashPwd 是 async，所有调用处都加 await
-//   2. 改密走 admin_config 独立 KV
+// functions/api/admin-action.js · 后台敏感操作（自动取号版）
 import { hashPwd } from '../_lib/auth.js';
 import { writeAdminConfig, readAdminConfig } from '../_lib/admin-config.js';
-import {
-  requireAdmin, optionsResponse, jsonError, jsonOk, rateLimit, getClientIp
-} from '../_lib/common.js';
+import { requireAdmin, optionsResponse, jsonError, jsonOk, rateLimit, getClientIp } from '../_lib/common.js';
 
 function nowStr() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -14,13 +9,7 @@ function nowStr() {
 
 function addLog(db, action, detail, ip, ua) {
   if (!Array.isArray(db.logs)) db.logs = [];
-  db.logs.unshift({
-    time: nowStr(),
-    action,
-    detail,
-    ip: ip || '',
-    ua: (ua || '').slice(0, 80)
-  });
+  db.logs.unshift({ time: nowStr(), action, detail, ip: ip || '', ua: (ua || '').slice(0, 80) });
   if (db.logs.length > 500) db.logs.length = 500;
 }
 
@@ -46,57 +35,71 @@ export async function onRequest(context) {
     const state = JSON.parse(raw);
     const db = state.db;
     let changed = false;
+
     /* ========== 确认发货 ========== */
-if (action === 'approve_order') {
-  const o = (db.orders || []).find(x => x.order_no === body.order_no);
-  if (!o) return jsonError('订单不存在', 404, env, request);
-  if (o.status !== 'pending_review') return jsonError('订单状态不是待审核', 400, env, request);
+    if (action === 'approve_order') {
+      const o = (db.orders || []).find(x => x.order_no === body.order_no);
+      if (!o) return jsonError('订单不存在', 404, env, request);
+      if (o.status !== 'pending_review') return jsonError('订单状态不是待审核', 400, env, request);
 
-  if (o.source === 'luban') {
-    o.status = 'processing';
-    o.approved_at = nowStr();
-    addLog(db, 'approve_order', `订单 ${o.order_no} 转上游接码`, ip, ua);
-    
-    state.rev = (state.rev || 0) + 1;
-    await env.YUNFAKA_KV.put('state', JSON.stringify(state));
-    
-    // 异步调用后端接码函数
-    const { processOrderLuban } = await import('./luban.js');
-    context.waitUntil(processOrderLuban(env, o.order_no));
-    return jsonOk({ ok: true, rev: state.rev }, env, request);
+      if (o.source === 'luban') {
+        o.status = 'processing';
+        o.approved_at = nowStr();
+        addLog(db, 'approve_order', `订单 ${o.order_no} 转上游接码`, ip, ua);
+        
+        state.rev = (state.rev || 0) + 1;
+        await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+        
+        const { processOrderLuban } = await import('./luban.js');
+        context.waitUntil(processOrderLuban(env, o.order_no));
+        return jsonOk({ ok: true, rev: state.rev }, env, request);
 
-  } else if (o.source === 'smm') {
-    o.status = 'processing';
-    o.approved_at = nowStr();
-    addLog(db, 'approve_order', `订单 ${o.order_no} 转上游 SMM`, ip, ua);
-    // 如需后端自动提交SMM，此处同理
-  } else {
-    const orderSku = o.sku_id || 0;
-    const available = (db.cards || []).filter(c =>
-      c.product_id === o.product_id &&
-      c.status === 'unused' &&
-      String(c.sku_id || 0) === String(orderSku)
-    );
-    if (available.length < o.quantity) {
-      return jsonError(`库存不足：需 ${o.quantity}，仅余 ${available.length}`, 400, env, request);
+      } else if (o.source === 'smm') {
+        o.status = 'processing';
+        o.approved_at = nowStr();
+        addLog(db, 'approve_order', `订单 ${o.order_no} 转上游 SMM`, ip, ua);
+        
+        state.rev = (state.rev || 0) + 1;
+        await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+
+        context.waitUntil((async () => {
+            try {
+                const p = new URLSearchParams({ key: env.CHINAYINLIU_API_KEY, action: 'add', service: o.smm_service_id, link: o.smm_link, quantity: o.quantity });
+                const r = await fetch('https://chinayinliu.com/api/v2', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: p.toString() });
+                const d = await r.json();
+                const raw2 = await env.YUNFAKA_KV.get('state');
+                const st2 = JSON.parse(raw2);
+                const o2 = st2.db.orders.find(x => x.order_no === o.order_no);
+                if (d.order) { o2.smm_order_id = String(d.order); }
+                else { o2.status = 'smm_error'; o2.smm_error = d.error || 'SMM提交失败'; }
+                st2.rev++; await env.YUNFAKA_KV.put('state', JSON.stringify(st2));
+            } catch(e) {}
+        })());
+        return jsonOk({ ok: true, rev: state.rev }, env, request);
+      } else {
+        const orderSku = o.sku_id || 0;
+        const available = (db.cards || []).filter(c => c.product_id === o.product_id && c.status === 'unused' && String(c.sku_id || 0) === String(orderSku));
+        if (available.length < o.quantity) {
+          return jsonError(`库存不足：需 ${o.quantity}，仅余 ${available.length}`, 400, env, request);
+        }
+        const usedIds = new Set((db.orders || []).flatMap(x => x.cards || []));
+        const safe = available.filter(c => !usedIds.has(c.content));
+        const toUse = safe.length >= o.quantity ? safe.slice(0, o.quantity) : available.slice(0, o.quantity);
+        toUse.forEach(c => {
+          c.status = 'used';
+          c.order_no = o.order_no;
+          c.used_at = nowStr();
+          o.cards.push(c.content);
+        });
+        o.status = 'delivered';
+        o.delivered_at = nowStr();
+        o.approved_at = nowStr();
+        addLog(db, 'approve_order', `订单 ${o.order_no} 发货`, ip, ua);
+      }
+      changed = true;
     }
-    const usedIds = new Set((db.orders || []).flatMap(x => x.cards || []));
-    const safe = available.filter(c => !usedIds.has(c.content));
-    const toUse = safe.length >= o.quantity ? safe.slice(0, o.quantity) : available.slice(0, o.quantity);
-    toUse.forEach(c => {
-      c.status = 'used';
-      c.order_no = o.order_no;
-      c.used_at = nowStr();
-      o.cards.push(c.content);
-    });
-    o.status = 'delivered';
-    o.delivered_at = nowStr();
-    o.approved_at = nowStr();
-    addLog(db, 'approve_order', `订单 ${o.order_no} 发货`, ip, ua);
-  }
-  changed = true;
-  }
-  /* ========== 驳回订单 ========== */
+
+    /* ========== 驳回订单 ========== */
     else if (action === 'reject_order') {
       const o = (db.orders || []).find(x => x.order_no === body.order_no);
       if (!o) return jsonError('订单不存在', 404, env, request);
@@ -123,9 +126,7 @@ if (action === 'approve_order') {
       const newBal = (m.balance || 0) + delta;
       if (newBal < 0) return jsonError('调整后余额不能为负', 400, env, request);
       m.balance = newBal;
-      addLog(db, 'adjust_balance',
-        `会员 ${m.username} 余额 ${delta > 0 ? '+' : ''}${(delta / 100).toFixed(2)}元`,
-        ip, ua);
+      addLog(db, 'adjust_balance', `会员 ${m.username} 余额 ${delta > 0 ? '+' : ''}${(delta / 100).toFixed(2)}元`, ip, ua);
       changed = true;
     }
 
@@ -152,17 +153,13 @@ if (action === 'approve_order') {
       allowed.forEach(k => {
         if (cfg[k] !== undefined) db.config[k] = String(cfg[k]).slice(0, 500);
       });
-      // 改密：走独立 KV
       if (body.new_admin_password) {
         if (String(body.new_admin_password).length < 6) {
           return jsonError('新密码至少 6 位', 400, env, request);
         }
         const ac = (await readAdminConfig(env)) || {};
-        const newHash = await hashPwd(body.new_admin_password); // ⭐ await
-        await writeAdminConfig(env, {
-          ...ac,
-          admin_pwd_hash: newHash
-        });
+        const newHash = await hashPwd(body.new_admin_password);
+        await writeAdminConfig(env, { ...ac, admin_pwd_hash: newHash });
         addLog(db, 'change_admin_pwd', '修改管理员密码', ip, ua);
       }
       addLog(db, 'save_settings', '修改站点设置', ip, ua);
@@ -176,7 +173,7 @@ if (action === 'approve_order') {
       if (!body.new_password || String(body.new_password).length < 6) {
         return jsonError('新密码至少6位', 400, env, request);
       }
-      m.password = await hashPwd(body.new_password); // ⭐ await
+      m.password = await hashPwd(body.new_password);
       addLog(db, 'reset_member_pwd', `重置会员 ${m.username} 密码`, ip, ua);
       changed = true;
     }

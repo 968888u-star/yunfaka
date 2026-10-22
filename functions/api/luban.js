@@ -1,4 +1,4 @@
-// functions/api/luban.js · LubanSms API 代理（终极后端取号版）
+// functions/api/luban.js · LubanSms API 代理（终极防御版）
 import { requireAdmin, requireMember, optionsResponse, jsonError, jsonOk, rateLimit } from '../_lib/common.js';
 
 async function findOrder(env, orderNo) {
@@ -147,7 +147,7 @@ export async function onRequest(context) {
   } catch (e) { return jsonError('操作失败，请稍后重试', 500, env, request, e); }
 }
 
-// ======== 供内部调用的后台静默取号逻辑 ========
+// ======== 供内部调用的后台静默取号逻辑（带必填参数防御） ========
 export async function processOrderLuban(env, orderNo) {
   try {
     const raw = await env.YUNFAKA_KV.get('state');
@@ -163,15 +163,32 @@ export async function processOrderLuban(env, orderNo) {
     const BASE = 'https://lubansms.com/v2/api/';
 
     let actionUrl = '';
+    
+    // 区分通用接码和指定接码的参数校验
     if (order.luban_type === 'common') {
+      if (!order.luban_keyword) {
+         order.status = 'luban_error'; 
+         order.luban_error = '取号失败：缺少关键词(keyword)';
+         state.rev = (state.rev || 0) + 1;
+         await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+         return { ok: false, msg: 'NO_KEYWORD' };
+      }
       const p = new URLSearchParams({ apikey, country: order.luban_country || '', phone: order.luban_phone || '', cardType: order.luban_cardtype || '', filter: order.luban_filter || '' });
       if (order.luban_keyword) p.set('keyword', order.luban_keyword);
       actionUrl = BASE + 'getKeywordNumber?' + p.toString();
     } else {
+      if (!order.luban_service_id) {
+         order.status = 'luban_error'; 
+         order.luban_error = '取号失败：缺少服务ID(service_id)';
+         state.rev = (state.rev || 0) + 1;
+         await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+         return { ok: false, msg: 'NO_SERVICE_ID' };
+      }
       const p = new URLSearchParams({ apikey, service_id: order.luban_service_id });
       actionUrl = BASE + 'getNumber?' + p.toString();
     }
 
+    // 向上游发起请求
     const res = await fetch(actionUrl);
     const d = await res.json();
     

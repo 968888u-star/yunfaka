@@ -1026,55 +1026,53 @@ function submitBuy(id){
 }
 
 function confirmPay(type, id){
-  if (window._confirmLock && window._confirmLock[type + ':' + id] && Date.now() - window._confirmLock[type + ':' + id] < 3000) {
+  const lockKey = type + ':' + id;
+  if (window._confirmLock && window._confirmLock[lockKey] && Date.now() - window._confirmLock[lockKey] < 3000) {
     toast('正在处理，请勿重复提交', 'warn'); return;
   }
   window._confirmLock = window._confirmLock || {};
-  window._confirmLock[type + ':' + id] = Date.now();
-
-  const db = loadDB();
-  if (type === 'order'){
-    const o = db.orders.find(x => x.order_no === id);
-    if (!o) return;
-    if (o.pay_method === 'usdt'){
-      if (!o.usdt_notified_at){ o.usdt_notified_at = now(); saveDB(db); notifyTg(o.order_no); }
-      toast('已通知商家，系统正在自动检测到账','success');
-      closeModal();
-      location.hash = '#/order/' + id;
-      if (location.hash === '#/order/' + id) route();
-      return;
-    }
-    if (o.pay_method === 'alipay'){ showPayerNameInput('order', id); return; }
-    o.status = 'pending_review';
-    o.submitted_at = now();
-    saveDB(db);
-    closeModal();
-    toast('已提交，正在通知商家审核','success');
-    notifyTg(o.order_no);
-    location.hash = '#/order/' + id;
-    if (location.hash === '#/order/' + id) route();
-  } else if (type === 'recharge'){
-    const r = db.recharges.find(x => x.id === id);
-    if (!r) return;
-    if (r.status === 'success'){ toast('该充值已到账','success'); return; }
-    if (r.method === 'usdt'){
-      if (!r.usdt_notified_at){ r.usdt_notified_at = now(); saveDB(db); try{notifyTg(r.id);}catch(e){} }
-      toast('已提交，系统正在自动检测USDT到账…','success');
-      closeModal();
-      startUsdtPolling(r.id);
-      location.hash = '#/member';
-      if (location.hash === '#/member') route();
-      return;
-    }
-    if (r.method === 'alipay'){ showPayerNameInput('recharge', id); return; }
-    r.status = 'pending_review';
-    r.submitted_at = now();
-    saveDB(db);
-    closeModal();
-    toast('已提交，管理员核实收款后到账','success');
-    try{notifyTg(r.id);}catch(e){}
-    location.hash = '#/member';
-    if (location.hash === '#/member') route();
+  window._confirmLock[lockKey] = Date.now();
+  setTimeout(function(){ try{ delete window._confirmLock[lockKey]; }catch(e){} }, 3000);
+  const __go = function(hash){ try{ closeModal(); }catch(e){} try{ location.hash = hash; }catch(e){} setTimeout(function(){ try{ route(); }catch(e){} }, 60); };
+  try {
+    const db = loadDB();
+    if (type === 'order'){
+      const o = (db.orders||[]).find(x => x.order_no === id);
+      if (!o){ toast('订单不存在，请刷新后重试','error'); return; }
+      if (o.pay_method === 'usdt'){
+        if (!o.usdt_notified_at){ o.usdt_notified_at = now(); try{ saveDB(db); }catch(e){} try{ notifyTg(o.order_no); }catch(e){} }
+        toast('已通知商家，系统正在自动检测到账','success');
+        __go('#/order/' + id);
+        return;
+      }
+      if (o.pay_method === 'alipay'){ try{ showPayerNameInput('order', id); }catch(e){ toast('打开付款信息失败：'+(e&&e.message||''),'error'); } return; }
+      o.status = 'pending_review'; o.submitted_at = now();
+      try{ saveDB(db); }catch(e){}
+      toast('已提交，正在通知商家审核','success');
+      try{ notifyTg(o.order_no); }catch(e){}
+      __go('#/order/' + id);
+    } else if (type === 'recharge'){
+      const r = (db.recharges||[]).find(x => x.id === id);
+      if (!r){ toast('充值记录不存在，请刷新后重试','error'); return; }
+      if (r.status === 'success'){ toast('该充值已到账','success'); return; }
+      if (r.method === 'usdt'){
+        if (!r.usdt_notified_at){ r.usdt_notified_at = now(); try{ saveDB(db); }catch(e){} try{ notifyTg(r.id); }catch(e){} }
+        toast('已提交，系统正在自动检测USDT到账…','success');
+        try{ startUsdtPolling(r.id); }catch(e){}
+        __go('#/member');
+        return;
+      }
+      if (r.method === 'alipay'){ try{ showPayerNameInput('recharge', id); }catch(e){ toast('打开付款信息失败：'+(e&&e.message||''),'error'); } return; }
+      r.status = 'pending_review'; r.submitted_at = now();
+      try{ saveDB(db); }catch(e){}
+      toast('已提交，管理员核实收款后到账','success');
+      try{ notifyTg(r.id); }catch(e){}
+      __go('#/member');
+    } else { toast('未知支付类型','error'); }
+  } catch (e) {
+    console.error('[confirmPay]', e);
+    try{ closeModal(); }catch(e2){}
+    toast('操作异常：' + (e && e.message ? e.message : '未知错误') + '，请刷新页面重试', 'error');
   }
 }
 

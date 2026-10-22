@@ -7299,7 +7299,7 @@ function yfPullNow(){
         }
       } catch(e){}
       // 支付弹窗打开中（用户正在付款），跳过覆盖重绘，只更新 rev，避免打断支付流程
-      var __modalOpen = document.querySelector('.modal-bg, .modal-overlay, [class*=modal]') || (document.body.style.overflow === 'hidden');
+      var __modalOpen = (document.body.style.overflow === 'hidden') || document.querySelector('.modal-bg.open, .modal-overlay, .pay-modal, #modal:not([style*=none])');
       if (__modalOpen){ console.log('[P22] 弹窗打开中，跳过重绘'); _yfRev = d.rev; return; }
       try {
         localStorage.setItem('yunfaka_db_v15', JSON.stringify(d.db));
@@ -8202,6 +8202,14 @@ function __doFlushSave(){
   const token = sessionStorage.getItem('yunfaka_admin_token') || '';
   postFullDb(db, token).then(function(d){ rs.forEach(function(r){ r(d); }); }).catch(function(e){
     console.warn('[P28] 保存失败:', e.message);
+    // 检测到无效/过期admin token（403）：自动清除，不toast（避免客户看到"请登录管理后台"）
+    if (e && e.message && (String(e.message).indexOf('无权限') >= 0 || String(e.message).indexOf('登录管理后台') >= 0)) {
+      try { sessionStorage.removeItem('yunfaka_admin_token'); } catch(e2){}
+      console.log('[P28] 检测到无效admin token，已自动清除');
+      var retAuth = { ok: false, msg: e.message };
+      rs.forEach(function(r){ r(retAuth); });
+      return;
+    }
     if (window.toast) window.toast('保存失败：' + e.message, 'error');
     var ret = { ok: false, msg: e.message };
     rs.forEach(function(r){ r(ret); });

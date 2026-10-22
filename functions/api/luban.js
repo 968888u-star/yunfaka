@@ -1,4 +1,4 @@
-// functions/api/luban.js · LubanSms API 代理（超级兼容与错误捕获版）
+// functions/api/luban.js · 终极暴力解析版
 import { requireAdmin, requireMember, optionsResponse, jsonError, jsonOk, rateLimit } from '../_lib/common.js';
 
 async function findOrder(env, orderNo) {
@@ -114,7 +114,7 @@ export async function onRequest(context) {
   } catch (e) { return jsonError('操作失败', 500, env, request, e); }
 }
 
-// ======== 内部静默取号逻辑（超级兼容解析与异常落盘） ========
+// ======== 内部静默取号逻辑（深水炸弹解析器） ========
 export async function processOrderLuban(env, orderNo) {
   try {
     const raw = await env.YUNFAKA_KV.get('state');
@@ -146,7 +146,6 @@ export async function processOrderLuban(env, orderNo) {
     let d;
     try { d = JSON.parse(text); } catch(e) { throw new Error('上游返回非JSON: ' + text.slice(0, 50)); }
 
-    // 暴力兼容各种成功标识
     const isSuccess = String(d.code) === '0' || String(d.code) === '200' || d.success === true;
     
     if (isSuccess) {
@@ -155,23 +154,47 @@ export async function processOrderLuban(env, orderNo) {
         try { payload = JSON.parse(payload); } catch(e) {}
       }
       
-      if (order.luban_type === 'common') {
-        order.luban_phone = payload.phone || payload.phone_number || payload.number || '';
-        order.luban_number = order.luban_phone;
-      } else {
-        // 暴力兼容各种字段名
-        order.luban_request_id = payload.request_id || payload.id || payload.order_id || '';
-        order.luban_phone = payload.phone_number || payload.phone || payload.number || '';
-        order.luban_number = order.luban_phone;
-      }
+      // ⭐ 核心修复：深度遍历提取号码和请求ID
+      let phone = '';
+      let reqId = '';
 
-      if (!order.luban_phone && !order.luban_request_id) {
-        throw new Error('上游成功但无号码: ' + JSON.stringify(payload).slice(0, 50));
+      // 递归扫描所有层级的对象，寻找像手机号的字段
+      function deepFind(obj) {
+        if (!obj || typeof obj !== 'object') return;
+        for (let k in obj) {
+          const val = obj[k];
+          const key = String(k).toLowerCase();
+          
+          if (typeof val === 'string' || typeof val === 'number') {
+            const sVal = String(val);
+            // 如果 key 包含 phone 或 number，且长度大于等于 6 位，认为是号码
+            if ((key.includes('phone') || key.includes('number')) && sVal.length >= 6) {
+              phone = sVal;
+            }
+            // 找 request_id 等
+            if (key.includes('id') && !phone) { // 防止把号码当成id
+              reqId = sVal;
+            }
+          } else if (val && typeof val === 'object') {
+            deepFind(val);
+          }
+        }
+      }
+      deepFind(payload);
+
+      // 赋值
+      order.luban_phone = phone;
+      order.luban_number = phone;
+      order.luban_request_id = reqId;
+
+      if (!order.luban_phone) {
+        throw new Error('上游成功但未解析出手机号: ' + JSON.stringify(payload).slice(0, 50));
       }
 
       order.status = 'processing';
       order.luban_start_time = Date.now();
-      order.luban_error = ''; // 清空历史错误
+      order.luban_deadline = Date.now() + 20 * 60 * 1000; // 强制写入 20 分钟倒计时，解决 0 分 0 秒
+      order.luban_error = ''; 
     } else {
       let errMsg = typeof d.msg === 'string' ? d.msg : JSON.stringify(d.msg || d);
       throw new Error('上游报错: ' + errMsg);
@@ -182,7 +205,6 @@ export async function processOrderLuban(env, orderNo) {
     return { ok: true, status: order.status };
   } catch (e) {
     console.error(`[Luban取号异常] 订单:${orderNo}, 原因:`, e.message);
-    // ⭐ 核心：无论报什么错，都把错误信息写入数据库，并标记为失败
     try {
       const raw2 = await env.YUNFAKA_KV.get('state');
       if (raw2) {

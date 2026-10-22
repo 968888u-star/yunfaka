@@ -10161,5 +10161,66 @@ if (typeof _origRenderP44 === 'function') {
 console.log('%c[P44] ✅ 验证码轮询无缝衔接已启用', 'color:#10b981;font-weight:bold;');
 })();
 </script>
+<!-- ============================================================
+     P45 · 彻底解决订单状态不同步、后台无待审核
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) return;
+
+// 辅助函数：同步状态到后端
+function syncOrderStatus(orderNo, status) {
+  return fetch('/api/public', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'update_order_status', order_no: orderNo, status: status })
+  }).catch(e => console.warn('状态同步失败', e));
+}
+
+// 1. 拦截 P41 的 payOrder，余额/USDT 支付时，把 processing 发给后端
+var _origPayOrderP45 = window.payOrder;
+window.payOrder = function(orderNo) {
+  var db = window.loadDB();
+  var o = db.orders.find(x => x.order_no === orderNo);
+  if (!o) return;
+  
+  if (o.status === 'pending') {
+    // 本地状态变更为 processing
+    o.status = 'processing'; 
+    window.saveDB(db);
+    // 通知后端更新状态（唤醒后端接码）
+    syncOrderStatus(orderNo, 'processing');
+  }
+  
+  if (_origPayOrderP45) return _origPayOrderP45.apply(this, arguments);
+};
+
+// 2. 拦截 confirmPay，支付宝/红包 提交时，把 pending_review 发给后端
+var _origConfirmPayP45 = window.confirmPay;
+window.confirmPay = function(type, id) {
+  if (type === 'order') {
+    var db = window.loadDB();
+    var o = db.orders.find(x => x.order_no === id);
+    if (o && o.status === 'pending' && o.pay_method === 'alipay') {
+       // 通知后端更新为待审核
+       syncOrderStatus(id, 'pending_review');
+    }
+  }
+  if (_origConfirmPayP45) return _origConfirmPayP45.apply(this, arguments);
+};
+
+// 3. 拦截 submitWithPayerName（填完姓氏后最终提交）
+var _origSubmitPayerP45 = window.submitWithPayerName;
+window.submitWithPayerName = function(type, id) {
+  if (type === 'order') {
+    syncOrderStatus(id, 'pending_review');
+  }
+  if (_origSubmitPayerP45) return _origSubmitPayerP45.apply(this, arguments);
+};
+
+console.log('%c[P45] ✅ 订单状态实时同步补丁已启用，支付宝状态直达后端', 'color:#10b981;font-weight:bold;');
+})();
+</script>
 </body>
 </html>

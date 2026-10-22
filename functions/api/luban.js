@@ -1,4 +1,4 @@
-// functions/api/luban.js · 终极容错防误判版
+// functions/api/luban.js · LubanSms API 代理（超级兼容与错误捕获版）
 import { requireAdmin, requireMember, optionsResponse, jsonError, jsonOk, rateLimit } from '../_lib/common.js';
 
 async function findOrder(env, orderNo) {
@@ -110,12 +110,11 @@ export async function onRequest(context) {
       const r = await fetch(buildUrl('setStatus', { request_id: requestId, status }));
       return jsonOk(await r.json(), env, request);
     }
-    // ... 其他写操作保留原样
     return jsonError('未知 action', 400, env, request);
   } catch (e) { return jsonError('操作失败', 500, env, request, e); }
 }
 
-// ======== 内部静默取号逻辑（核心修复） ========
+// ======== 内部静默取号逻辑（超级兼容解析与异常落盘） ========
 export async function processOrderLuban(env, orderNo) {
   try {
     const raw = await env.YUNFAKA_KV.get('state');
@@ -128,61 +127,75 @@ export async function processOrderLuban(env, orderNo) {
     
     const apikey = env.LUBAN_APIKEY;
     const BASE = 'https://lubansms.com/v2/api/';
-
     let actionUrl = '';
+
     if (order.luban_type === 'common') {
-      if (!order.luban_keyword) {
-         order.status = 'luban_error'; order.luban_error = '参数缺失: 缺少关键词';
-         await env.YUNFAKA_KV.put('state', JSON.stringify(state));
-         return { ok: false };
-      }
+      if (!order.luban_keyword) throw new Error('缺少关键词(keyword)');
       const p = new URLSearchParams({ apikey, country: order.luban_country || '', phone: order.luban_phone || '', cardType: order.luban_cardtype || '', filter: order.luban_filter || '' });
       if (order.luban_keyword) p.set('keyword', order.luban_keyword);
       actionUrl = BASE + 'getKeywordNumber?' + p.toString();
     } else {
-      if (!order.luban_service_id) {
-         order.status = 'luban_error'; order.luban_error = '参数缺失: 缺少服务ID';
-         await env.YUNFAKA_KV.put('state', JSON.stringify(state));
-         return { ok: false };
-      }
-      const p = new URLSearchParams({ apikey, service_id: order.luban_service_id });
+      if (!order.luban_service_id) throw new Error('缺少服务ID(service_id)');
+      const cleanServiceId = String(order.luban_service_id).trim();
+      const p = new URLSearchParams({ apikey, service_id: cleanServiceId });
       actionUrl = BASE + 'getNumber?' + p.toString();
     }
 
     const res = await fetch(actionUrl);
     const text = await res.text();
-    
     let d;
-    try { d = JSON.parse(text); } catch(e) { d = { code: -1, msg: '非JSON返回: ' + text.slice(0,50) }; }
+    try { d = JSON.parse(text); } catch(e) { throw new Error('上游返回非JSON: ' + text.slice(0, 50)); }
 
-    // ⭐ 核心修复：兼容 code 为数字 0 或 字符串 "0"
-    if (String(d.code) === '0') {
-      if (order.luban_type === 'common') {
-        order.luban_phone = d.msg.phone || d.msg.phone_number || d.msg.number || '';
-        order.luban_number = order.luban_phone;
-      } else {
-        order.luban_request_id = d.msg.request_id || d.msg.id || d.msg.order_id || '';
-        order.luban_phone = d.msg.phone_number || d.msg.phone || d.msg.number || '';
-        order.luban_number = order.luban_phone;
+    // 暴力兼容各种成功标识
+    const isSuccess = String(d.code) === '0' || String(d.code) === '200' || d.success === true;
+    
+    if (isSuccess) {
+      let payload = d.msg || d.data || d;
+      if (typeof payload === 'string') {
+        try { payload = JSON.parse(payload); } catch(e) {}
       }
       
-      // 如果居然解析不到号码，抛错
-      if (!order.luban_phone && !order.luban_request_id) {
-          order.status = 'luban_error';
-          order.luban_error = '上游成功但未提供号码: ' + JSON.stringify(d.msg).slice(0, 50);
+      if (order.luban_type === 'common') {
+        order.luban_phone = payload.phone || payload.phone_number || payload.number || '';
+        order.luban_number = order.luban_phone;
       } else {
-          order.status = 'processing';
-          order.luban_start_time = Date.now();
+        // 暴力兼容各种字段名
+        order.luban_request_id = payload.request_id || payload.id || payload.order_id || '';
+        order.luban_phone = payload.phone_number || payload.phone || payload.number || '';
+        order.luban_number = order.luban_phone;
       }
+
+      if (!order.luban_phone && !order.luban_request_id) {
+        throw new Error('上游成功但无号码: ' + JSON.stringify(payload).slice(0, 50));
+      }
+
+      order.status = 'processing';
+      order.luban_start_time = Date.now();
+      order.luban_error = ''; // 清空历史错误
     } else {
-      order.status = 'luban_error';
-      order.luban_error = typeof d.msg === 'string' ? d.msg : JSON.stringify(d.msg || d).slice(0, 100);
+      let errMsg = typeof d.msg === 'string' ? d.msg : JSON.stringify(d.msg || d);
+      throw new Error('上游报错: ' + errMsg);
     }
     
     state.rev = (state.rev || 0) + 1;
     await env.YUNFAKA_KV.put('state', JSON.stringify(state));
     return { ok: true, status: order.status };
   } catch (e) {
+    console.error(`[Luban取号异常] 订单:${orderNo}, 原因:`, e.message);
+    // ⭐ 核心：无论报什么错，都把错误信息写入数据库，并标记为失败
+    try {
+      const raw2 = await env.YUNFAKA_KV.get('state');
+      if (raw2) {
+         const st2 = JSON.parse(raw2);
+         const o2 = (st2.db.orders || []).find(x => String(x.order_no) === String(orderNo));
+         if (o2) {
+            o2.status = 'luban_error';
+            o2.luban_error = e.message || '未知异常';
+            st2.rev = (st2.rev || 0) + 1;
+            await env.YUNFAKA_KV.put('state', JSON.stringify(st2));
+         }
+      }
+    } catch(err) {}
     return { ok: false, msg: e.message };
   }
 }

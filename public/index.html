@@ -10203,5 +10203,159 @@ window.fetch = function(url, opts){
 console.log('%c[P39] ✅ 白嫖漏洞已封堵，并发扣费已加锁', 'color:#ef4444;font-weight:bold;font-size:14px');
 })();
 </script>
+<!-- ============================================================
+     P40 · 解除取号死锁 + 修复口令红包状态回滚
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) return;
+
+// 1. 彻底清理 P39 遗留的死锁机制
+delete window._lubanLocks;
+delete window._smmLocks;
+
+// 依靠状态和是否已有号码来判断防重，去掉强制的互斥锁
+window.payOrder = function(orderNo) {
+  var db = window.loadDB();
+  var o = db.orders.find(x => x.order_no === orderNo);
+  if (!o) return;
+
+  // 如果状态是 pending_review，说明没付钱，直接拦截
+  if (o.status === 'pending_review') return;
+
+  // 如果是 pending 且没用余额全额抵扣，拦截
+  if (o.status === 'pending' && (o.balance_used || 0) === 0) return;
+
+  // 如果已经取到号码或单号，拦截
+  if (o.luban_phone || o.luban_request_id || o.smm_order_id) return;
+
+  o.status = 'processing';
+  window.saveDB(db);
+
+  if (o.source === 'luban') {
+    if (window.toast) toast('正在为您分配号码…', 'info');
+    if (o.luban_type === 'common') {
+      var params = { keyword: o.luban_keyword || '' };
+      if (o.luban_country) params.country = o.luban_country;
+      if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
+    } else {
+      if (window.lubanStartSession) window.lubanStartSession(orderNo);
+    }
+  } else if (o.source === 'smm') {
+    if (window.toast) toast('正在提交推广任务…', 'info');
+    if (window.smmApi) {
+      window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity })
+        .then(r => {
+          var db2 = window.loadDB(); 
+          var o2 = db2.orders.find(x => x.order_no === orderNo); 
+          if (!o2) return;
+          if (r.ok && r.data && r.data.order) {
+            o2.smm_order_id = String(r.data.order); 
+            o2.smm_state = 'In progress'; 
+            window.saveDB(db2);
+            if (window.toast) toast('已提交，服务单号：' + r.data.order, 'success'); 
+            if (window.startPoll) window.startPoll(orderNo);
+          } else {
+            o2.status = 'smm_error'; 
+            o2.smm_error = '提交失败：' + (r.msg || '未知'); 
+            window.saveDB(db2);
+            if (window.toast) toast('提交失败', 'error');
+          }
+          if (location.hash === '#/order/' + orderNo && window.route) window.route();
+        }).catch(e => {
+          var db2 = window.loadDB(); 
+          var o2 = db2.orders.find(x => x.order_no === orderNo);
+          if (o2){ o2.status = 'smm_error'; o2.smm_error = '网络错误：' + e.message; window.saveDB(db2); }
+          if (window.toast) toast('网络错误', 'error');
+        });
+    }
+  }
+  
+  if (window.route) setTimeout(window.route, 500);
+};
+
+// 2. 修复口令红包和 USDT 的推送字段缺失（防止被后端用 pending 覆盖）
+var _origFetchP40 = window.fetch;
+window.fetch = function(url, opts){
+  var u = String(url || '');
+  
+  if (u.indexOf('/api/public') >= 0 && opts && typeof opts.body === 'string'){
+    try {
+      var body = JSON.parse(opts.body);
+      if (body.action === 'create_order'){
+        var db = window.loadDB();
+        var o = (db.orders || []).find(x => x.order_no === body.order_no);
+        if (o){
+          // 补全字段，尤其是 status，防止后端覆盖
+          body.product_id = body.product_id || o.product_id || 0;
+          body.source = body.source || o.source;
+          body.product_name = body.product_name || o.product_name;
+          body.amount = (body.amount != null) ? body.amount : (o.amount || 0);
+          body.amount_due = (body.amount_due != null) ? body.amount_due : (o.amount_due || 0);
+          body.balance_used = (body.balance_used != null) ? body.balance_used : (o.balance_used || 0);
+          body.status = o.status; // 【极其重要】必须带上当前状态，比如 pending_review
+          body.payer_name = o.payer_name || '';
+          body.redpacket_code = o.redpacket_code || '';
+          opts.body = JSON.stringify(body);
+        }
+      }
+    } catch(e){}
+  }
+
+  if (u.indexOf('/api/usdt-check') >= 0) {
+    return _origFetchP40.apply(this, arguments).then(function(res){
+      var clone = res.clone();
+      clone.json().then(function(d){
+        if (d && d.ok && d.auto && d.status !== 'pending') {
+          var db = window.loadDB();
+          (db.orders || []).forEach(function(o){
+            if (o.pay_method === 'usdt' && o.status === 'pending') {
+              o.status = 'processing';
+              window.saveDB(db);
+              if (window.payOrder) window.payOrder(o.order_no);
+            }
+          });
+        }
+      }).catch(function(){});
+      return res;
+    });
+  }
+  
+  return _origFetchP40.apply(this, arguments);
+};
+
+// 3. 拦截前端的主动拉取覆盖，如果本地是 pending_review，而拉下来是 pending，保大不保小
+var _origPullServerData = window.yfPullServerData;
+if (typeof _origPullServerData === 'function') {
+  window.yfPullServerData = function() {
+    return _origPullServerData.apply(this, arguments).then(function(d){
+      if (!d || !d.ok || !d.db) return d;
+      var db = window.loadDB();
+      var localMap = {};
+      (db.orders || []).forEach(o => localMap[o.order_no] = o);
+      
+      var changed = false;
+      (d.db.orders || []).forEach(serverO => {
+        var localO = localMap[serverO.order_no];
+        // 如果本地是待审核，服务端是待支付，把服务端的改成待审核，防止状态倒退
+        if (localO && localO.status === 'pending_review' && serverO.status === 'pending') {
+          serverO.status = 'pending_review';
+          serverO.payer_name = localO.payer_name;
+          changed = true;
+        }
+      });
+      if (changed) {
+        window.__DB = d.db;
+        localStorage.setItem('yunfaka_db_v15', JSON.stringify(d.db));
+      }
+      return d;
+    });
+  };
+}
+
+console.log('%c[P40] ✅ 取号死锁已解除，口令红包状态回滚已修复', 'color:#10b981;font-weight:bold;font-size:14px');
+})();
+</script>
 </body>
 </html>

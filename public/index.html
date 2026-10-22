@@ -9799,5 +9799,104 @@ if (typeof _origRenderOrderView3 === 'function') {
 console.log('%c[P35] ✅ 接码取号和验证码轮询已恢复，切底修复卡死BUG', 'color:#10b981;font-weight:bold;font-size:14px');
 })();
 </script>
+<!-- ============================================================
+     P36 · 补全 USDT/口令红包 付款后的自动取号逻辑
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) return;
+
+// 1. 修复 USDT 全局轮询：一旦检测到到账，立即触发前端取号
+var _origCheckOne = null;
+// 由于 P9 里的 checkOne 是闭包内的局部函数，我们拦截全局的 fetch 来监听检测结果
+var _origFetchP36 = window.fetch;
+window.fetch = function(url, opts){
+  var u = String(url || '');
+  if (u.indexOf('/api/usdt-check') >= 0) {
+    return _origFetchP36.apply(this, arguments).then(function(res){
+      // 克隆响应，以便我们读取内容
+      var clone = res.clone();
+      clone.json().then(function(d){
+        if (d && d.ok && d.auto && d.status !== 'pending') {
+          // 发现 USDT 到账，检查本地是否有处于 pending 的虚拟商品订单，如果有，触发取号
+          var db = window.loadDB();
+          var needPay = false;
+          (db.orders || []).forEach(function(o){
+            if (o.pay_method === 'usdt' && o.status === 'pending' && (o.source === 'luban' || o.source === 'smm')) {
+              // 强制修改状态并触发 payOrder
+              o.status = 'processing';
+              window.saveDB(db);
+              if (window.payOrder) window.payOrder(o.order_no);
+              needPay = true;
+            }
+          });
+          if (needPay && window.toast) window.toast('检测到 USDT 到账，正在为您取号…', 'success');
+        }
+      }).catch(function(){});
+      return res;
+    });
+  }
+  return _origFetchP36.apply(this, arguments);
+};
+
+// 2. 拦截后端的“审核通过”确认，确保前端发起取号
+// 由于 P6 将 approveOrder 转为后端 API，如果后端没有实现自动取号，由前端来补全
+var _origApproveOrder = window.approveOrder;
+if (typeof _origApproveOrder === 'function') {
+  window.approveOrder = function(orderNo) {
+    // 先找到订单
+    var db = window.loadDB();
+    var o = (db.orders || []).find(x => x.order_no === orderNo);
+    
+    // 无论后端成功与否，只要店主确认了，前端介入取号
+    if (o && o.status === 'pending_review') {
+      o.status = 'processing';
+      window.saveDB(db);
+      
+      if (o.source === 'luban') {
+        if (o.luban_type === 'common') {
+          var params = { keyword: o.luban_keyword || '' };
+          if (o.luban_country) params.country = o.luban_country;
+          if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
+        } else {
+          if (window.lubanStartSession) window.lubanStartSession(orderNo);
+        }
+      } else if (o.source === 'smm') {
+        if (window.smmApi) window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity });
+      }
+      
+      // 强制执行一次原函数（走后端记录）
+      return _origApproveOrder.apply(this, arguments);
+    }
+    return _origApproveOrder.apply(this, arguments);
+  };
+}
+
+// 3. 增加订单页的兜底轮询：如果是待审核状态，一旦发现后台确认了，自动刷新并取号
+var _p36Timer = null;
+function startP36Watch(orderNo) {
+  if (_p36Timer) clearInterval(_p36Timer);
+  _p36Timer = setInterval(function(){
+    var db = window.loadDB();
+    var o = (db.orders || []).find(x => x.order_no === orderNo);
+    // 如果状态变成 processing 且前端没有在轮询，说明后台确认了，但前端没触发
+    if (o && o.status === 'processing' && !o.luban_number) {
+       // 检查当前是否在订单页
+       if (location.hash.indexOf('#/order/') === 0 && window.route) window.route();
+    }
+  }, 5000);
+}
+var _origRenderOrderViewP36 = window.renderOrderView;
+if (typeof _origRenderOrderViewP36 === 'function') {
+  window.renderOrderView = function(orderNo, secret) {
+    startP36Watch(orderNo);
+    return _origRenderOrderViewP36.apply(this, arguments);
+  };
+}
+
+console.log('%c[P36] ✅ USDT/口令红包 付款后自动取号拦截器已启用', 'color:#10b981;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

@@ -1105,37 +1105,44 @@ function showPayerNameInput(type, id){
 }
 
 function submitWithPayerName(type, id){
+  if (window._payerSubmitting){ toast('正在处理，请勿重复提交','warn'); return; }
+  window._payerSubmitting = true;
+  setTimeout(function(){ window._payerSubmitting = false; }, 5000);
   const el = document.getElementById('payer-name-input');
   const name = el ? el.value.trim() : '';
-  if (!name){ toast('请填写付款人姓氏','error'); return; }
-  if (name.length > 4){ toast('姓氏最多4个字','error'); return; }
-  const db = loadDB();
-  if (type === 'order'){
-    const o = db.orders.find(x => x.order_no === id);
-    if (!o) return;
-    o.payer_name = name;
-    o.status = 'pending_review';
-    o.submitted_at = now();
-    saveDB(db);
-    closeModal();
-    toast('已提交，正在通知商家审核','success');
-    try{ yfSendTgNow('🔔 <b>新订单待审核</b>\n\n订单号：<code>'+o.order_no+'</code>\n商品：'+o.product_name+(o.sku_name?' · '+o.sku_name:'')+'\n数量：'+o.quantity+'\n金额：¥'+yuan(o.amount_due)+'\n红包口令：<code>'+(o.redpacket_code||'-')+'</code>\n付款人姓氏：<b>'+esc(name)+'</b>\n暗号：'+(o.secret||'-')+'\n\n👉 请到后台「待审核」处理'); }catch(e){}
-    try{ notifyTg(o.order_no); }catch(e){}
-    location.hash = '#/order/' + id;
-    if (location.hash === '#/order/' + id) route();
-  } else {
-    const r = db.recharges.find(x => x.id === id);
-    if (!r) return;
-    r.payer_name = name;
-    r.status = 'pending_review';
-    r.submitted_at = now();
-    saveDB(db);
-    closeModal();
-    toast('已提交，管理员核实收款后到账','success');
-    try{ yfSendTgNow('💰 <b>会员充值待审核</b>\n\n充值单号：<code>'+r.id+'</code>\n会员：'+(r.username||'未知')+'\n金额：¥'+yuan(r.amount)+'\n红包口令：<code>'+(r.redpacket_code||'-')+'</code>\n付款人姓氏：<b>'+esc(name)+'</b>\n\n👉 请到后台「会员管理」确认到账'); }catch(e){}
-    location.hash = '#/member';
-    if (location.hash === '#/member') route();
+  if (!name){ toast('请填写付款人姓氏','error'); window._payerSubmitting = false; return; }
+  if (name.length > 4){ toast('姓氏最多4个字','error'); window._payerSubmitting = false; return; }
+  try {
+    const db = loadDB();
+    const __go = function(hash){ try{ closeModal(); }catch(e){} try{ location.hash = hash; }catch(e){} setTimeout(function(){ try{ route(); }catch(e){} }, 60); };
+    if (type === 'order'){
+      const o = db.orders.find(x => x.order_no === id);
+      if (!o){ toast('订单不存在','error'); window._payerSubmitting = false; return; }
+      o.payer_name = name;
+      o.status = 'pending_review';
+      o.submitted_at = now();
+      try{ saveDB(db); }catch(e){}
+      toast('已提交，正在通知商家审核','success');
+      try{ yfSendTgNow('🔔 <b>新订单待审核</b>\n\n订单号：<code>'+o.order_no+'</code>\n商品：'+o.product_name+(o.sku_name?' · '+o.sku_name:'')+'\n数量：'+o.quantity+'\n金额：¥'+yuan(o.amount_due)+'\n红包口令：<code>'+(o.redpacket_code||'-')+'</code>\n付款人姓氏：<b>'+esc(name)+'</b>\n暗号：'+(o.secret||'-')+'\n\n👉 请到后台「待审核」处理'); }catch(e){}
+      try{ notifyTg(o.order_no); }catch(e){}
+      __go('#/order/' + id);
+    } else {
+      const r = db.recharges.find(x => x.id === id);
+      if (!r){ toast('充值记录不存在','error'); window._payerSubmitting = false; return; }
+      r.payer_name = name;
+      r.status = 'pending_review';
+      r.submitted_at = now();
+      try{ saveDB(db); }catch(e){}
+      toast('已提交，管理员核实收款后到账','success');
+      try{ yfSendTgNow('💰 <b>会员充值待审核</b>\n\n充值单号：<code>'+r.id+'</code>\n会员：'+(r.username||'未知')+'\n金额：¥'+yuan(r.amount)+'\n红包口令：<code>'+(r.redpacket_code||'-')+'</code>\n付款人姓氏：<b>'+esc(name)+'</b>\n\n👉 请到后台「会员管理」确认到账'); }catch(e){}
+      __go('#/member');
+    }
+  } catch (e) {
+    console.error('[submitWithPayerName]', e);
+    try{ closeModal(); }catch(e2){}
+    toast('操作异常：' + (e && e.message ? e.message : '未知错误') + '，请刷新重试', 'error');
   }
+  window._payerSubmitting = false;
 }
 
 function processRecharge(id){
@@ -9379,10 +9386,10 @@ if (typeof _origShowPayModal === 'function'){
     var db = window.loadDB();
     if (type === 'order'){
       var o = (db.orders || []).find(function(x){ return x.order_no === id; });
-      if (o && o.pay_method === 'usdt') ensureExpectedUsdt(o, o.usdt_rate);
+      if (o && o.pay_method === 'usdt'){ var __had1 = o.expected_usdt_exact; ensureExpectedUsdt(o, o.usdt_rate); if (!__had1 && o.expected_usdt_exact){ try{ window.saveDB(db); }catch(e){} } }
     } else if (type === 'recharge'){
       var r = (db.recharges || []).find(function(x){ return x.id === id; });
-      if (r && r.method === 'usdt') ensureExpectedUsdt(r, r.usdt_rate);
+      if (r && r.method === 'usdt'){ var __had2 = r.expected_usdt_exact; ensureExpectedUsdt(r, r.usdt_rate); if (!__had2 && r.expected_usdt_exact){ try{ window.saveDB(db); }catch(e){} } }
     }
     return _origShowPayModal.apply(this, arguments);
   };

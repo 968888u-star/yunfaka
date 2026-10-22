@@ -10082,5 +10082,126 @@ if (typeof _origRenderOrderViewP38 === 'function') {
 console.log('%c[P38] ✅ SMM 单号回调已恢复，全渠道并发防抖已加锁', 'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P39 · 修复白嫖漏洞 + 防止并发重复扣上游费用
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) return;
+
+// 全局并发锁，防止同一个订单被多次请求号码
+window._lubanLocks = window._lubanLocks || {};
+window._smmLocks = window._smmLocks || {};
+
+// 1. 安全重写指定接码请求（加锁）
+var _origStartSession = window.lubanStartSession;
+if (typeof _origStartSession === 'function') {
+  window.lubanStartSession = function(orderNo) {
+    if (window._lubanLocks[orderNo]) return;
+    window._lubanLocks[orderNo] = true;
+    
+    var db = window.loadDB();
+    var o = db.orders.find(x => x.order_no === orderNo);
+    // 安全校验：必须是有余额抵扣，或者已经处于 processing 的订单（后端确认已付）
+    if (!o || (o.status !== 'processing' && (o.balance_used || 0) === 0 && o.amount_due > 0)) {
+      window._lubanLocks[orderNo] = false;
+      return;
+    }
+    
+    _origStartSession.apply(this, arguments);
+  };
+}
+
+// 2. 安全重写通用接码请求（加锁）
+var _origStartCommon = window.lubanStartCommon;
+if (typeof _origStartCommon === 'function') {
+  window.lubanStartCommon = function(orderNo, params) {
+    if (window._lubanLocks[orderNo]) return;
+    window._lubanLocks[orderNo] = true;
+    
+    var db = window.loadDB();
+    var o = db.orders.find(x => x.order_no === orderNo);
+    if (!o || (o.status !== 'processing' && (o.balance_used || 0) === 0 && o.amount_due > 0)) {
+      window._lubanLocks[orderNo] = false;
+      return;
+    }
+    
+    _origStartCommon.apply(this, arguments);
+  };
+}
+
+// 3. 修复 renderOrderView 的白嫖漏洞
+var _origRenderOrderViewP39 = window.renderOrderView;
+if (typeof _origRenderOrderViewP39 === 'function') {
+  window.renderOrderView = function(orderNo, secret) {
+    var ret = _origRenderOrderViewP39.apply(this, arguments);
+    var db = window.loadDB();
+    var o = (db.orders || []).find(x => x.order_no === orderNo);
+    
+    // 【核心修复】：绝对不能在 pending_review（待审核）状态下触发取号！
+    // 只有状态为 processing 且没拿到号码时，才允许触发补发取号
+    if (o && o.status === 'processing' && !o.luban_phone && !o.luban_request_id && !o.smm_order_id) {
+       var now = Date.now();
+       if (!o._lastTriggerMap || now - o._lastTriggerMap > 3000) {
+           o._lastTriggerMap = now;
+           setTimeout(function(){ window.payOrder(orderNo); }, 300);
+       }
+    }
+    return ret;
+  };
+}
+
+// 4. 修复 P38 payOrder 中的防抖逻辑，避免被前端劫持
+var _origPayOrderP39 = window.payOrder;
+if (typeof _origPayOrderP39 === 'function') {
+  window.payOrder = function(orderNo) {
+    var db = window.loadDB();
+    var o = db.orders.find(x => x.order_no === orderNo);
+    if (!o) return;
+
+    // 如果状态是 pending_review，说明没付钱，直接拦截！
+    if (o.status === 'pending_review') {
+      console.log('[P39] 拦截：待审核订单不允许前端取号');
+      return;
+    }
+
+    // 如果是 pending（没付钱），且没用余额全额抵扣，直接拦截
+    if (o.status === 'pending' && (o.balance_used || 0) === 0) {
+      return;
+    }
+
+    return _origPayOrderP39.apply(this, arguments);
+  };
+}
+
+// 5. 修复 P36 拦截器里修改状态的问题，避免状态错乱
+var _origFetchP39 = window.fetch;
+window.fetch = function(url, opts){
+  var u = String(url || '');
+  if (u.indexOf('/api/usdt-check') >= 0) {
+    return _origFetchP39.apply(this, arguments).then(function(res){
+      var clone = res.clone();
+      clone.json().then(function(d){
+        if (d && d.ok && d.auto && d.status !== 'pending') {
+          var db = window.loadDB();
+          (db.orders || []).forEach(function(o){
+            if (o.pay_method === 'usdt' && o.status === 'pending') {
+              o.status = 'processing';
+              window.saveDB(db);
+              if (window.payOrder) window.payOrder(o.order_no);
+            }
+          });
+        }
+      }).catch(function(){});
+      return res;
+    });
+  }
+  return _origFetchP39.apply(this, arguments);
+};
+
+console.log('%c[P39] ✅ 白嫖漏洞已封堵，并发扣费已加锁', 'color:#ef4444;font-weight:bold;font-size:14px');
+})();
+</script>
 </body>
 </html>

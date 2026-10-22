@@ -37,6 +37,31 @@ export async function onRequest(context) {
     const cfg = db.config || {};
     /* ========== 更新接码验证码（前端轮询到后上报） ========== */
 if (action === 'update_luban_sms') {
+ /* ========== 确认订单已支付（USDT到账 / 口令红包确认） ========== */
+if (action === 'confirm_pay') {
+  const orderNo = String(body.order_no || '');
+  if (!orderNo) return jsonError('参数缺失', 400, env, request);
+  
+  const o = (db.orders || []).find(x => x.order_no === orderNo);
+  if (!o) return jsonError('订单不存在', 404, env, request);
+  if (o.status !== 'pending' && o.status !== 'pending_review') {
+     return jsonOk({ ok: true, msg: '已经是' + o.status }, env, request);
+  }
+
+  o.status = 'processing';
+  o.paid_at = nowStr();
+  
+  state.rev = (state.rev || 0) + 1;
+  await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+  
+  // 触发接码（如果是 Luban 订单）
+  if (o.source === 'luban') {
+    const { processOrderLuban } = await import('./luban.js');
+    context.waitUntil(processOrderLuban(env, o.order_no));
+  }
+  
+  return jsonOk({ ok: true, status: o.status }, env, request);
+}
   const orderNo = String(body.order_no || '');
   const sms = String(body.sms || '').slice(0, 200);
   if (!orderNo || !sms) return jsonError('参数缺失', 400, env, request);

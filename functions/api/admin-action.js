@@ -46,45 +46,57 @@ export async function onRequest(context) {
     const state = JSON.parse(raw);
     const db = state.db;
     let changed = false;
-
     /* ========== 确认发货 ========== */
-    if (action === 'approve_order') {
-      const o = (db.orders || []).find(x => x.order_no === body.order_no);
-      if (!o) return jsonError('订单不存在', 404, env, request);
-      if (o.status !== 'pending_review') return jsonError('订单状态不是待审核', 400, env, request);
+if (action === 'approve_order') {
+  const o = (db.orders || []).find(x => x.order_no === body.order_no);
+  if (!o) return jsonError('订单不存在', 404, env, request);
+  if (o.status !== 'pending_review') return jsonError('订单状态不是待审核', 400, env, request);
 
-      if (o.source === 'luban' || o.source === 'smm') {
-        o.status = 'processing';
-        o.approved_at = nowStr();
-        addLog(db, 'approve_order', `订单 ${o.order_no} 转上游处理`, ip, ua);
-      } else {
-        const orderSku = o.sku_id || 0;
-        const available = (db.cards || []).filter(c =>
-          c.product_id === o.product_id &&
-          c.status === 'unused' &&
-          String(c.sku_id || 0) === String(orderSku)
-        );
-        if (available.length < o.quantity) {
-          return jsonError(`库存不足：需 ${o.quantity}，仅余 ${available.length}`, 400, env, request);
-        }
-        const usedIds = new Set((db.orders || []).flatMap(x => x.cards || []));
-        const safe = available.filter(c => !usedIds.has(c.content));
-        const toUse = safe.length >= o.quantity ? safe.slice(0, o.quantity) : available.slice(0, o.quantity);
-        toUse.forEach(c => {
-          c.status = 'used';
-          c.order_no = o.order_no;
-          c.used_at = nowStr();
-          o.cards.push(c.content);
-        });
-        o.status = 'delivered';
-        o.delivered_at = nowStr();
-        o.approved_at = nowStr();
-        addLog(db, 'approve_order', `订单 ${o.order_no} 发货`, ip, ua);
-      }
-      changed = true;
+  if (o.source === 'luban') {
+    o.status = 'processing';
+    o.approved_at = nowStr();
+    addLog(db, 'approve_order', `订单 ${o.order_no} 转上游接码`, ip, ua);
+    
+    state.rev = (state.rev || 0) + 1;
+    await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+    
+    // 异步调用后端接码函数
+    const { processOrderLuban } = await import('./luban.js');
+    context.waitUntil(processOrderLuban(env, o.order_no));
+    return jsonOk({ ok: true, rev: state.rev }, env, request);
+
+  } else if (o.source === 'smm') {
+    o.status = 'processing';
+    o.approved_at = nowStr();
+    addLog(db, 'approve_order', `订单 ${o.order_no} 转上游 SMM`, ip, ua);
+    // 如需后端自动提交SMM，此处同理
+  } else {
+    const orderSku = o.sku_id || 0;
+    const available = (db.cards || []).filter(c =>
+      c.product_id === o.product_id &&
+      c.status === 'unused' &&
+      String(c.sku_id || 0) === String(orderSku)
+    );
+    if (available.length < o.quantity) {
+      return jsonError(`库存不足：需 ${o.quantity}，仅余 ${available.length}`, 400, env, request);
     }
-
-    /* ========== 驳回订单 ========== */
+    const usedIds = new Set((db.orders || []).flatMap(x => x.cards || []));
+    const safe = available.filter(c => !usedIds.has(c.content));
+    const toUse = safe.length >= o.quantity ? safe.slice(0, o.quantity) : available.slice(0, o.quantity);
+    toUse.forEach(c => {
+      c.status = 'used';
+      c.order_no = o.order_no;
+      c.used_at = nowStr();
+      o.cards.push(c.content);
+    });
+    o.status = 'delivered';
+    o.delivered_at = nowStr();
+    o.approved_at = nowStr();
+    addLog(db, 'approve_order', `订单 ${o.order_no} 发货`, ip, ua);
+  }
+  changed = true;
+  }
+  /* ========== 驳回订单 ========== */
     else if (action === 'reject_order') {
       const o = (db.orders || []).find(x => x.order_no === body.order_no);
       if (!o) return jsonError('订单不存在', 404, env, request);

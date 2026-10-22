@@ -9538,296 +9538,7 @@ console.log('%c  修复：TG分类解析 / publicBody缺字段 / USDT尾数 / �
   'color:#6b7280;font-size:12px');
 })();
 </script>
-<!-- ============================================================
-     P33 · 修复接码/SMM下单时误报"商品不存在"的问题
-     ============================================================ -->
-<script>
-(function(){
-'use strict';
-if (!window.toast) return;
-
-var _origToast = window.toast;
-window.toast = function(msg, type){
-  var m = String(msg || '');
-  // 拦截 P28 触发的针对虚拟商品（接码/SMM）的误报
-  if (m === '商品不存在' && type === 'error') {
-    console.log('%c[P33] 已拦截接码/SMM的“商品不存在”误报，订单已保存在本地', 'color:#f59e0b');
-    return;
-  }
-  return _origToast.apply(this, arguments);
-};
-
-// 进一步加固：拦截对虚拟商品订单的 /api/public 同步请求
-var _origFetch = window.fetch;
-window.fetch = function(url, opts){
-  var u = String(url || '');
-  if (u.indexOf('/api/public') >= 0 && opts && typeof opts.body === 'string'){
-    try {
-      var body = JSON.parse(opts.body);
-      if (body.action === 'create_order' && (body.product_id === 0 || body.source === 'luban' || body.source === 'smm')){
-        console.log('%c[P33] 拦截虚拟商品保存请求（接码/SMM不走本地商品库接口）', 'color:#10b981');
-        // 伪造成功响应，阻止后端校验报错，且不让 P28 触发覆盖本地数据
-        return Promise.resolve(new Response(JSON.stringify({ok: true}), {
-          status: 200,
-          headers: {'Content-Type': 'application/json'}
-        }));
-      }
-    } catch(e){}
-  }
-  return _origFetch.apply(this, arguments);
-};
-
-console.log('%c[P33] ✅ 接码/SMM下单误报修复已启用', 'color:#10b981;font-weight:bold');
-})();
-</script>
-<!-- ============================================================
-     P34 · 彻底修复接码/SMM 的支付、取号、轮询全流程
-     ============================================================ -->
-<script>
-(function(){
-'use strict';
-
-// 1. 恢复 payOrder 的前端取号触发逻辑（确保用户付款后，前端主动触发取号）
-window.payOrder = function(orderNo) {
-  var db = window.loadDB ? window.loadDB() : null;
-  if (!db) return;
-  var o = db.orders.find(x => x.order_no === orderNo);
-  
-  if (o && o.status === 'pending') {
-    console.log('[P34] 触发前端支付成功逻辑:', orderNo);
-    
-    // 如果订单是接码类型
-    if (o.source === 'luban') {
-      o.status = 'processing';
-      window.saveDB(db);
-      
-      if (o.luban_type === 'common') {
-        // 触发通用接码
-        var params = { keyword: o.luban_keyword || '' };
-        if (o.luban_country) params.country = o.luban_country;
-        if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
-      } else {
-        // 触发指定接码
-        if (window.lubanStartSession) window.lubanStartSession(orderNo);
-      }
-    } 
-    // 如果订单是 SMM 类型
-    else if (o.source === 'smm') {
-      o.status = 'processing';
-      window.saveDB(db);
-      if (window.smmApi) {
-        window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity });
-      }
-    }
-    
-    // 强制刷新页面展示
-    if (window.route) setTimeout(window.route, 500);
-  }
-};
-
-// 2. 修复 P33 丢单问题：如果是虚拟商品，直接发给管理员，或者调用专门的接口
-var _origFetch2 = window.fetch;
-window.fetch = function(url, opts){
-  var u = String(url || '');
-  // 如果是虚拟商品（接码/SMM）的 create_order，走后端通用推送
-  if (u.indexOf('/api/public') >= 0 && opts && typeof opts.body === 'string'){
-    try {
-      var body = JSON.parse(opts.body);
-      if (body.action === 'create_order' && (body.product_id === 0 || body.source === 'luban' || body.source === 'smm')) {
-        // 将订单直接推送到后端的 /api/state (全量保存) 或者 /api/admin-action
-        var db = window.loadDB();
-        return _origFetch2.call(this, '/api/state?t=' + Date.now(), { cache: 'no-store' })
-          .then(r => r.json())
-          .then(d => {
-            var rev = d.rev || 0;
-            return _origFetch2.call(this, '/api/state', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ db: db, baseRev: rev })
-            });
-          });
-      }
-    } catch(e){}
-  }
-  return _origFetch2.apply(this, arguments);
-};
-
-// 3. 解决轮询冲突：拦截原生的 Luban 轮询，统一改为 P9 的全局检测和 P32 的 state 拉取
-window.lubanPollSms = function(orderNo) {
-  console.log('[P34] 拦截前端直接轮询 Luban，交由后端/state拉取处理');
-};
-window.lubanCommonPoll = function(orderNo) {
-  console.log('[P34] 拦截前端直接轮询 Luban(通用)，交由后端/state拉取处理');
-};
-
-// 4. 解决 P33 拦截时导致的内部异常
-var _origToast2 = window.toast;
-window.toast = function(msg, type){
-  if (String(msg).indexOf('商品不存在') >= 0) {
-    return; // 彻底静默
-  }
-  return _origToast2.apply(this, arguments);
-};
-
-console.log('%c[P34] ✅ 接码/SMM 支付、取号、轮询全流程修复完成', 'color:#10b981;font-weight:bold;font-size:13px');
-})();
-</script>
-<!-- ============================================================
-     P35 · 彻底打通接码全流程（恢复前端轮询，修复请求覆盖）
-     ============================================================ -->
-<script>
-(function(){
-'use strict';
-if (!window.loadDB) return;
-
-// 1. 恢复被 P34 阉割的验证码轮询
-var _origLubanPoll = null;
-var _origCommonPoll = null;
-
-// 我们直接重写 __lubanFetch 和轮询逻辑，绕过补丁冲突
-window.lubanPollSms = function(orderNo, attempt) {
-  if (attempt === undefined) attempt = 0;
-  if (attempt > 40) { if(window.toast) toast('超时未收到验证码，请释放号码','error'); return; }
-  
-  var db = window.loadDB(); 
-  var o = db.orders.find(function(x){return x.order_no===orderNo;}); 
-  if (!o || !o.luban_request_id) return;
-  
-  fetch('/api/luban?action=get_sms&request_id=' + encodeURIComponent(o.luban_request_id) + '&order_no=' + encodeURIComponent(orderNo))
-    .then(r => r.json())
-    .then(d => {
-      var db2 = window.loadDB(); 
-      var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); 
-      if (!o2) return;
-      
-      var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
-      if (d && d.code === 0 && sms) {
-        o2.luban_sms = String(sms);
-        o2.luban_code = o2.luban_sms;
-        o2.status = 'delivered'; 
-        o2.delivered_at = o2.delivered_at || new Date().toLocaleString(); 
-        window.saveDB(db2);
-        if(window.toast) toast('收到验证码：' + o2.luban_sms, 'success');
-        if(window.yfStrongAlert) window.yfStrongAlert(o2.luban_sms);
-        if (location.hash.indexOf('#/order/') === 0 && window.route) window.route();
-      } else {
-        setTimeout(function(){ window.lubanPollSms(orderNo, attempt+1); }, 15000);
-      }
-    }).catch(function(){
-      setTimeout(function(){ window.lubanPollSms(orderNo, attempt+1); }, 15000);
-    });
-};
-
-window.lubanCommonPoll = function(orderNo, attempt) {
-  if (attempt === undefined) attempt = 0;
-  if (attempt > 40) { if(window.toast) toast('超时未收到验证码，请释放号码','error'); return; }
-  
-  var db = window.loadDB(); 
-  var o = db.orders.find(function(x){return x.order_no===orderNo;}); 
-  if (!o || !o.luban_phone) return;
-  
-  var url = '/api/luban?action=common_get_sms&phone=' + encodeURIComponent(o.luban_phone) + '&keyword=' + encodeURIComponent(o.luban_keyword||'') + '&order_no=' + encodeURIComponent(orderNo);
-  fetch(url)
-    .then(r => r.json())
-    .then(d => {
-      var db2 = window.loadDB(); 
-      var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); 
-      if (!o2) return;
-      
-      var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
-      if (d && d.code === 0 && sms) {
-        o2.luban_sms = String(sms);
-        o2.luban_code = o2.luban_sms;
-        o2.status = 'delivered'; 
-        o2.delivered_at = o2.delivered_at || new Date().toLocaleString(); 
-        window.saveDB(db2);
-        if(window.toast) toast('收到验证码：' + o2.luban_sms, 'success');
-        if(window.yfStrongAlert) window.yfStrongAlert(o2.luban_sms);
-        if (location.hash.indexOf('#/order/') === 0 && window.route) window.route();
-      } else {
-        setTimeout(function(){ window.lubanCommonPoll(orderNo, attempt+1); }, 15000);
-      }
-    }).catch(function(){
-      setTimeout(function(){ window.lubanCommonPoll(orderNo, attempt+1); }, 15000);
-    });
-};
-
-// 2. 修复 P34 里的那个错误 fetch 拦截（不要用全量 /api/state 覆盖）
-// 让普通用户的写操作正常通过 /api/public，让后端去处理
-var _origFetch3 = window.fetch;
-window.fetch = function(url, opts){
-  var u = String(url || '');
-  // 移除 P34 里的错误拦截
-  if (u.indexOf('/api/public') >= 0 && opts && typeof opts.body === 'string'){
-    try {
-      var body = JSON.parse(opts.body);
-      if (body.action === 'create_order') {
-        // 给后端补全字段，防止报“商品不存在”
-        var db = window.loadDB();
-        var o = (db.orders || []).find(x => x.order_no === body.order_no);
-        if (o) {
-          if (o.source === 'luban' || o.source === 'smm') {
-             body.product_id = -1; // 告诉后端这是虚拟商品
-             body.source = o.source;
-             body.product_name = o.product_name;
-             body.amount = o.amount;
-             body.amount_due = o.amount_due;
-             body.balance_used = o.balance_used;
-             opts.body = JSON.stringify(body);
-          }
-        }
-      }
-    } catch(e){}
-  }
-  return _origFetch3.apply(this, arguments);
-};
-
-// 3. 重新触发取号
-window.payOrder = function(orderNo) {
-  var db = window.loadDB();
-  var o = db.orders.find(x => x.order_no === orderNo);
-  if (!o || o.status !== 'pending') return;
-  
-  o.status = 'processing';
-  window.saveDB(db);
-  
-  if (o.source === 'luban') {
-    if (o.luban_type === 'common') {
-      var params = { keyword: o.luban_keyword || '' };
-      if (o.luban_country) params.country = o.luban_country;
-      if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
-    } else {
-      if (window.lubanStartSession) window.lubanStartSession(orderNo);
-    }
-  } else if (o.source === 'smm') {
-    if (window.smmApi) window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity });
-  }
-  
-  if (window.route) setTimeout(window.route, 500);
-};
-
-// 4. 修复 renderOrderView 里的轮询触发（去掉 P32 的定时拉取，用我们恢复的轮询）
-var _origRenderOrderView3 = window.renderOrderView;
-if (typeof _origRenderOrderView3 === 'function') {
-  window.renderOrderView = function(orderNo, secret) {
-    var ret = _origRenderOrderView3.apply(this, arguments);
-    var db = window.loadDB();
-    var o = (db.orders || []).find(x => x.order_no === orderNo);
-    if (o && o.status === 'processing') {
-       if (o.luban_type === 'common') {
-          setTimeout(() => window.lubanCommonPoll(orderNo, 0), 2000);
-       } else {
-          setTimeout(() => window.lubanPollSms(orderNo, 0), 2000);
-       }
-    }
-    return ret;
-  };
-}
-
-console.log('%c[P35] ✅ 接码取号和验证码轮询已恢复，切底修复卡死BUG', 'color:#10b981;font-weight:bold;font-size:14px');
-})();
-</script>
-<!-- ============================================================
+  <!-- ============================================================
      P36 · 补全 USDT/口令红包 付款后的自动取号逻辑
      ============================================================ -->
 <script>
@@ -9924,311 +9635,6 @@ if (typeof _origRenderOrderViewP36 === 'function') {
 }
 
 console.log('%c[P36] ✅ USDT/口令红包 付款后自动取号拦截器已启用', 'color:#10b981;font-weight:bold;font-size:13px');
-})();
-</script>
-<!-- ============================================================
-     P37 · 彻底解开取号死锁，全渠道自动取号
-     ============================================================ -->
-<script>
-(function(){
-'use strict';
-if (!window.loadDB) return;
-
-// 1. 重写 payOrder，修复状态死锁问题
-window.payOrder = function(orderNo) {
-  var db = window.loadDB();
-  var o = db.orders.find(x => x.order_no === orderNo);
-  // 允许 pending 或 processing 状态触发，防止被拦截
-  if (!o || (o.status !== 'pending' && o.status !== 'processing')) return;
-  
-  // 如果已经有号码了，就不用再取了
-  if (o.luban_phone || o.luban_request_id) return;
-
-  o.status = 'processing';
-  window.saveDB(db);
-  
-  if (o.source === 'luban') {
-    if (window.toast) toast('正在为您分配号码…', 'info');
-    if (o.luban_type === 'common') {
-      var params = { keyword: o.luban_keyword || '' };
-      if (o.luban_country) params.country = o.luban_country;
-      if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
-    } else {
-      if (window.lubanStartSession) window.lubanStartSession(orderNo);
-    }
-  } else if (o.source === 'smm') {
-    if (window.smmApi) window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity });
-  }
-  
-  if (window.route) setTimeout(window.route, 500);
-};
-
-// 2. 重写 P36 拦截器，不要先改状态再调 payOrder，直接调 payOrder 让他自己改
-var _origFetchP37 = window.fetch;
-window.fetch = function(url, opts){
-  var u = String(url || '');
-  if (u.indexOf('/api/usdt-check') >= 0) {
-    return _origFetchP37.apply(this, arguments).then(function(res){
-      var clone = res.clone();
-      clone.json().then(function(d){
-        // 如果后端确认到账
-        if (d && d.ok && d.auto && d.status !== 'pending') {
-          var db = window.loadDB();
-          var needPay = false;
-          (db.orders || []).forEach(function(o){
-            if (o.pay_method === 'usdt' && o.status === 'pending' && (o.source === 'luban' || o.source === 'smm')) {
-              // 直接调 payOrder，让它去改状态并取号
-              if (window.payOrder) window.payOrder(o.order_no);
-              needPay = true;
-            }
-          });
-          if (needPay && window.toast) window.toast('检测到 USDT 到账，正在为您取号…', 'success');
-        }
-      }).catch(function(){});
-      return res;
-    });
-  }
-  return _origFetchP37.apply(this, arguments);
-};
-
-// 3. 增加对“后台确认”的监听（解决口令红包后端确认后前端不取号问题）
-// 在每次渲染订单详情页时，检查如果状态是 processing 且没号码，立刻触发 payOrder
-var _origRenderOrderViewP37 = window.renderOrderView;
-if (typeof _origRenderOrderViewP37 === 'function') {
-  window.renderOrderView = function(orderNo, secret) {
-    var ret = _origRenderOrderViewP37.apply(this, arguments);
-    var db = window.loadDB();
-    var o = (db.orders || []).find(x => x.order_no === orderNo);
-    
-    // 发现订单处理中，且没取到号码，立刻补发取号请求
-    if (o && o.status === 'processing' && !o.luban_phone && !o.luban_request_id) {
-       if (window.payOrder) {
-         // 使用 setTimeout 防止阻塞页面渲染
-         setTimeout(function(){ window.payOrder(orderNo); }, 500);
-       }
-    }
-    return ret;
-  };
-}
-
-console.log('%c[P37] ✅ 全渠道支付取号死锁已解开，后台确认后前端将自动补发取号', 'color:#10b981;font-weight:bold;font-size:13px');
-})();
-</script>
-<!-- ============================================================
-     P38 · 修复 SMM 提交丢单号问题 + 增强并发防抖
-     ============================================================ -->
-<script>
-(function(){
-'use strict';
-if (!window.loadDB) return;
-
-var _smmSubmitting = {};
-
-window.payOrder = function(orderNo) {
-  var db = window.loadDB();
-  var o = db.orders.find(x => x.order_no === orderNo);
-  
-  // 放宽状态判断，只要不是已发货/驳回就可以尝试（但要防止重复请求）
-  if (!o || o.status === 'delivered' || o.status === 'rejected' || o.status === 'smm_error') return;
-  
-  // 如果已经取过号/或者已经提交过，就不要重复触发
-  if (o.luban_phone || o.luban_request_id || o.smm_order_id || _smmSubmitting[orderNo]) return;
-
-  o.status = 'processing';
-  window.saveDB(db);
-  
-  if (o.source === 'luban') {
-    if (window.toast) toast('正在为您分配号码…', 'info');
-    if (o.luban_type === 'common') {
-      var params = { keyword: o.luban_keyword || '' };
-      if (o.luban_country) params.country = o.luban_country;
-      if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
-    } else {
-      if (window.lubanStartSession) window.lubanStartSession(orderNo);
-    }
-  } 
-  else if (o.source === 'smm') {
-    _smmSubmitting[orderNo] = true;
-    if (window.toast) toast('正在提交推广任务…', 'info');
-    
-    // 恢复被 P37 阉割的 smmApi 回调，拿回单号
-    if (window.smmApi) {
-      window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity })
-        .then(r => {
-          var db2 = window.loadDB(); 
-          var o2 = db2.orders.find(x => x.order_no === orderNo); 
-          if (!o2) return;
-          
-          if (r.ok && r.data && r.data.order) {
-            o2.smm_order_id = String(r.data.order); 
-            o2.smm_state = 'In progress'; 
-            window.saveDB(db2);
-            if (window.toast) toast('已提交，服务单号：' + r.data.order, 'success'); 
-            if (window.startPoll) window.startPoll(orderNo);
-          } else {
-            o2.status = 'smm_error'; 
-            o2.smm_error = '提交失败：' + (r.msg || '未知'); 
-            window.saveDB(db2);
-            if (window.toast) toast('提交失败', 'error');
-          }
-          _smmSubmitting[orderNo] = false;
-          if (location.hash === '#/order/' + orderNo && window.route) window.route();
-        }).catch(e => {
-          var db2 = window.loadDB(); 
-          var o2 = db2.orders.find(x => x.order_no === orderNo);
-          if (o2){ o2.status = 'smm_error'; o2.smm_error = '网络错误：' + e.message; window.saveDB(db2); }
-          _smmSubmitting[orderNo] = false;
-          if (window.toast) toast('网络错误', 'error');
-        });
-    }
-  }
-  
-  if (window.route) setTimeout(window.route, 500);
-};
-
-// 强化 renderOrderView，加入时间防抖，避免疯狂重复请求
-var _lastTriggerMap = {};
-var _origRenderOrderViewP38 = window.renderOrderView;
-if (typeof _origRenderOrderViewP38 === 'function') {
-  window.renderOrderView = function(orderNo, secret) {
-    var ret = _origRenderOrderViewP38.apply(this, arguments);
-    var db = window.loadDB();
-    var o = (db.orders || []).find(x => x.order_no === orderNo);
-    
-    if (o && (o.status === 'processing' || o.status === 'pending_review') && !o.luban_phone && !o.smm_order_id) {
-       var now = Date.now();
-       // 3秒内不重复触发取号
-       if (!_lastTriggerMap[orderNo] || now - _lastTriggerMap[orderNo] > 3000) {
-           _lastTriggerMap[orderNo] = now;
-           setTimeout(function(){ window.payOrder(orderNo); }, 300);
-       }
-    }
-    return ret;
-  };
-}
-
-console.log('%c[P38] ✅ SMM 单号回调已恢复，全渠道并发防抖已加锁', 'color:#10b981;font-weight:bold;font-size:13px');
-})();
-</script>
-<!-- ============================================================
-     P39 · 修复白嫖漏洞 + 防止并发重复扣上游费用
-     ============================================================ -->
-<script>
-(function(){
-'use strict';
-if (!window.loadDB) return;
-
-// 全局并发锁，防止同一个订单被多次请求号码
-window._lubanLocks = window._lubanLocks || {};
-window._smmLocks = window._smmLocks || {};
-
-// 1. 安全重写指定接码请求（加锁）
-var _origStartSession = window.lubanStartSession;
-if (typeof _origStartSession === 'function') {
-  window.lubanStartSession = function(orderNo) {
-    if (window._lubanLocks[orderNo]) return;
-    window._lubanLocks[orderNo] = true;
-    
-    var db = window.loadDB();
-    var o = db.orders.find(x => x.order_no === orderNo);
-    // 安全校验：必须是有余额抵扣，或者已经处于 processing 的订单（后端确认已付）
-    if (!o || (o.status !== 'processing' && (o.balance_used || 0) === 0 && o.amount_due > 0)) {
-      window._lubanLocks[orderNo] = false;
-      return;
-    }
-    
-    _origStartSession.apply(this, arguments);
-  };
-}
-
-// 2. 安全重写通用接码请求（加锁）
-var _origStartCommon = window.lubanStartCommon;
-if (typeof _origStartCommon === 'function') {
-  window.lubanStartCommon = function(orderNo, params) {
-    if (window._lubanLocks[orderNo]) return;
-    window._lubanLocks[orderNo] = true;
-    
-    var db = window.loadDB();
-    var o = db.orders.find(x => x.order_no === orderNo);
-    if (!o || (o.status !== 'processing' && (o.balance_used || 0) === 0 && o.amount_due > 0)) {
-      window._lubanLocks[orderNo] = false;
-      return;
-    }
-    
-    _origStartCommon.apply(this, arguments);
-  };
-}
-
-// 3. 修复 renderOrderView 的白嫖漏洞
-var _origRenderOrderViewP39 = window.renderOrderView;
-if (typeof _origRenderOrderViewP39 === 'function') {
-  window.renderOrderView = function(orderNo, secret) {
-    var ret = _origRenderOrderViewP39.apply(this, arguments);
-    var db = window.loadDB();
-    var o = (db.orders || []).find(x => x.order_no === orderNo);
-    
-    // 【核心修复】：绝对不能在 pending_review（待审核）状态下触发取号！
-    // 只有状态为 processing 且没拿到号码时，才允许触发补发取号
-    if (o && o.status === 'processing' && !o.luban_phone && !o.luban_request_id && !o.smm_order_id) {
-       var now = Date.now();
-       if (!o._lastTriggerMap || now - o._lastTriggerMap > 3000) {
-           o._lastTriggerMap = now;
-           setTimeout(function(){ window.payOrder(orderNo); }, 300);
-       }
-    }
-    return ret;
-  };
-}
-
-// 4. 修复 P38 payOrder 中的防抖逻辑，避免被前端劫持
-var _origPayOrderP39 = window.payOrder;
-if (typeof _origPayOrderP39 === 'function') {
-  window.payOrder = function(orderNo) {
-    var db = window.loadDB();
-    var o = db.orders.find(x => x.order_no === orderNo);
-    if (!o) return;
-
-    // 如果状态是 pending_review，说明没付钱，直接拦截！
-    if (o.status === 'pending_review') {
-      console.log('[P39] 拦截：待审核订单不允许前端取号');
-      return;
-    }
-
-    // 如果是 pending（没付钱），且没用余额全额抵扣，直接拦截
-    if (o.status === 'pending' && (o.balance_used || 0) === 0) {
-      return;
-    }
-
-    return _origPayOrderP39.apply(this, arguments);
-  };
-}
-
-// 5. 修复 P36 拦截器里修改状态的问题，避免状态错乱
-var _origFetchP39 = window.fetch;
-window.fetch = function(url, opts){
-  var u = String(url || '');
-  if (u.indexOf('/api/usdt-check') >= 0) {
-    return _origFetchP39.apply(this, arguments).then(function(res){
-      var clone = res.clone();
-      clone.json().then(function(d){
-        if (d && d.ok && d.auto && d.status !== 'pending') {
-          var db = window.loadDB();
-          (db.orders || []).forEach(function(o){
-            if (o.pay_method === 'usdt' && o.status === 'pending') {
-              o.status = 'processing';
-              window.saveDB(db);
-              if (window.payOrder) window.payOrder(o.order_no);
-            }
-          });
-        }
-      }).catch(function(){});
-      return res;
-    });
-  }
-  return _origFetchP39.apply(this, arguments);
-};
-
-console.log('%c[P39] ✅ 白嫖漏洞已封堵，并发扣费已加锁', 'color:#ef4444;font-weight:bold;font-size:14px');
 })();
 </script>
 <!-- ============================================================
@@ -10383,6 +9789,136 @@ if (typeof _origPullServerData === 'function') {
 }
 
 console.log('%c[P40] ✅ 取号死锁已解除，口令红包状态回滚已修复', 'color:#10b981;font-weight:bold;font-size:14px');
+})();
+</script>
+<!-- ============================================================
+     P41 · 彻底分离前后端取号（最终极重构版）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) return;
+
+// 1. 废弃前端擅自去上游取号，只负责更新状态和提示
+window.payOrder = function(orderNo) {
+  var db = window.loadDB();
+  var o = db.orders.find(x => x.order_no === orderNo);
+  if (!o) return;
+  
+  // 只能从 pending 变成 processing（由后端确认支付后接管）
+  if (o.status === 'pending') {
+    o.status = 'processing'; 
+    window.saveDB(db);
+  }
+
+  if (o.source === 'luban' || o.source === 'smm') {
+    if (window.toast) toast('订单已提交系统，正在自动分配…', 'info');
+    if (window.route) setTimeout(window.route, 500);
+    startOrderPolling(orderNo);
+  }
+};
+
+// 2. 统一的订单状态轮询（静默同步云端数据）
+window.startOrderPolling = function(orderNo) {
+  if (window._pollLubanTimers && window._pollLubanTimers[orderNo]) return;
+  if (!window._pollLubanTimers) window._pollLubanTimers = {};
+  
+  window._pollLubanTimers[orderNo] = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      let res = await fetch('/api/state?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json());
+      if (!res.ok || !res.db) return;
+      
+      let o = (res.db.orders || []).find(x => x.order_no === orderNo);
+      if (!o) return;
+      
+      let oldDb = window.loadDB();
+      let oldO = (oldDb.orders || []).find(x => x.order_no === orderNo);
+      
+      if (oldO && o.status !== oldO.status) {
+        // 状态发生了改变，更新本地并重绘
+        window.__DB = res.db;
+        localStorage.setItem('yunfaka_db_v15', JSON.stringify(res.db));
+        
+        if (location.hash === '#/order/' + orderNo && window.route) window.route();
+        
+        if (o.status === 'delivered' && o.luban_code) {
+          if (window.yfStrongAlert) window.yfStrongAlert(o.luban_code);
+        }
+      }
+      
+      // 如果发货了或者出错了，停止轮询
+      if (o.status === 'delivered' || o.status === 'rejected' || o.status === 'luban_error' || o.status === 'smm_error') {
+        clearInterval(window._pollLubanTimers[orderNo]);
+        delete window._pollLubanTimers[orderNo];
+      }
+    } catch(e) {}
+  }, 4000); // 4秒同步一次
+};
+
+// 3. 订单详情页核心：轮询短信验证码 + 上报保存
+var _origRenderOrderViewP41 = window.renderOrderView;
+if (typeof _origRenderOrderViewP41 === 'function') {
+  window.renderOrderView = function(orderNo, secret) {
+    var ret = _origRenderOrderViewP41.apply(this, arguments);
+    var db = window.loadDB();
+    var o = (db.orders || []).find(x => x.order_no === orderNo);
+    
+    // 只要状态是 processing，就强制拉取云端状态（触发号码显示）
+    if (o && o.status === 'processing') {
+      startOrderPolling(orderNo);
+      
+      // 有号码了，开始轮询短信接口
+      if (o.luban_phone) {
+        if (!o._smsTimer) {
+          o._smsTimer = setInterval(async () => {
+            if (document.hidden) return;
+            try {
+              let act = o.luban_type === 'common' ? 'common_get_sms' : 'get_sms';
+              let url = `/api/luban?action=${act}&order_no=${o.order_no}`;
+              if (act === 'get_sms') url += `&request_id=${o.luban_request_id || ''}`;
+              else url += `&phone=${o.luban_phone || ''}&keyword=${encodeURIComponent(o.luban_keyword || '')}`;
+              
+              let r = await fetch(url).then(res => res.json());
+              let sms = r.data && (r.data.sms || r.data.code || r.data.message || r.data.text);
+              
+              if (sms) {
+                clearInterval(o._smsTimer);
+                o._smsTimer = null;
+                
+                // 将验证码上报给后端入库
+                fetch('/api/public', {
+                  method: 'POST', headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({ action: 'update_luban_sms', order_no: o.order_no, sms: String(sms) })
+                }).then(() => {
+                  if (window.yfStrongAlert) window.yfStrongAlert(sms);
+                  if (window.route) window.route();
+                });
+              }
+            } catch(e) {}
+          }, 8000); // 8秒查一次短信
+        }
+      }
+    }
+    return ret;
+  };
+}
+
+// 4. 路由清理：离开订单页时关掉定时器防内存泄漏
+var _origRouteP41 = window.route;
+window.route = function() {
+  if (location.hash.indexOf('#/order/') !== 0) {
+    if (window._pollLubanTimers) {
+      Object.keys(window._pollLubanTimers).forEach(k => {
+        clearInterval(window._pollLubanTimers[k]);
+        delete window._pollLubanTimers[k];
+      });
+    }
+  }
+  return _origRouteP41.apply(this, arguments);
+};
+
+console.log('%c[P41] ✅ 前后端接码分离重构完毕，由后端接管取号，前端只负责轮询展示', 'color:#10b981;font-weight:bold;font-size:14px');
 })();
 </script>
 </body>

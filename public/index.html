@@ -10068,5 +10068,98 @@ window.confirmPay = function(type, id){
 console.log('%c[P43] ✅ 前端订单并发覆盖与"订单不存在"异常已彻底修复', 'color:#10b981;font-weight:bold;font-size:14px');
 })();
 </script>
+<script>
+(function(){
+'use strict';
+window.startOrderPolling = function(orderNo) {
+  if (window._pollLubanTimers && window._pollLubanTimers[orderNo]) return;
+  if (!window._pollLubanTimers) window._pollLubanTimers = {};
+  
+  window._pollLubanTimers[orderNo] = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      let res = await fetch('/api/state?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json());
+      if (!res.ok || !res.db) return;
+      
+      let o = (res.db.orders || []).find(x => x.order_no === orderNo);
+      if (!o) return;
+      
+      let oldDb = window.loadDB();
+      let oldO = (oldDb.orders || []).find(x => x.order_no === orderNo);
+      
+      let needUpdate = false;
+      if (oldO && (o.status !== oldO.status || o.luban_phone !== oldO.luban_phone || o.luban_code !== oldO.luban_code)) {
+         needUpdate = true;
+      }
+      
+      if (needUpdate) {
+        window.__DB = res.db;
+        localStorage.setItem('yunfaka_db_v15', JSON.stringify(res.db));
+        if (location.hash === '#/order/' + orderNo && window.route) window.route();
+        
+        // 【核心修复】：如果刚刚拿到了号码，直接启动验证码轮询
+        if (o.status === 'processing' && o.luban_phone && (!oldO || !oldO.luban_phone)) {
+            triggerSmsPolling(o); 
+        }
+        
+        if (o.status === 'delivered' && o.luban_code) {
+          if (window.yfStrongAlert) window.yfStrongAlert(o.luban_code);
+        }
+      }
+      
+      if (o.status === 'delivered' || o.status === 'rejected' || o.status === 'luban_error' || o.status === 'smm_error') {
+        clearInterval(window._pollLubanTimers[orderNo]);
+        delete window._pollLubanTimers[orderNo];
+      }
+    } catch(e) {}
+  }, 4000);
+};
+
+// 剥离出来的短信轮询逻辑
+window.triggerSmsPolling = function(o) {
+    if (o._smsTimer) return; // 已经在跑了
+    o._smsTimer = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        let act = o.luban_type === 'common' ? 'common_get_sms' : 'get_sms';
+        let url = `/api/luban?action=${act}&order_no=${o.order_no}`;
+        if (act === 'get_sms') url += `&request_id=${o.luban_request_id || ''}`;
+        else url += `&phone=${o.luban_phone || ''}&keyword=${encodeURIComponent(o.luban_keyword || '')}`;
+        
+        let r = await fetch(url).then(res => res.json());
+        let sms = r.data && (r.data.sms || r.data.code || r.data.message || r.data.text);
+        
+        if (sms) {
+          clearInterval(o._smsTimer);
+          o._smsTimer = null;
+          
+          fetch('/api/public', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action: 'update_luban_sms', order_no: o.order_no, sms: String(sms) })
+          }).then(() => {
+            if (window.yfStrongAlert) window.yfStrongAlert(sms);
+            if (window.route) window.route();
+          });
+        }
+      } catch(e) {}
+    }, 8000);
+};
+
+// 顺便重写一下 renderOrderView，如果刷新时已经有号码了，直接启动
+var _origRenderP44 = window.renderOrderView;
+if (typeof _origRenderP44 === 'function') {
+  window.renderOrderView = function(orderNo, secret) {
+    var ret = _origRenderP44.apply(this, arguments);
+    var db = window.loadDB();
+    var o = (db.orders || []).find(x => x.order_no === orderNo);
+    if (o && o.status === 'processing' && o.luban_phone) {
+      triggerSmsPolling(o);
+    }
+    return ret;
+  };
+}
+console.log('%c[P44] ✅ 验证码轮询无缝衔接已启用', 'color:#10b981;font-weight:bold;');
+})();
+</script>
 </body>
 </html>

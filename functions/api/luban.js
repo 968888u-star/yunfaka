@@ -166,3 +166,55 @@ export async function onRequest(context) {
     return jsonError('未知 action: ' + action, 400, env, request);
   } catch (e) { return jsonError('操作失败，请稍后重试', 500, env, request, e); }
 }
+// ======== 新增：后端内部触发取号逻辑（供 admin-action 和 public 调用） ========
+export async function processOrderLuban(env, orderNo) {
+  try {
+    const raw = await env.YUNFAKA_KV.get('state');
+    if (!raw) return { ok: false, msg: 'DB_EMPTY' };
+    const state = JSON.parse(raw);
+    const order = (state.db.orders || []).find(o => String(o.order_no) === String(orderNo));
+    
+    if (!order || order.source !== 'luban') return { ok: false, msg: 'INVALID_ORDER' };
+    if (order.luban_phone || order.luban_request_id) return { ok: true, msg: 'ALREADY_HAVE_NUMBER' }; // 防重锁
+    
+    const apikey = env.LUBAN_APIKEY;
+    if (!apikey) return { ok: false, msg: 'NO_API_KEY' };
+    const BASE = 'https://lubansms.com/v2/api/';
+
+    let actionUrl = '';
+    if (order.luban_type === 'common') {
+      const p = new URLSearchParams({ apikey, country: order.luban_country || '', phone: order.luban_phone || '', cardType: order.luban_cardtype || '', filter: order.luban_filter || '' });
+      // 关键词是必须的
+      if (order.luban_keyword) p.set('keyword', order.luban_keyword);
+      actionUrl = BASE + 'getKeywordNumber?' + p.toString();
+    } else {
+      const p = new URLSearchParams({ apikey, service_id: order.luban_service_id });
+      actionUrl = BASE + 'getNumber?' + p.toString();
+    }
+
+    const res = await fetch(actionUrl);
+    const d = await res.json();
+    
+    if (d.code === 0 && d.msg) {
+      if (order.luban_type === 'common') {
+        order.luban_phone = d.msg.phone || d.msg.phone_number || '';
+        order.luban_number = order.luban_phone;
+      } else {
+        order.luban_request_id = d.msg.request_id || d.msg.id || '';
+        order.luban_phone = d.msg.phone_number || d.msg.phone || '';
+        order.luban_number = order.luban_phone;
+      }
+      order.status = 'processing';
+      order.luban_start_time = Date.now();
+    } else {
+      order.status = 'luban_error';
+      order.luban_error = d.msg || '取号失败，上游余额不足或服务不可用';
+    }
+    
+    state.rev = (state.rev || 0) + 1;
+    await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+    return { ok: true, status: order.status };
+  } catch (e) {
+    return { ok: false, msg: e.message };
+  }
+}

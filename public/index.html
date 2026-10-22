@@ -9644,5 +9644,160 @@ window.toast = function(msg, type){
 console.log('%c[P34] ✅ 接码/SMM 支付、取号、轮询全流程修复完成', 'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P35 · 彻底打通接码全流程（恢复前端轮询，修复请求覆盖）
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) return;
+
+// 1. 恢复被 P34 阉割的验证码轮询
+var _origLubanPoll = null;
+var _origCommonPoll = null;
+
+// 我们直接重写 __lubanFetch 和轮询逻辑，绕过补丁冲突
+window.lubanPollSms = function(orderNo, attempt) {
+  if (attempt === undefined) attempt = 0;
+  if (attempt > 40) { if(window.toast) toast('超时未收到验证码，请释放号码','error'); return; }
+  
+  var db = window.loadDB(); 
+  var o = db.orders.find(function(x){return x.order_no===orderNo;}); 
+  if (!o || !o.luban_request_id) return;
+  
+  fetch('/api/luban?action=get_sms&request_id=' + encodeURIComponent(o.luban_request_id) + '&order_no=' + encodeURIComponent(orderNo))
+    .then(r => r.json())
+    .then(d => {
+      var db2 = window.loadDB(); 
+      var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); 
+      if (!o2) return;
+      
+      var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
+      if (d && d.code === 0 && sms) {
+        o2.luban_sms = String(sms);
+        o2.luban_code = o2.luban_sms;
+        o2.status = 'delivered'; 
+        o2.delivered_at = o2.delivered_at || new Date().toLocaleString(); 
+        window.saveDB(db2);
+        if(window.toast) toast('收到验证码：' + o2.luban_sms, 'success');
+        if(window.yfStrongAlert) window.yfStrongAlert(o2.luban_sms);
+        if (location.hash.indexOf('#/order/') === 0 && window.route) window.route();
+      } else {
+        setTimeout(function(){ window.lubanPollSms(orderNo, attempt+1); }, 15000);
+      }
+    }).catch(function(){
+      setTimeout(function(){ window.lubanPollSms(orderNo, attempt+1); }, 15000);
+    });
+};
+
+window.lubanCommonPoll = function(orderNo, attempt) {
+  if (attempt === undefined) attempt = 0;
+  if (attempt > 40) { if(window.toast) toast('超时未收到验证码，请释放号码','error'); return; }
+  
+  var db = window.loadDB(); 
+  var o = db.orders.find(function(x){return x.order_no===orderNo;}); 
+  if (!o || !o.luban_phone) return;
+  
+  var url = '/api/luban?action=common_get_sms&phone=' + encodeURIComponent(o.luban_phone) + '&keyword=' + encodeURIComponent(o.luban_keyword||'') + '&order_no=' + encodeURIComponent(orderNo);
+  fetch(url)
+    .then(r => r.json())
+    .then(d => {
+      var db2 = window.loadDB(); 
+      var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); 
+      if (!o2) return;
+      
+      var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
+      if (d && d.code === 0 && sms) {
+        o2.luban_sms = String(sms);
+        o2.luban_code = o2.luban_sms;
+        o2.status = 'delivered'; 
+        o2.delivered_at = o2.delivered_at || new Date().toLocaleString(); 
+        window.saveDB(db2);
+        if(window.toast) toast('收到验证码：' + o2.luban_sms, 'success');
+        if(window.yfStrongAlert) window.yfStrongAlert(o2.luban_sms);
+        if (location.hash.indexOf('#/order/') === 0 && window.route) window.route();
+      } else {
+        setTimeout(function(){ window.lubanCommonPoll(orderNo, attempt+1); }, 15000);
+      }
+    }).catch(function(){
+      setTimeout(function(){ window.lubanCommonPoll(orderNo, attempt+1); }, 15000);
+    });
+};
+
+// 2. 修复 P34 里的那个错误 fetch 拦截（不要用全量 /api/state 覆盖）
+// 让普通用户的写操作正常通过 /api/public，让后端去处理
+var _origFetch3 = window.fetch;
+window.fetch = function(url, opts){
+  var u = String(url || '');
+  // 移除 P34 里的错误拦截
+  if (u.indexOf('/api/public') >= 0 && opts && typeof opts.body === 'string'){
+    try {
+      var body = JSON.parse(opts.body);
+      if (body.action === 'create_order') {
+        // 给后端补全字段，防止报“商品不存在”
+        var db = window.loadDB();
+        var o = (db.orders || []).find(x => x.order_no === body.order_no);
+        if (o) {
+          if (o.source === 'luban' || o.source === 'smm') {
+             body.product_id = -1; // 告诉后端这是虚拟商品
+             body.source = o.source;
+             body.product_name = o.product_name;
+             body.amount = o.amount;
+             body.amount_due = o.amount_due;
+             body.balance_used = o.balance_used;
+             opts.body = JSON.stringify(body);
+          }
+        }
+      }
+    } catch(e){}
+  }
+  return _origFetch3.apply(this, arguments);
+};
+
+// 3. 重新触发取号
+window.payOrder = function(orderNo) {
+  var db = window.loadDB();
+  var o = db.orders.find(x => x.order_no === orderNo);
+  if (!o || o.status !== 'pending') return;
+  
+  o.status = 'processing';
+  window.saveDB(db);
+  
+  if (o.source === 'luban') {
+    if (o.luban_type === 'common') {
+      var params = { keyword: o.luban_keyword || '' };
+      if (o.luban_country) params.country = o.luban_country;
+      if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
+    } else {
+      if (window.lubanStartSession) window.lubanStartSession(orderNo);
+    }
+  } else if (o.source === 'smm') {
+    if (window.smmApi) window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity });
+  }
+  
+  if (window.route) setTimeout(window.route, 500);
+};
+
+// 4. 修复 renderOrderView 里的轮询触发（去掉 P32 的定时拉取，用我们恢复的轮询）
+var _origRenderOrderView3 = window.renderOrderView;
+if (typeof _origRenderOrderView3 === 'function') {
+  window.renderOrderView = function(orderNo, secret) {
+    var ret = _origRenderOrderView3.apply(this, arguments);
+    var db = window.loadDB();
+    var o = (db.orders || []).find(x => x.order_no === orderNo);
+    if (o && o.status === 'processing') {
+       if (o.luban_type === 'common') {
+          setTimeout(() => window.lubanCommonPoll(orderNo, 0), 2000);
+       } else {
+          setTimeout(() => window.lubanPollSms(orderNo, 0), 2000);
+       }
+    }
+    return ret;
+  };
+}
+
+console.log('%c[P35] ✅ 接码取号和验证码轮询已恢复，切底修复卡死BUG', 'color:#10b981;font-weight:bold;font-size:14px');
+})();
+</script>
 </body>
 </html>

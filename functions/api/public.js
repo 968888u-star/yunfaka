@@ -1,10 +1,4 @@
-// functions/api/public.js · 普通用户公开写入口（安全修复版）
-// 修复：
-//   1. use_balance 必须携带 X-Member-Token 且 username 匹配（防冒用他人余额）
-//   2. register_member 的 hashPwd/hashSecret 加 await（防 Promise 损坏数据）
-//   3. create_order 保存 smm_service_id / smm_link（修复 SMM 无法自动提交上游）
-//   4. USDT 订单生成唯一金额尾数 expected_usdt_exact（防同金额订单错配）
-//   5. register_member 加限流（防批量注册污染数据）
+// functions/api/public.js · 普通用户公开写入口（终极接码分离版）
 import { hashPwd, hashSecret } from '../_lib/auth.js';
 import { optionsResponse, jsonError, jsonOk, rateLimit, getClientIp, requireMember } from '../_lib/common.js';
 
@@ -27,6 +21,7 @@ export async function onRequest(context) {
   const ip = getClientIp(request);
   const rl = await rateLimit(env.YUNFAKA_KV, 'pub:' + ip, 30, 60000);
   if (rl.blocked) return jsonError('操作过于频繁，请稍后重试', 429, env, request);
+  
   try {
     const body = await request.json();
     const action = body.action || '';
@@ -35,59 +30,60 @@ export async function onRequest(context) {
     const state = JSON.parse(raw);
     const db = state.db;
     const cfg = db.config || {};
-    /* ========== 更新接码验证码（前端轮询到后上报） ========== */
-if (action === 'update_luban_sms') {
- /* ========== 确认订单已支付（USDT到账 / 口令红包确认） ========== */
-if (action === 'confirm_pay') {
-  const orderNo = String(body.order_no || '');
-  if (!orderNo) return jsonError('参数缺失', 400, env, request);
-  
-  const o = (db.orders || []).find(x => x.order_no === orderNo);
-  if (!o) return jsonError('订单不存在', 404, env, request);
-  if (o.status !== 'pending' && o.status !== 'pending_review') {
-     return jsonOk({ ok: true, msg: '已经是' + o.status }, env, request);
-  }
 
-  o.status = 'processing';
-  o.paid_at = nowStr();
-  
-  state.rev = (state.rev || 0) + 1;
-  await env.YUNFAKA_KV.put('state', JSON.stringify(state));
-  
-  // 触发接码（如果是 Luban 订单）
-  if (o.source === 'luban') {
-    const { processOrderLuban } = await import('./luban.js');
-    context.waitUntil(processOrderLuban(env, o.order_no));
-  }
-  
-  return jsonOk({ ok: true, status: o.status }, env, request);
-}
-  const orderNo = String(body.order_no || '');
-  const sms = String(body.sms || '').slice(0, 200);
-  if (!orderNo || !sms) return jsonError('参数缺失', 400, env, request);
-  
-  const o = (db.orders || []).find(x => x.order_no === orderNo);
-  if (!o) return jsonError('订单不存在', 404, env, request);
-  if (o.source !== 'luban') return jsonError('非接码订单', 400, env, request);
-  if (o.status === 'delivered') return jsonOk({ ok: true, msg: '已发货' }, env, request);
+    /* ========== 1. 更新接码验证码（前端轮询到后上报） ========== */
+    if (action === 'update_luban_sms') {
+      const orderNo = String(body.order_no || '');
+      const sms = String(body.sms || '').slice(0, 200);
+      if (!orderNo || !sms) return jsonError('参数缺失', 400, env, request);
+      
+      const o = (db.orders || []).find(x => x.order_no === orderNo);
+      if (!o) return jsonError('订单不存在', 404, env, request);
+      if (o.source !== 'luban') return jsonError('非接码订单', 400, env, request);
+      if (o.status === 'delivered') return jsonOk({ ok: true, msg: '已发货' }, env, request);
 
-  o.luban_sms = sms;
-  o.luban_code = sms;
-  o.status = 'delivered';
-  o.delivered_at = nowStr();
+      o.luban_sms = sms;
+      o.luban_code = sms;
+      o.status = 'delivered';
+      o.delivered_at = nowStr();
 
-  state.rev = (state.rev || 0) + 1;
-  await env.YUNFAKA_KV.put('state', JSON.stringify(state));
-  
-  context.waitUntil(notifyTg(cfg, `🎉 接码验证码已到达\n订单号：<code>${orderNo}</code>\n号码：${o.luban_phone || '-'}\n验证码：<b>${sms}</b>`));
-  return jsonOk({ ok: true }, env, request);
-}
-    /* ========== 下单 ========== */
+      state.rev = (state.rev || 0) + 1;
+      await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+      
+      context.waitUntil(notifyTg(cfg, `🎉 接码验证码已到达\n订单号：<code>${orderNo}</code>\n号码：${o.luban_phone || '-'}\n验证码：<b>${sms}</b>`));
+      return jsonOk({ ok: true }, env, request);
+    }
+
+    /* ========== 2. 确认订单已支付（USDT到账 / 口令红包确认） ========== */
+    if (action === 'confirm_pay') {
+      const orderNo = String(body.order_no || '');
+      if (!orderNo) return jsonError('参数缺失', 400, env, request);
+      
+      const o = (db.orders || []).find(x => x.order_no === orderNo);
+      if (!o) return jsonError('订单不存在', 404, env, request);
+      if (o.status !== 'pending' && o.status !== 'pending_review') {
+         return jsonOk({ ok: true, msg: '已经是' + o.status }, env, request);
+      }
+
+      o.status = 'processing';
+      o.paid_at = nowStr();
+      
+      state.rev = (state.rev || 0) + 1;
+      await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+      
+      // 触发接码（如果是 Luban 订单）
+      if (o.source === 'luban') {
+        const { processOrderLuban } = await import('./luban.js');
+        context.waitUntil(processOrderLuban(env, o.order_no));
+      }
+      return jsonOk({ ok: true, status: o.status }, env, request);
+    }
+
+    /* ========== 3. 下单 ========== */
     if (action === 'create_order') {
       const product = (db.products || []).find(p => p.id === body.product_id);
       if (!product) return jsonError('商品不存在', 404, env, request);
       if (!product.active) return jsonError('商品已下架', 400, env, request);
-      // 后端权威定价：忽略前端传来的 price
       let price = product.price || 0;
       let skuName = '';
       if (body.sku_id) {
@@ -101,7 +97,6 @@ if (action === 'confirm_pay') {
       const secret = String(body.secret || '').slice(0, 60);
       if (!secret) return jsonError('请输入暗号', 400, env, request);
 
-      // ⭐ 安全修复：使用余额必须携带会员 token，且 username 匹配
       const username = String(body.username || '').slice(0, 20);
       let member = null;
       if (body.use_balance) {
@@ -114,7 +109,6 @@ if (action === 'confirm_pay') {
         member = (db.members || []).find(m => m.username === username) || null;
       }
 
-      // 余额抵扣
       let balanceUsed = 0;
       if (body.use_balance && member && cfg.balance_enabled !== false) {
         balanceUsed = Math.min(member.balance || 0, amount);
@@ -130,6 +124,7 @@ if (action === 'confirm_pay') {
         return jsonError('订单号冲突，请重试', 409, env, request);
       }
       const rate = Number(cfg.pay_usdt_rate) || 7.2;
+      
       const order = {
         order_no: orderNo,
         product_id: product.id,
@@ -162,10 +157,10 @@ if (action === 'confirm_pay') {
         smm_link: String(body.smm_link || '').slice(0, 500),
         usdt_rate: rate
       };
-      // ⭐ USDT 唯一金额尾数：基础金额 + 随机微尾数，防止同金额订单错配
+      
       if (payMethod === 'usdt' && amountDue > 0) {
         const baseUsdt = amountDue / 100 / rate;
-        const micro = Math.floor(Math.random() * 9999) + 1; // 1~9999 微 USDT
+        const micro = Math.floor(Math.random() * 9999) + 1;
         order.expected_usdt_exact = Math.round((baseUsdt + micro / 1e6) * 1e6) / 1e6;
       }
       if (payMethod === 'alipay') {
@@ -173,22 +168,18 @@ if (action === 'confirm_pay') {
         order.redpacket_code = prefix + randStr(6);
       }
       db.orders.unshift(order);
-      // 余额充足：立即发货
+      
+      // 余额充足立即触发
       if (amountDue === 0) {
         if (order.source === 'local') {
           const orderSku = order.sku_id || 0;
-          const available = (db.cards || []).filter(c =>
-            c.product_id === order.product_id && c.status === 'unused' &&
-            String(c.sku_id || 0) === String(orderSku));
+          const available = (db.cards || []).filter(c => c.product_id === order.product_id && c.status === 'unused' && String(c.sku_id || 0) === String(orderSku));
           if (available.length >= order.quantity) {
             available.slice(0, order.quantity).forEach(c => {
               c.status = 'used'; c.order_no = order.order_no; c.used_at = nowStr();
               order.cards.push(c.content);
             });
-            order.status = 'delivered';
-            order.delivered_at = nowStr();
-          } else if (available.length === 0 && order.product_id) {
-            order.status = 'out_of_stock';
+            order.status = 'delivered'; order.delivered_at = nowStr();
           } else {
             order.status = 'out_of_stock';
           }
@@ -196,13 +187,21 @@ if (action === 'confirm_pay') {
           order.status = 'processing';
         }
       }
+      
       state.rev = (state.rev || 0) + 1;
       await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+      
+      // 如果余额全额抵扣，唤醒接码
+      if (amountDue === 0 && order.source === 'luban') {
+        const { processOrderLuban } = await import('./luban.js');
+        context.waitUntil(processOrderLuban(env, order.order_no));
+      }
+      
       context.waitUntil(notifyTg(cfg, `🔔 新订单\n订单号：<code>${orderNo}</code>\n商品：${order.product_name}\n数量：${quantity}\n金额：¥${(amount/100).toFixed(2)}\n状态：${order.status}`));
       return jsonOk({ ok: true, order_no: orderNo, status: order.status, expected_usdt_exact: order.expected_usdt_exact || 0 }, env, request);
     }
 
-    /* ========== 充值 ========== */
+    /* ========== 4. 充值 ========== */
     if (action === 'create_recharge') {
       const memPayload = await requireMember(request, env);
       if (!memPayload) return jsonError('请先登录会员', 401, env, request);
@@ -235,9 +234,8 @@ if (action === 'confirm_pay') {
       return jsonOk({ ok: true, id, status: 'pending', expected_usdt_exact: rc.expected_usdt_exact || 0 }, env, request);
     }
 
-    /* ========== 注册 ========== */
+    /* ========== 5. 注册 ========== */
     if (action === 'register_member') {
-      // 注册限流：单 IP 5次/小时
       const regRl = await rateLimit(env.YUNFAKA_KV, 'reg:' + ip, 5, 3600000);
       if (regRl.blocked) return jsonError('注册过于频繁，请稍后再试', 429, env, request);
       const username = String(body.username || '').trim();
@@ -260,7 +258,7 @@ if (action === 'confirm_pay') {
       return jsonOk({ ok: true, username }, env, request);
     }
 
-    /* ========== 到货提醒 ========== */
+    /* ========== 6. 到货提醒 ========== */
     if (action === 'notify_stock') {
       const pid = Number(body.product_id);
       const product = (db.products || []).find(p => p.id === pid);

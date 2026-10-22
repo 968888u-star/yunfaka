@@ -1,4 +1,4 @@
-// functions/api/public.js · 终极防黑防白嫖版
+// functions/api/public.js · 终极防黑防白嫖版 + 状态同步接口
 import { hashPwd, hashSecret } from '../_lib/auth.js';
 import { optionsResponse, jsonError, jsonOk, rateLimit, getClientIp, requireMember } from '../_lib/common.js';
 
@@ -83,7 +83,39 @@ export async function onRequest(context) {
       return jsonOk({ ok: true, status: o.status }, env, request);
     }
 
-    /* ========== 3. 下单（防 0 元购） ========== */
+    /* ========== 3. 更新订单状态（专治前端状态不同步） ========== */
+    if (action === 'update_order_status') {
+      const orderNo = String(body.order_no || '');
+      const newStatus = String(body.status || '');
+      const o = (db.orders || []).find(x => x.order_no === orderNo);
+      if (!o) return jsonError('订单不存在', 404, env, request);
+      
+      // 安全限制：只允许特定状态流转
+      const allowedStatuses = ['pending_review', 'processing', 'rejected'];
+      if (!allowedStatuses.includes(newStatus)) return jsonError('无效状态', 400, env, request);
+      
+      // 支付宝订单只允许 pending -> pending_review
+      if (o.pay_method === 'alipay' && o.status === 'pending' && newStatus !== 'pending_review') {
+          return jsonError('非法状态流转', 400, env, request);
+      }
+      
+      o.status = newStatus;
+      if (newStatus === 'pending_review') o.submitted_at = nowStr();
+      if (newStatus === 'processing') o.paid_at = nowStr();
+      if (newStatus === 'rejected') o.completed_at = nowStr();
+      
+      state.rev = (state.rev || 0) + 1;
+      await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+      
+      // 如果是余额或 USDT，转为 processing 时必须触发接码
+      if (newStatus === 'processing' && o.source === 'luban') {
+        const { processOrderLuban } = await import('./luban.js');
+        context.waitUntil(processOrderLuban(env, orderNo));
+      }
+      return jsonOk({ ok: true, status: o.status }, env, request);
+    }
+
+    /* ========== 4. 下单（防 0 元购） ========== */
     if (action === 'create_order') {
       const isVirtual = body.source === 'luban' || body.source === 'smm' || body.product_id === 0;
       let product = null;
@@ -92,14 +124,11 @@ export async function onRequest(context) {
       if (isVirtual) {
         if (body.source === 'luban') {
           if (body.luban_type === 'common') {
-            // 通用接码：强制使用后端配置的通用价格
             price = Math.round((Number(cfg.luban_common_cost) || 2) * (Number(cfg.luban_markup) || 1.3) * 100);
           } else {
-            // 指定接码：尝试从商品库找同名或同ID商品（如果前端先同步过的话）
             const exist = (db.products || []).find(p => p.luban_service_id === body.luban_service_id);
             if (exist) price = exist.price;
             else {
-               // 如果不在商品库，允许下单，但必须保证前端传的 amount 和真实价值偏差不能太大（防0元购）
                const reqAmount = Number(body.amount) || 0;
                if (reqAmount < 100) return jsonError('价格异常，拒绝下单', 400, env, request); 
                price = reqAmount; 
@@ -197,7 +226,7 @@ export async function onRequest(context) {
         if (order.source === 'luban') {
           order.status = 'processing';
         } else {
-          order.status = 'delivered'; // 本地卡密直接发（略）
+          order.status = 'delivered';
         }
       }
       
@@ -211,7 +240,7 @@ export async function onRequest(context) {
       return jsonOk({ ok: true, order_no: orderNo, status: order.status, expected_usdt_exact: order.expected_usdt_exact || 0 }, env, request);
     }
 
-    // 充值与注册逻辑...（保持不变，略）
+    /* ========== 5. 充值 ========== */
     if (action === 'create_recharge') {
       const memPayload = await requireMember(request, env);
       if (!memPayload) return jsonError('请先登录会员', 401, env, request);
@@ -240,6 +269,7 @@ export async function onRequest(context) {
       return jsonOk({ ok: true, id, status: 'pending', expected_usdt_exact: rc.expected_usdt_exact || 0 }, env, request);
     }
 
+    /* ========== 6. 注册 ========== */
     if (action === 'register_member') {
       const username = String(body.username || '').trim();
       const password = String(body.password || '');

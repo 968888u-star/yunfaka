@@ -1,4 +1,4 @@
-// functions/api/public.js · 普通用户公开写入口（终极接码分离版）
+// functions/api/public.js · 普通用户公开写入口（终极接码分离版 + 虚拟商品放行）
 import { hashPwd, hashSecret } from '../_lib/auth.js';
 import { optionsResponse, jsonError, jsonOk, rateLimit, getClientIp, requireMember } from '../_lib/common.js';
 
@@ -79,11 +79,32 @@ export async function onRequest(context) {
       return jsonOk({ ok: true, status: o.status }, env, request);
     }
 
-    /* ========== 3. 下单 ========== */
+    /* ========== 3. 下单（支持虚拟商品无库直接下单） ========== */
     if (action === 'create_order') {
-      const product = (db.products || []).find(p => p.id === body.product_id);
+      const isVirtual = body.source === 'luban' || body.source === 'smm' || body.product_id === 0;
+      let product = null;
+
+      if (isVirtual) {
+        // 虚拟商品（接码/SMM），直接从前端传入的数据构造，跳过商品库校验
+        product = {
+          id: body.product_id || 0,
+          name: body.product_name || '虚拟商品',
+          price: body.amount || 0,
+          source: body.source || 'luban',
+          luban_type: body.luban_type,
+          luban_service_id: body.luban_service_id,
+          luban_service_name: body.luban_service_name,
+          luban_country: body.luban_country,
+          smm_service_id: body.smm_service_id,
+          active: true
+        };
+      } else {
+        product = (db.products || []).find(p => p.id === body.product_id);
+      }
+
       if (!product) return jsonError('商品不存在', 404, env, request);
       if (!product.active) return jsonError('商品已下架', 400, env, request);
+      
       let price = product.price || 0;
       let skuName = '';
       if (body.sku_id) {
@@ -145,15 +166,15 @@ export async function onRequest(context) {
         created_at: nowStr(),
         delivered_at: '',
         source: product.source || 'local',
-        luban_type: product.luban_type || '',
-        luban_service_id: product.luban_service_id || '',
-        luban_service_name: product.luban_service_name || '',
-        luban_country: product.luban_country || '',
+        luban_type: product.luban_type || body.luban_type || '',
+        luban_service_id: product.luban_service_id || body.luban_service_id || '',
+        luban_service_name: product.luban_service_name || body.luban_service_name || '',
+        luban_country: product.luban_country || body.luban_country || '',
         luban_keyword: String(body.luban_keyword || '').slice(0, 100),
         luban_cardtype: String(body.luban_cardtype || '').slice(0, 50),
         luban_filter: String(body.luban_filter || '').slice(0, 10),
         luban_phone: String(body.luban_phone || '').slice(0, 30),
-        smm_service_id: product.smm_service_id || '',
+        smm_service_id: product.smm_service_id || body.smm_service_id || '',
         smm_link: String(body.smm_link || '').slice(0, 500),
         usdt_rate: rate
       };

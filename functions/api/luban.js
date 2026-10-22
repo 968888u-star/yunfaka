@@ -1,8 +1,4 @@
-// functions/api/luban.js · LubanSms API 代理（安全修复版）
-// 安全修复：
-//   1. 取号类扣费操作（request_number/common_request）必须绑定已支付订单
-//   2. services 不再返回 origin_cost（泄露上游真实成本）
-//   3. 会员只能操作自己订单的号码
+// functions/api/luban.js · LubanSms API 代理（终极后端取号版）
 import { requireAdmin, requireMember, optionsResponse, jsonError, jsonOk, rateLimit } from '../_lib/common.js';
 
 async function findOrder(env, orderNo) {
@@ -46,7 +42,7 @@ export async function onRequest(context) {
       return jsonOk(d, env, request);
     } catch (e) { return jsonError('上游服务暂不可用', 502, env, request, e); }
   }
-  // 轮询短信（只读不扣钱）：只要求订单存在，不要求会员归属（游客订单也能轮询）
+
   if (action === 'get_sms' || action === 'common_get_sms') {
     const orderNo = url.searchParams.get('order_no') || '';
     if (!orderNo) return jsonError('缺少 order_no', 400, env, request);
@@ -65,6 +61,7 @@ export async function onRequest(context) {
       return jsonOk(await r.json(), env, request);
     }
   }
+
   if (action === 'services' || action === 'client_services') {
     const params = { language: url.searchParams.get('language') || 'zh', page: url.searchParams.get('page') || '1' };
     if (url.searchParams.get('countryName')) params.country = url.searchParams.get('countryName');
@@ -76,7 +73,6 @@ export async function onRequest(context) {
       try { d = JSON.parse(text); } catch (e) { return jsonError('上游返回异常（' + text.slice(0, 80).replace(/[<>&"']/g, '') + '）', 502, env, request); }
       if (d.code === 0 && Array.isArray(d.msg)) {
         d.msg = d.msg.map(item => {
-          // 修复：上游数组可能含 null/非对象元素，直接访问 item.cost 会抛 TypeError 导致 1101
           if (!item || typeof item !== 'object' || item.cost === undefined) return item;
           const originUsd = parseFloat(item.cost) || 0;
           if (action === 'services') {
@@ -100,16 +96,13 @@ export async function onRequest(context) {
   const order = await findOrder(env, orderNo);
   if (!order) return jsonError('订单不存在', 404, env, request);
 
-  // 取号类（扣费）必须已支付
   const isChargeAction = (action === 'request_number' || action === 'common_request');
   if (isChargeAction && order.status === 'pending') return jsonError('订单未支付，无法取号', 400, env, request);
 
-  // 会员只能操作自己的订单
   const admin = await requireAdmin(request, env);
   const member = await requireMember(request, env);
   if (!admin && (!member || member.username !== order.username)) return jsonError('只能操作自己的订单', 403, env, request);
 
-  // 取号限流：单订单 3次/分钟
   if (isChargeAction) {
     const rl = await rateLimit(env.YUNFAKA_KV, 'luban:' + orderNo, 3, 60000);
     if (rl.blocked) return jsonError('取号过于频繁，请稍后重试', 429, env, request);
@@ -120,12 +113,6 @@ export async function onRequest(context) {
       const serviceId = url.searchParams.get('service_id') || order.luban_service_id || '';
       if (!serviceId) return jsonError('缺少 service_id', 400, env, request);
       const r = await fetch(buildUrl('getNumber', { service_id: serviceId }));
-      return jsonOk(await r.json(), env, request);
-    }
-    if (action === 'get_sms') {
-      const requestId = url.searchParams.get('request_id');
-      if (!requestId) return jsonError('缺少 request_id', 400, env, request);
-      const r = await fetch(buildUrl('getSms', { request_id: requestId }));
       return jsonOk(await r.json(), env, request);
     }
     if (action === 'change_status') {
@@ -150,13 +137,6 @@ export async function onRequest(context) {
       const r = await fetch(buildUrl('getKeywordNumber', params));
       return jsonOk(await r.json(), env, request);
     }
-    if (action === 'common_get_sms') {
-      const phone = url.searchParams.get('phone');
-      const keyword = url.searchParams.get('keyword') || '';
-      if (!phone) return jsonError('缺少 phone', 400, env, request);
-      const r = await fetch(buildUrl('getKeywordSms', { phone, keyword }));
-      return jsonOk(await r.json(), env, request);
-    }
     if (action === 'common_release') {
       const phone = url.searchParams.get('phone');
       if (!phone) return jsonError('缺少 phone', 400, env, request);
@@ -166,7 +146,8 @@ export async function onRequest(context) {
     return jsonError('未知 action: ' + action, 400, env, request);
   } catch (e) { return jsonError('操作失败，请稍后重试', 500, env, request, e); }
 }
-// ======== 新增：后端内部触发取号逻辑（供 admin-action 和 public 调用） ========
+
+// ======== 供内部调用的后台静默取号逻辑 ========
 export async function processOrderLuban(env, orderNo) {
   try {
     const raw = await env.YUNFAKA_KV.get('state');
@@ -175,7 +156,7 @@ export async function processOrderLuban(env, orderNo) {
     const order = (state.db.orders || []).find(o => String(o.order_no) === String(orderNo));
     
     if (!order || order.source !== 'luban') return { ok: false, msg: 'INVALID_ORDER' };
-    if (order.luban_phone || order.luban_request_id) return { ok: true, msg: 'ALREADY_HAVE_NUMBER' }; // 防重锁
+    if (order.luban_phone || order.luban_request_id) return { ok: true, msg: 'ALREADY_HAVE_NUMBER' };
     
     const apikey = env.LUBAN_APIKEY;
     if (!apikey) return { ok: false, msg: 'NO_API_KEY' };
@@ -184,7 +165,6 @@ export async function processOrderLuban(env, orderNo) {
     let actionUrl = '';
     if (order.luban_type === 'common') {
       const p = new URLSearchParams({ apikey, country: order.luban_country || '', phone: order.luban_phone || '', cardType: order.luban_cardtype || '', filter: order.luban_filter || '' });
-      // 关键词是必须的
       if (order.luban_keyword) p.set('keyword', order.luban_keyword);
       actionUrl = BASE + 'getKeywordNumber?' + p.toString();
     } else {

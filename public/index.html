@@ -9797,7 +9797,6 @@ console.log('%c[P50] ✅ 终极主控面板已加载（安全/同步/USDT/秒回
 (function(){
 'use strict';
 
-// 1. 显示真实的错误原因
 var _origRenderOrderViewP51 = window.renderOrderView;
 window.renderOrderView = function(orderNo, secret) {
   var ret = _origRenderOrderViewP51.apply(this, arguments);
@@ -9809,43 +9808,44 @@ window.renderOrderView = function(orderNo, secret) {
       var o = (db.orders || []).find(x => x.order_no === orderNo);
       if (!o || o.status !== 'luban_error') return;
 
-      // 查找原有的失败提示框
       var cards = app.querySelectorAll('.card.panel');
       var target = null;
-      cards.forEach(function(c){ if (c.textContent.indexOf('接码失败') >= 0) target = c; });
+      cards.forEach(function(c){ if (c.textContent.indexOf('接码失败') >= 0 || c.textContent.indexOf('接码已结束') >= 0) target = c; });
       
       if (target && !target.querySelector('#p51-retry-btn')) {
-        var errMsg = o.luban_error || '未知错误';
+        // 显示上游真实的报错信息！
+        var errMsg = o.luban_error || '上游服务器繁忙，请点击下方按钮重试';
+        console.warn('[Luban错误详情]', errMsg);
+        
         target.innerHTML = '<b>❌ 接码失败</b>'
-          + '<p class="muted" style="font-size:13px;margin:6px 0 12px">' + String(errMsg).replace(/</g,'&lt;') + '</p>'
+          + '<p class="muted" style="font-size:13px;margin:6px 0 12px;word-break:break-all;">' + String(errMsg).replace(/</g,'&lt;') + '</p>'
           + '<button class="btn primary" id="p51-retry-btn" onclick="retryLuban(\'' + orderNo + '\')">🔄 重新尝试取号</button>';
       }
     } catch(e){}
-  }, 150);
+  }, 200);
   return ret;
 };
 
-// 2. 一键重试函数
 window.retryLuban = function(orderNo) {
-  if (!confirm('确定要重新向上游请求取号吗？如果是上游余额不足，请先充值。')) return;
+  if (!confirm('确定要重新向上游请求取号吗？如果上游余额不足，请联系老板充值。')) return;
   var btn = document.getElementById('p51-retry-btn');
   if (btn) { btn.disabled = true; btn.textContent = '重试中…'; }
 
-  // 通知后端改回 processing，并触发取号
+  var db = window.loadDB();
+  var o = db.orders.find(x => x.order_no === orderNo);
+  if (o) { o.status = 'processing'; o.luban_error = ''; window.saveDB(db); }
+
+  // 触发后端重新取号
   fetch('/api/public', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ action: 'update_order_status', order_no: orderNo, status: 'processing' })
   }).then(r => r.json()).then(d => {
     if (d.ok) {
-      if (window.toast) toast('已请求重试，请稍候…', 'success');
-      // 更新本地状态并刷新
-      var db = window.loadDB();
-      var o = db.orders.find(x => x.order_no === orderNo);
-      if (o) { o.status = 'processing'; o.luban_error = ''; window.saveDB(db); }
+      if (window.toast) toast('已提交重试请求，正在拉取号码…', 'success');
       if (window.startSmartPolling) window.startSmartPolling(orderNo);
       if (window.route) window.route();
     } else {
-      if (window.toast) toast(d.msg || '重试失败', 'error');
+      if (window.toast) toast(d.msg || '重试请求失败', 'error');
       if (btn) { btn.disabled = false; btn.textContent = '🔄 重新尝试取号'; }
     }
   }).catch(e => {
@@ -9854,7 +9854,7 @@ window.retryLuban = function(orderNo) {
   });
 };
 
-console.log('%c[P51] ✅ 接码失败原因展示与一键重试已加载', 'color:#10b981;font-weight:bold;');
+console.log('%c[P51] ✅ 错误真实原因已接管', 'color:#10b981;font-weight:bold;');
 })();
 </script>
 </body>

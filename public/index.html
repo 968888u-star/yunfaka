@@ -7253,7 +7253,7 @@ window.saveDB = function(db){
 
   if (_bc){ try { _bc.postMessage({ type:'db_changed', ts:Date.now() }); } catch(e){} }
 
-  setTimeout(yfPullNow, 300);
+  setTimeout(yfPullNow, 2000);
 
   return r;
 };
@@ -7281,6 +7281,26 @@ function yfPullNow(){
       console.log('%c[P22] 服务端 rev 变化: ' + _yfRev + ' → ' + d.rev, 'color:#6366f1;font-size:12px');
       _yfRev = d.rev;
 
+      // 防订单丢失：覆盖前合并本地待支付/待审核订单和充值（尚未同步到服务端的）
+      try {
+        var __localRaw = localStorage.getItem('yunfaka_db_v15');
+        if (__localRaw){
+          var __ldb = JSON.parse(__localRaw);
+          if (__ldb && Array.isArray(__ldb.orders)){
+            var __sids = {}; (d.db.orders||[]).forEach(function(o){ __sids[o.order_no]=true; });
+            var __pend = __ldb.orders.filter(function(o){ return (o.status==='pending'||o.status==='pending_review') && !__sids[o.order_no]; });
+            if (__pend.length){ d.db.orders = (d.db.orders||[]).concat(__pend); console.log('[P22] 合并本地未同步订单', __pend.length); }
+          }
+          if (__ldb && Array.isArray(__ldb.recharges)){
+            var __srids = {}; (d.db.recharges||[]).forEach(function(r){ __srids[r.id]=true; });
+            var __pendr = __ldb.recharges.filter(function(r){ return (r.status==='pending'||r.status==='pending_review') && !__srids[r.id]; });
+            if (__pendr.length){ d.db.recharges = (d.db.recharges||[]).concat(__pendr); console.log('[P22] 合并本地未同步充值', __pendr.length); }
+          }
+        }
+      } catch(e){}
+      // 支付弹窗打开中（用户正在付款），跳过覆盖重绘，只更新 rev，避免打断支付流程
+      var __modalOpen = document.querySelector('.modal-bg, .modal-overlay, [class*=modal]') || (document.body.style.overflow === 'hidden');
+      if (__modalOpen){ console.log('[P22] 弹窗打开中，跳过重绘'); _yfRev = d.rev; return; }
       try {
         localStorage.setItem('yunfaka_db_v15', JSON.stringify(d.db));
         localStorage.removeItem('yf_config_override');
@@ -7306,18 +7326,18 @@ fetch('/api/state?t=' + Date.now(), { cache:'no-store' })
   .then(function(d){ if (d && d.ok) _yfRev = d.rev; })
   .catch(function(){});
 
-setInterval(yfPullNow, 10000);
+setInterval(yfPullNow, 30000);
 
 document.addEventListener('visibilitychange', function(){
-  if (!document.hidden) setTimeout(yfPullNow, 300);
+  if (!document.hidden) setTimeout(yfPullNow, 1500);
 });
-window.addEventListener('online', function(){ setTimeout(yfPullNow, 300); });
+window.addEventListener('online', function(){ setTimeout(yfPullNow, 1500); });
 
 if (_bc){
   _bc.onmessage = function(e){
     if (e.data && e.data.type === 'db_changed'){
       console.log('[P22] 收到其他 tab 变更广播，立即同步');
-      setTimeout(yfPullNow, 300);
+      setTimeout(yfPullNow, 2000);
     }
   };
 }

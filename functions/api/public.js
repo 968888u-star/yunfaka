@@ -35,7 +35,28 @@ export async function onRequest(context) {
     const state = JSON.parse(raw);
     const db = state.db;
     const cfg = db.config || {};
+    /* ========== 更新接码验证码（前端轮询到后上报） ========== */
+if (action === 'update_luban_sms') {
+  const orderNo = String(body.order_no || '');
+  const sms = String(body.sms || '').slice(0, 200);
+  if (!orderNo || !sms) return jsonError('参数缺失', 400, env, request);
+  
+  const o = (db.orders || []).find(x => x.order_no === orderNo);
+  if (!o) return jsonError('订单不存在', 404, env, request);
+  if (o.source !== 'luban') return jsonError('非接码订单', 400, env, request);
+  if (o.status === 'delivered') return jsonOk({ ok: true, msg: '已发货' }, env, request);
 
+  o.luban_sms = sms;
+  o.luban_code = sms;
+  o.status = 'delivered';
+  o.delivered_at = nowStr();
+
+  state.rev = (state.rev || 0) + 1;
+  await env.YUNFAKA_KV.put('state', JSON.stringify(state));
+  
+  context.waitUntil(notifyTg(cfg, `🎉 接码验证码已到达\n订单号：<code>${orderNo}</code>\n号码：${o.luban_phone || '-'}\n验证码：<b>${sms}</b>`));
+  return jsonOk({ ok: true }, env, request);
+}
     /* ========== 下单 ========== */
     if (action === 'create_order') {
       const product = (db.products || []).find(p => p.id === body.product_id);

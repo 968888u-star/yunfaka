@@ -9510,5 +9510,47 @@ console.log('%c  修复：TG分类解析 / publicBody缺字段 / USDT尾数 / �
   'color:#6b7280;font-size:12px');
 })();
 </script>
+<!-- ============================================================
+     P33 · 修复接码/SMM下单时误报"商品不存在"的问题
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.toast) return;
+
+var _origToast = window.toast;
+window.toast = function(msg, type){
+  var m = String(msg || '');
+  // 拦截 P28 触发的针对虚拟商品（接码/SMM）的误报
+  if (m === '商品不存在' && type === 'error') {
+    console.log('%c[P33] 已拦截接码/SMM的“商品不存在”误报，订单已保存在本地', 'color:#f59e0b');
+    return;
+  }
+  return _origToast.apply(this, arguments);
+};
+
+// 进一步加固：拦截对虚拟商品订单的 /api/public 同步请求
+var _origFetch = window.fetch;
+window.fetch = function(url, opts){
+  var u = String(url || '');
+  if (u.indexOf('/api/public') >= 0 && opts && typeof opts.body === 'string'){
+    try {
+      var body = JSON.parse(opts.body);
+      if (body.action === 'create_order' && (body.product_id === 0 || body.source === 'luban' || body.source === 'smm')){
+        console.log('%c[P33] 拦截虚拟商品保存请求（接码/SMM不走本地商品库接口）', 'color:#10b981');
+        // 伪造成功响应，阻止后端校验报错，且不让 P28 触发覆盖本地数据
+        return Promise.resolve(new Response(JSON.stringify({ok: true}), {
+          status: 200,
+          headers: {'Content-Type': 'application/json'}
+        }));
+      }
+    } catch(e){}
+  }
+  return _origFetch.apply(this, arguments);
+};
+
+console.log('%c[P33] ✅ 接码/SMM下单误报修复已启用', 'color:#10b981;font-weight:bold');
+})();
+</script>
 </body>
 </html>

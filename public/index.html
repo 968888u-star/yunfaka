@@ -9898,5 +9898,93 @@ if (typeof _origRenderOrderViewP36 === 'function') {
 console.log('%c[P36] ✅ USDT/口令红包 付款后自动取号拦截器已启用', 'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P37 · 彻底解开取号死锁，全渠道自动取号
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) return;
+
+// 1. 重写 payOrder，修复状态死锁问题
+window.payOrder = function(orderNo) {
+  var db = window.loadDB();
+  var o = db.orders.find(x => x.order_no === orderNo);
+  // 允许 pending 或 processing 状态触发，防止被拦截
+  if (!o || (o.status !== 'pending' && o.status !== 'processing')) return;
+  
+  // 如果已经有号码了，就不用再取了
+  if (o.luban_phone || o.luban_request_id) return;
+
+  o.status = 'processing';
+  window.saveDB(db);
+  
+  if (o.source === 'luban') {
+    if (window.toast) toast('正在为您分配号码…', 'info');
+    if (o.luban_type === 'common') {
+      var params = { keyword: o.luban_keyword || '' };
+      if (o.luban_country) params.country = o.luban_country;
+      if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
+    } else {
+      if (window.lubanStartSession) window.lubanStartSession(orderNo);
+    }
+  } else if (o.source === 'smm') {
+    if (window.smmApi) window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity });
+  }
+  
+  if (window.route) setTimeout(window.route, 500);
+};
+
+// 2. 重写 P36 拦截器，不要先改状态再调 payOrder，直接调 payOrder 让他自己改
+var _origFetchP37 = window.fetch;
+window.fetch = function(url, opts){
+  var u = String(url || '');
+  if (u.indexOf('/api/usdt-check') >= 0) {
+    return _origFetchP37.apply(this, arguments).then(function(res){
+      var clone = res.clone();
+      clone.json().then(function(d){
+        // 如果后端确认到账
+        if (d && d.ok && d.auto && d.status !== 'pending') {
+          var db = window.loadDB();
+          var needPay = false;
+          (db.orders || []).forEach(function(o){
+            if (o.pay_method === 'usdt' && o.status === 'pending' && (o.source === 'luban' || o.source === 'smm')) {
+              // 直接调 payOrder，让它去改状态并取号
+              if (window.payOrder) window.payOrder(o.order_no);
+              needPay = true;
+            }
+          });
+          if (needPay && window.toast) window.toast('检测到 USDT 到账，正在为您取号…', 'success');
+        }
+      }).catch(function(){});
+      return res;
+    });
+  }
+  return _origFetchP37.apply(this, arguments);
+};
+
+// 3. 增加对“后台确认”的监听（解决口令红包后端确认后前端不取号问题）
+// 在每次渲染订单详情页时，检查如果状态是 processing 且没号码，立刻触发 payOrder
+var _origRenderOrderViewP37 = window.renderOrderView;
+if (typeof _origRenderOrderViewP37 === 'function') {
+  window.renderOrderView = function(orderNo, secret) {
+    var ret = _origRenderOrderViewP37.apply(this, arguments);
+    var db = window.loadDB();
+    var o = (db.orders || []).find(x => x.order_no === orderNo);
+    
+    // 发现订单处理中，且没取到号码，立刻补发取号请求
+    if (o && o.status === 'processing' && !o.luban_phone && !o.luban_request_id) {
+       if (window.payOrder) {
+         // 使用 setTimeout 防止阻塞页面渲染
+         setTimeout(function(){ window.payOrder(orderNo); }, 500);
+       }
+    }
+    return ret;
+  };
+}
+
+console.log('%c[P37] ✅ 全渠道支付取号死锁已解开，后台确认后前端将自动补发取号', 'color:#10b981;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

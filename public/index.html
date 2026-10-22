@@ -9986,5 +9986,101 @@ if (typeof _origRenderOrderViewP37 === 'function') {
 console.log('%c[P37] ✅ 全渠道支付取号死锁已解开，后台确认后前端将自动补发取号', 'color:#10b981;font-weight:bold;font-size:13px');
 })();
 </script>
+<!-- ============================================================
+     P38 · 修复 SMM 提交丢单号问题 + 增强并发防抖
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+if (!window.loadDB) return;
+
+var _smmSubmitting = {};
+
+window.payOrder = function(orderNo) {
+  var db = window.loadDB();
+  var o = db.orders.find(x => x.order_no === orderNo);
+  
+  // 放宽状态判断，只要不是已发货/驳回就可以尝试（但要防止重复请求）
+  if (!o || o.status === 'delivered' || o.status === 'rejected' || o.status === 'smm_error') return;
+  
+  // 如果已经取过号/或者已经提交过，就不要重复触发
+  if (o.luban_phone || o.luban_request_id || o.smm_order_id || _smmSubmitting[orderNo]) return;
+
+  o.status = 'processing';
+  window.saveDB(db);
+  
+  if (o.source === 'luban') {
+    if (window.toast) toast('正在为您分配号码…', 'info');
+    if (o.luban_type === 'common') {
+      var params = { keyword: o.luban_keyword || '' };
+      if (o.luban_country) params.country = o.luban_country;
+      if (window.lubanStartCommon) window.lubanStartCommon(orderNo, params);
+    } else {
+      if (window.lubanStartSession) window.lubanStartSession(orderNo);
+    }
+  } 
+  else if (o.source === 'smm') {
+    _smmSubmitting[orderNo] = true;
+    if (window.toast) toast('正在提交推广任务…', 'info');
+    
+    // 恢复被 P37 阉割的 smmApi 回调，拿回单号
+    if (window.smmApi) {
+      window.smmApi('add', { order_no: o.order_no, service: o.smm_service_id, link: o.smm_link, quantity: o.quantity })
+        .then(r => {
+          var db2 = window.loadDB(); 
+          var o2 = db2.orders.find(x => x.order_no === orderNo); 
+          if (!o2) return;
+          
+          if (r.ok && r.data && r.data.order) {
+            o2.smm_order_id = String(r.data.order); 
+            o2.smm_state = 'In progress'; 
+            window.saveDB(db2);
+            if (window.toast) toast('已提交，服务单号：' + r.data.order, 'success'); 
+            if (window.startPoll) window.startPoll(orderNo);
+          } else {
+            o2.status = 'smm_error'; 
+            o2.smm_error = '提交失败：' + (r.msg || '未知'); 
+            window.saveDB(db2);
+            if (window.toast) toast('提交失败', 'error');
+          }
+          _smmSubmitting[orderNo] = false;
+          if (location.hash === '#/order/' + orderNo && window.route) window.route();
+        }).catch(e => {
+          var db2 = window.loadDB(); 
+          var o2 = db2.orders.find(x => x.order_no === orderNo);
+          if (o2){ o2.status = 'smm_error'; o2.smm_error = '网络错误：' + e.message; window.saveDB(db2); }
+          _smmSubmitting[orderNo] = false;
+          if (window.toast) toast('网络错误', 'error');
+        });
+    }
+  }
+  
+  if (window.route) setTimeout(window.route, 500);
+};
+
+// 强化 renderOrderView，加入时间防抖，避免疯狂重复请求
+var _lastTriggerMap = {};
+var _origRenderOrderViewP38 = window.renderOrderView;
+if (typeof _origRenderOrderViewP38 === 'function') {
+  window.renderOrderView = function(orderNo, secret) {
+    var ret = _origRenderOrderViewP38.apply(this, arguments);
+    var db = window.loadDB();
+    var o = (db.orders || []).find(x => x.order_no === orderNo);
+    
+    if (o && (o.status === 'processing' || o.status === 'pending_review') && !o.luban_phone && !o.smm_order_id) {
+       var now = Date.now();
+       // 3秒内不重复触发取号
+       if (!_lastTriggerMap[orderNo] || now - _lastTriggerMap[orderNo] > 3000) {
+           _lastTriggerMap[orderNo] = now;
+           setTimeout(function(){ window.payOrder(orderNo); }, 300);
+       }
+    }
+    return ret;
+  };
+}
+
+console.log('%c[P38] ✅ SMM 单号回调已恢复，全渠道并发防抖已加锁', 'color:#10b981;font-weight:bold;font-size:13px');
+})();
+</script>
 </body>
 </html>

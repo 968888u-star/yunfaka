@@ -5,6 +5,7 @@
 //   3. CORS 收紧、错误脱敏、调用限流
 //   4. 金额匹配窗口从 ±2% 收窄到 ±1%（配合唯一尾数更安全）
 import { corsHeaders, optionsResponse, jsonError, jsonOk, rateLimit, getClientIp } from '../_lib/common.js';
+import { processOrderLuban } from './luban.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -20,6 +21,7 @@ export async function onRequest(context) {
   if (rl.blocked) return jsonError('查询过于频繁，请稍后再试', 429, env, request);
 
   try {
+    let needLubanFetch = false;
     const raw = await env.YUNFAKA_KV.get('state');
     if (!raw) return jsonError('无数据', 404, env, request);
     const state = JSON.parse(raw);
@@ -124,15 +126,11 @@ export async function onRequest(context) {
             } else { o2.status = 'pending_review'; o2.auto_submit_error = '未配置上游API或缺少参数'; }
           } catch (e) { o2.status = 'pending_review'; o2.auto_submit_error = '上游下单异常'; }
         } else if (o2.source === 'luban') {
-          try {
-            const lbKey = env.LUBAN_APIKEY || '';
-            if (lbKey && o2.luban_type === 'sms' && o2.luban_service_id) {
-              const lr = await fetch(`https://lubansms.com/v2/api/getNumber?apikey=${lbKey}&service_id=${encodeURIComponent(o2.luban_service_id)}`);
-              const ld = await lr.json();
-              if (ld && ld.code === 0 && ld.data) { o2.luban_request_id = ld.data.request_id || ld.data.id || ''; o2.luban_phone = ld.data.phone_number || ld.data.phone || ''; o2.status = 'processing'; o2.submitted_at = nowStr(); }
-              else { o2.status = 'pending_review'; o2.auto_submit_error = String((ld && ld.msg) || '上游取号失败').slice(0, 100); }
-            } else { o2.status = 'pending_review'; o2.auto_submit_error = '通用接码需人工处理或未配置API'; }
-          } catch (e) { o2.status = 'pending_review'; o2.auto_submit_error = '上游取号异常'; }
+          // 统一交给 processOrderLuban 异步取号（在 KV 写回后通过 waitUntil 触发，避免并发覆盖）
+          // 旧版内联取号只设 luban_phone 缺 luban_number/luban_deadline，导致前端显示"正在分配中"和"0分00秒"
+          o2.status = 'processing';
+          o2.submitted_at = nowStr();
+          needLubanFetch = true;
         } else {
           const avail = s2.db.cards.filter(c => c.product_id === o2.product_id && c.status === 'unused' && String(c.sku_id || 0) === String(o2.sku_id || 0));
           if (avail.length >= o2.quantity) {
@@ -155,6 +153,13 @@ export async function onRequest(context) {
       }
       s2.rev = (s2.rev || 0) + 1;
       await env.YUNFAKA_KV.put('state', JSON.stringify(s2));
+
+      // 接码订单：KV 写回后异步触发取号（processOrderLuban 内部读最新 KV，字段齐全）
+      if (needLubanFetch) {
+        context.waitUntil((async () => {
+          try { await processOrderLuban(env, orderNo); } catch (e) { console.error('[usdt-check] luban取号异常:', e && e.message); }
+        })());
+      }
 
       const cfgTg = cfg;
       if (cfgTg.tg_bot_token && cfgTg.tg_chat_id) {

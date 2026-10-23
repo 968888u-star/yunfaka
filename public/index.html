@@ -1553,15 +1553,18 @@ function renderOrderView(orderNo, secret){
         <div style="font-size:15px;font-weight:700;margin-bottom:10px">🎉 收到验证码</div>
         <div class="codebox" style="margin-bottom:14px"><span class="mono" style="font-size:24px;font-weight:800">${esc(o.luban_code)}</span>
         <button data-v="${esc(o.luban_code)}" onclick="copyText(this.dataset.v,this)">复制</button></div>
-        <div class="muted" style="font-size:12px">接收号码：${esc(o.luban_number || '-')}</div>
+        <div class="muted" style="font-size:12px">接收号码：${esc(o.luban_number || o.luban_phone || '-')}</div>
       </div>`;
     } else if (o.status === 'processing' || o.status === 'waiting_sms'){
-      const remain = o.luban_deadline ? Math.max(0, Math.floor((o.luban_deadline - Date.now()) / 1000)) : 0;
+      const hasNum = !!(o.luban_number || o.luban_phone);
+      const deadline = o.luban_deadline || (hasNum ? (Date.now() + 20*60*1000) : 0);
+      const remain = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
       const mins = Math.floor(remain / 60); const secs = remain % 60;
+      const timerText = hasNum ? ('剩余 ' + mins + '分' + (secs < 10 ? '0' + secs : secs) + '秒') : '号码分配中，请稍候（可点立即检查重试）';
       body = `<div class="session-box">
         <div class="lbl">接收号码（请使用此号码注册）</div>
-        <div class="num">${esc(o.luban_number || '正在分配中…')}</div>
-        <div class="timer">⏱ 剩余 ${mins}分${secs < 10 ? '0' + secs : secs}秒</div>
+        <div class="num">${esc(o.luban_number || o.luban_phone || '正在分配中…')}</div>
+        <div class="timer">${timerText}</div>
       </div>
       <div class="row" style="justify-content:flex-end;gap:8px;margin-bottom:14px">
         <button class="btn ghost" onclick="lubanRelease('${esc(o.order_no)}')">释放号码</button>
@@ -3173,9 +3176,9 @@ function lubanStartSession(orderNo){
   if(window.toast) toast('正在请求号码…','info');
   __lubanFetch('request_number', {service_id: o.luban_service_id||'', __orderNo: orderNo}).then(function(d){
     var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
-    if(d && d.code===0 && d.data){
-      o2.luban_request_id = d.data.request_id || d.data.id || '';
-      o2.luban_phone = d.data.phone_number || d.data.phone || '';
+    if(d && d.code===0 && (d.data || d.phone)){
+      o2.luban_request_id = (d.data && (d.data.request_id || d.data.id)) || d.request_id || '';
+      o2.luban_phone = (d.data && (d.data.phone_number || d.data.phone || d.data.mobile)) || d.phone || '';
       o2.luban_number = o2.luban_phone;
       o2.status = 'processing'; o2.submitted_at = now(); saveDB(db2);
       if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
@@ -3200,8 +3203,8 @@ function lubanStartCommon(orderNo, params){
   if(o.luban_keyword && !src.keyword) src.keyword = o.luban_keyword;
   __lubanFetch('common_request', p).then(function(d){
     var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
-    if(d && d.code===0 && d.data){
-      o2.luban_phone = d.data.phone || d.data.phone_number || '';
+    if(d && d.code===0 && (d.data || d.phone)){
+      o2.luban_phone = (d.data && (d.data.phone || d.data.phone_number || d.data.mobile)) || d.phone || '';
       o2.luban_number = o2.luban_phone;
       o2.status = 'processing'; o2.submitted_at = now(); saveDB(db2);
       if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
@@ -9721,10 +9724,10 @@ function startSmartPolling(orderNo) {
     async function checkSms(o) {
         if (document.hidden) return;
         try {
-            let act = o.luban_type === 'common' ? 'common_get_sms' : 'get_sms';
+            let act = (o.luban_type === 'common' || !o.luban_request_id) ? 'common_get_sms' : 'get_sms';
             let url = `/api/luban?action=${act}&order_no=${o.order_no}`;
-            if (act === 'get_sms') url += `&request_id=${o.luban_request_id || ''}`;
-            else url += `&phone=${o.luban_phone || ''}&keyword=${encodeURIComponent(o.luban_keyword || '')}`;
+            if (act === 'get_sms') url += `&request_id=${encodeURIComponent(o.luban_request_id || '')}`;
+            else url += `&phone=${encodeURIComponent(o.luban_phone || '')}&keyword=${encodeURIComponent(o.luban_keyword || '')}`;
 
             let r = await fetch(url).then(res => res.json());
             let sms = r.data && (r.data.sms || r.data.code || r.data.message || r.data.text);

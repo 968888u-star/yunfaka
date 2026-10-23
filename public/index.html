@@ -9709,13 +9709,12 @@ function startSmartPolling(orderNo) {
                 }
                 return;
             }
-
-            if (o.status === 'processing' && o.luban_phone) {
-                if (!window._p50Timers[orderNo].smsTimer) {
-                    window._p50Timers[orderNo].smsTimer = setInterval(() => checkSms(o), 6000); 
-                }
-            }
-        } catch(e) {}
+       if (o.status === 'processing' && (o.luban_phone || o.luban_request_id)) {
+       if (!window._p50Timers[orderNo].smsTimer) {
+        window._p50Timers[orderNo].smsTimer = setInterval(() => checkSms(o), 6000); 
+    }
+}
+ } catch(e) {}
     }, 3000);
 
     // 6秒查短信

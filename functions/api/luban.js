@@ -250,18 +250,48 @@ export async function onRequest(context) {
       const status = url.searchParams.get('status') || 'reject';
       if (!requestId) return jsonError('缺少 request_id', 400, env, request);
       const r = await fetch(buildUrl(apikey, 'setStatus', { request_id: requestId, status }));
-      return jsonOk(await r.json(), env, request);
+      const upstream = await r.json();
+      // 释放成功后同步订单状态，避免前端刷新后回到 processing
+      try {
+        const raw3 = await env.YUNFAKA_KV.get('state');
+        if (raw3) {
+          const st3 = JSON.parse(raw3);
+          const o3 = (st3.db.orders || []).find(x => String(x.order_no) === String(orderNo));
+          if (o3 && o3.status !== 'delivered') {
+            o3.status = 'rejected';
+            o3.luban_released = true;
+            o3.luban_error = o3.luban_error || '客户主动释放号码';
+            st3.rev = (st3.rev || 0) + 1;
+            await env.YUNFAKA_KV.put('state', JSON.stringify(st3));
+          }
+        }
+      } catch (e) {}
+      return jsonOk(upstream, env, request);
     }
     if (action === 'common_release') {
       const phone = url.searchParams.get('phone') || order.luban_phone || '';
       if (!phone) return jsonError('缺少 phone', 400, env, request);
-      // 鲁班通用接码释放：尝试 releaseNumber，若上游不支持也返回成功（号码超时自动释放）
+      let upstream = { ok: true, msg: 'release_attempted' };
       try {
         const r = await fetch(buildUrl(apikey, 'releaseNumber', { phone }));
-        return jsonOk(await r.json(), env, request);
-      } catch (e) {
-        return jsonOk({ ok: true, msg: 'release_attempted' }, env, request);
-      }
+        upstream = await r.json();
+      } catch (e) {}
+      // 同步订单状态
+      try {
+        const raw3 = await env.YUNFAKA_KV.get('state');
+        if (raw3) {
+          const st3 = JSON.parse(raw3);
+          const o3 = (st3.db.orders || []).find(x => String(x.order_no) === String(orderNo));
+          if (o3 && o3.status !== 'delivered') {
+            o3.status = 'rejected';
+            o3.luban_released = true;
+            o3.luban_error = o3.luban_error || '客户主动释放号码';
+            st3.rev = (st3.rev || 0) + 1;
+            await env.YUNFAKA_KV.put('state', JSON.stringify(st3));
+          }
+        }
+      } catch (e) {}
+      return jsonOk(upstream, env, request);
     }
 
     return jsonError('未知 action: ' + String(action).slice(0, 30), 400, env, request);

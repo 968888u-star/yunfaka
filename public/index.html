@@ -1549,11 +1549,19 @@ function renderOrderView(orderNo, secret){
     } else if (o.status === 'rejected'){
       body = `<div class="card panel" style="background:#f1f5f9;border-color:#cbd5e1"><b>号码已释放</b><p class="muted" style="font-size:13px;margin:6px 0 0">${esc(o.luban_error || '接码已结束')}</p></div>`;
     } else if (o.status === 'delivered' && o.luban_code){
+      var canAgain = !!(o.luban_phone || o.luban_number);
+      var againBtn = canAgain ? `<button class="btn ghost" onclick="lubanReceiveAgain('${esc(o.order_no)}')">再次接收验证码</button>` : '';
+      var fullSms = o.luban_sms && o.luban_sms !== o.luban_code ? `<div class="muted" style="font-size:12px;margin-top:8px;word-break:break-all">完整短信：${esc(o.luban_sms)}</div>` : '';
       body = `<div class="card panel" style="background:#f0fdf4;border-color:#86efac;padding:20px">
-        <div style="font-size:15px;font-weight:700;margin-bottom:10px">🎉 收到验证码</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:10px">收到验证码（已自动复制）</div>
         <div class="codebox" style="margin-bottom:14px"><span class="mono" style="font-size:24px;font-weight:800">${esc(o.luban_code)}</span>
         <button data-v="${esc(o.luban_code)}" onclick="copyText(this.dataset.v,this)">复制</button></div>
         <div class="muted" style="font-size:12px">接收号码：${esc(o.luban_number || o.luban_phone || '-')}</div>
+        ${fullSms}
+        <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+          ${againBtn}
+          <button class="btn ghost" onclick="lubanRelease('${esc(o.order_no)}')">释放号码</button>
+        </div>
       </div>`;
     } else if (o.status === 'processing' || o.status === 'waiting_sms'){
       const hasNum = !!(o.luban_number || o.luban_phone);
@@ -3225,10 +3233,13 @@ function lubanPollSms(orderNo, attempt){
     var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
     var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
     if(d && d.code===0 && sms){
+      var code = (window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : String(sms));
       o2.luban_sms = String(sms);
-      o2.luban_code = o2.luban_sms;
+      o2.luban_code = code;
       o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); saveDB(db2);
-      if(window.toast) toast('收到验证码：'+o2.luban_sms,'success');
+      window.yfAutoCopy && window.yfAutoCopy(code);
+      if(window.toast) toast('验证码 '+code+' 已自动复制','success');
+      if(window.yfStrongAlert) window.yfStrongAlert(code);
       if(location.hash.indexOf('#/order/')===0 && window.route) route();
       return;
     }
@@ -3246,10 +3257,13 @@ function lubanCommonPoll(orderNo, attempt){
     var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
     var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
     if(d && d.code===0 && sms){
+      var code2 = (window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : String(sms));
       o2.luban_sms = String(sms);
-      o2.luban_code = o2.luban_sms;
+      o2.luban_code = code2;
       o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); saveDB(db2);
-      if(window.toast) toast('收到验证码：'+o2.luban_sms,'success');
+      window.yfAutoCopy && window.yfAutoCopy(code2);
+      if(window.toast) toast('验证码 '+code2+' 已自动复制','success');
+      if(window.yfStrongAlert) window.yfStrongAlert(code2);
       if(location.hash.indexOf('#/order/')===0 && window.route) route();
       return;
     }
@@ -3268,9 +3282,41 @@ function lubanRelease(orderNo){
   if(__lubanPollTimers[orderNo]){ clearTimeout(__lubanPollTimers[orderNo]); delete __lubanPollTimers[orderNo]; }
   if(location.hash.indexOf('#/order/')===0 && window.route) route();
 }
+function lubanReceiveAgain(orderNo){
+  var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
+  o.status = 'processing'; o.luban_code = ''; o.luban_sms = ''; saveDB(db);
+  if(window.toast) toast('已继续监听新验证码…','info');
+  if(o.luban_type==='common') lubanCommonPoll(orderNo, 0);
+  else lubanPollSms(orderNo, 0);
+  if(window.startSmartPolling) window.startSmartPolling(orderNo);
+  if(location.hash.indexOf('#/order/')===0 && window.route) route();
+}
+function lubanReleaseSilent(orderNo){
+  var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
+  if(o.luban_type==='common'){ if(window.__lubanFetch) window.__lubanFetch('common_release', {phone: o.luban_phone||'', __orderNo: orderNo}); }
+  else { if(window.__lubanFetch) window.__lubanFetch('change_status', {request_id: o.luban_request_id||'', status: 'reject', __orderNo: orderNo}); }
+  o.status = 'rejected'; o.luban_released = true; saveDB(db);
+  if(window._p50Timers && window._p50Timers[orderNo] && window.stopTimers) window.stopTimers(orderNo);
+  if(location.hash.indexOf('#/order/')===0 && window.route) route();
+}
 function lubanManualCheck(orderNo){
   var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
-  if(window.toast) toast('正在检查…','info');
+  var hasNum = !!(o.luban_phone || o.luban_number);
+  if(!hasNum){
+    if(window.toast) toast('尚未取到号码，正在重新分配…','info');
+    if(o.luban_type==='common'){
+      var params = { keyword: o.luban_keyword || '' };
+      if(o.luban_country) params.country = o.luban_country;
+      if(o.luban_phone) params.phone = o.luban_phone;
+      if(o.luban_cardtype && o.luban_cardtype!=='全部') params.cardType = o.luban_cardtype;
+      if(o.luban_filter==='是') params.filter = '1';
+      lubanStartCommon(orderNo, params);
+    } else {
+      lubanStartSession(orderNo);
+    }
+    return;
+  }
+  if(window.toast) toast('正在查询验证码…','info');
   if(o.luban_type==='common') lubanCommonPoll(orderNo, 0);
   else lubanPollSms(orderNo, 0);
 }
@@ -9677,6 +9723,29 @@ function stopTimers(orderNo) {
     }
 }
 
+
+// —— 接码辅助：从短信文本提取4-8位验证码，自动复制 ——
+function yfExtractSmsCode(sms){
+  var s = String(sms || '');
+  var m = s.match(/(?<!\d)(\d{4,8})(?!\d)/);
+  return m ? m[1] : s;
+}
+function yfAutoCopy(text){
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(String(text)).catch(function(){});
+      return true;
+    }
+  } catch(e) {}
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = String(text); ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    return true;
+  } catch(e) { return false; }
+}
+
 function startSmartPolling(orderNo) {
     if (window._p50Timers[orderNo]) return; 
     window._p50Timers[orderNo] = { stateTimer: null, smsTimer: null };
@@ -9712,6 +9781,48 @@ function startSmartPolling(orderNo) {
                 }
                 return;
             }
+            // —— 号码从无到有：提示 + 自动复制 ——
+            var nowHasNum = !!(o.luban_phone || o.luban_number);
+            if (nowHasNum && !window._p50NotifiedNum) {
+                window._p50NotifiedNum = {};
+            }
+            if (nowHasNum && !window._p50NotifiedNum[orderNo]) {
+                window._p50NotifiedNum[orderNo] = true;
+                var numVal = o.luban_number || o.luban_phone;
+                if (window.toast) window.toast('已分配号码：' + numVal + '，已自动复制', 'success');
+                try { if (navigator.clipboard) navigator.clipboard.writeText(numVal); } catch(e) {}
+                if (location.hash === '#/order/' + orderNo && window.route) window.route();
+            }
+            // —— 倒计时结束自动静默释放号码 ——
+            if (nowHasNum && o.luban_deadline && Date.now() > o.luban_deadline && o.status === 'processing') {
+                if (!window._p50AutoReleased) window._p50AutoReleased = {};
+                if (!window._p50AutoReleased[orderNo]) {
+                    window._p50AutoReleased[orderNo] = true;
+                    if (window.toast) window.toast('接码超时，号码已自动释放', 'warn');
+                    if (window.lubanReleaseSilent) window.lubanReleaseSilent(orderNo);
+                }
+            }
+            // —— 处理中超 60 秒仍无号码：自动重试取号一次 ——
+            if (o.status === 'processing' && !nowHasNum) {
+                if (!window._p50RetryAt) window._p50RetryAt = {};
+                if (!window._p50RetryAt[orderNo]) {
+                    var created = o.created_at ? new Date(String(o.created_at).replace(' ', 'T')).getTime() : Date.now();
+                    if (Date.now() - created > 60000) {
+                        window._p50RetryAt[orderNo] = Date.now();
+                        if (window.toast) window.toast('号码分配超时，正在自动重试…', 'info');
+                        if (o.luban_type === 'common') {
+                            var rp = { keyword: o.luban_keyword || '' };
+                            if (o.luban_country) rp.country = o.luban_country;
+                            if (o.luban_phone) rp.phone = o.luban_phone;
+                            if (o.luban_cardtype && o.luban_cardtype !== '全部') rp.cardType = o.luban_cardtype;
+                            if (o.luban_filter === '是') rp.filter = '1';
+                            if (window.lubanStartCommon) window.lubanStartCommon(orderNo, rp);
+                        } else {
+                            if (window.lubanStartSession) window.lubanStartSession(orderNo);
+                        }
+                    }
+                }
+            }
        if (o.status === 'processing' && (o.luban_phone || o.luban_request_id)) {
        if (!window._p50Timers[orderNo].smsTimer) {
         window._p50Timers[orderNo].smsTimer = setInterval(() => checkSms(o), 6000); 
@@ -9734,11 +9845,20 @@ function startSmartPolling(orderNo) {
             
             if (sms) {
                 stopTimers(o.order_no); 
+                var code = window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : String(sms);
                 await fetch('/api/public', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ action: 'update_luban_sms', order_no: o.order_no, sms: String(sms) })
+                    body: JSON.stringify({ action: 'update_luban_sms', order_no: o.order_no, sms: String(sms), code: code })
                 });
-                if (window.yfStrongAlert) window.yfStrongAlert(sms);
+                // 同步本地状态
+                try {
+                    var ldb = window.loadDB();
+                    var lo = (ldb.orders || []).find(function(x){ return x.order_no === o.order_no; });
+                    if (lo) { lo.luban_sms = String(sms); lo.luban_code = code; lo.status = 'delivered'; lo.delivered_at = lo.delivered_at || new Date().toISOString().slice(0,19).replace('T',' '); window.saveDB(ldb); }
+                } catch(e) {}
+                window.yfAutoCopy && window.yfAutoCopy(code);
+                if (window.toast) window.toast('验证码 ' + code + ' 已自动复制', 'success');
+                if (window.yfStrongAlert) window.yfStrongAlert(code + '\n\n<small style="font-size:12px;color:#666">完整短信：' + String(sms).replace(/</g,'&lt;') + '</small>');
                 if (window.route) window.route();
             }
         } catch(e) {}

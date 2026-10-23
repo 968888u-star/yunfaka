@@ -38,12 +38,12 @@ export async function onRequest(context) {
       if (!orderNo || !sms) return jsonError('参数缺失', 400, env, request);
       
       const o = (db.orders || []).find(x => x.order_no === orderNo);
-      if (!o || o.source !== 'luban' || o.status === 'delivered') return jsonOk({ ok: true }, env, request);
+      if (!o || o.source !== 'luban') return jsonOk({ ok: true }, env, request);
 
       o.luban_sms = sms;
-      o.luban_code = sms;
+      o.luban_code = String(body.code || sms).slice(0, 30); // 优先用前端提取的验证码数字
       o.status = 'delivered';
-      o.delivered_at = nowStr();
+      if (!o.delivered_at) o.delivered_at = nowStr();
 
       state.rev = (state.rev || 0) + 1;
       await env.YUNFAKA_KV.put('state', JSON.stringify(state));

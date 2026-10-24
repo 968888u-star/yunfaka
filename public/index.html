@@ -1572,7 +1572,7 @@ function renderOrderView(orderNo, secret){
       body = `<div class="session-box">
         <div class="lbl">接收号码（请使用此号码注册）</div>
         <div class="num">${esc(o.luban_number || o.luban_phone || '正在分配中…')}</div>
-        <div class="timer">${timerText}</div>
+        <div class="timer" id="luban-timer-${esc(o.order_no)}" data-deadline="${deadline}" data-hasnum="${hasNum?'1':'0'}">${timerText}</div>
       </div>
       <div class="row" style="justify-content:flex-end;gap:8px;margin-bottom:14px">
         <button class="btn ghost" onclick="lubanRelease('${esc(o.order_no)}')">释放号码</button>
@@ -3321,13 +3321,23 @@ function lubanCommonPoll(orderNo, attempt){
   });
 }
 function lubanRelease(orderNo){
-  // 两步确认防误触（替代 confirm，移动端 confirm 常被拦截导致"点击没反应"）
+  // 两步确认防误触（按钮文字直接变化，比toast更明显）
   if(!window._releaseConfirm || window._releaseConfirm !== orderNo){
     window._releaseConfirm = orderNo;
-    if(window.toast) toast('再次点击「释放号码」确认释放','warn');
-    setTimeout(function(){ if(window._releaseConfirm === orderNo) window._releaseConfirm = null; }, 3000);
+    // 把页面上所有"释放号码"按钮文字改为"确认释放？"，3秒后恢复
+    var btns = document.querySelectorAll('button');
+    for(var bi=0;bi<btns.length;bi++){ if(btns[bi].textContent.indexOf('释放号码')>=0){ btns[bi].textContent='⚠️ 确认释放？'; btns[bi].style.background='#fef2f2'; btns[bi].style.color='#dc2626'; btns[bi].style.borderColor='#dc2626'; } }
+    if(window.toast) toast('按钮已变为「确认释放？」，3秒内再次点击确认','warn');
+    setTimeout(function(){
+      if(window._releaseConfirm === orderNo) window._releaseConfirm = null;
+      var btns2 = document.querySelectorAll('button');
+      for(var bj=0;bj<btns2.length;bj++){ if(btns2[bj].textContent.indexOf('确认释放')>=0){ btns2[bj].textContent='释放号码'; btns2[bj].style.background=''; btns2[bj].style.color=''; btns2[bj].style.borderColor=''; } }
+    }, 3000);
     return;
   }
+  // 恢复按钮文字
+  var btnsR = document.querySelectorAll('button');
+  for(var bk=0;bk<btnsR.length;bk++){ if(btnsR[bk].textContent.indexOf('确认释放')>=0){ btnsR[bk].textContent='释放号码'; btnsR[bk].style.background=''; btnsR[bk].style.color=''; btnsR[bk].style.borderColor=''; } }
   window._releaseConfirm = null;
   var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
   // 调用后端释放（catch 兜底，即使上游失败后端也会同步状态）
@@ -9821,6 +9831,27 @@ function yfAutoCopy(text){
     document.execCommand('copy'); document.body.removeChild(ta);
     return true;
   } catch(e) { return false; }
+}
+
+
+// —— 接码倒计时每秒自动刷新（修复倒计时卡住不动）——
+if (!window.__lubanTimerStarted) {
+  window.__lubanTimerStarted = true;
+  setInterval(function(){
+    try {
+      var els = document.querySelectorAll('[id^="luban-timer-"]');
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i];
+        var deadline = parseInt(el.getAttribute('data-deadline')) || 0;
+        var hasNum = el.getAttribute('data-hasnum') === '1';
+        if (!hasNum) { el.textContent = '号码分配中，请稍候（可点立即检查重试）'; continue; }
+        if (!deadline) { el.textContent = '剩余 20分00秒'; continue; }
+        var remain = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+        var mins = Math.floor(remain / 60); var secs = remain % 60;
+        el.textContent = '剩余 ' + mins + '分' + (secs < 10 ? '0' + secs : secs) + '秒';
+      }
+    } catch(e) {}
+  }, 1000);
 }
 
 function startSmartPolling(orderNo) {

@@ -166,8 +166,15 @@ export async function onRequest(context) {
       let r;
       if (action === 'get_sms') {
         const requestId = url.searchParams.get('request_id') || order.luban_request_id || '';
-        if (!requestId) return jsonError('缺少 request_id（取号可能未成功）', 400, env, request);
-        r = await fetch(buildUrl(apikey, 'getSms', { request_id: requestId }));
+        if (requestId) {
+          r = await fetch(buildUrl(apikey, 'getSms', { request_id: requestId }));
+        } else {
+          // 兜底：无 request_id 时用 phone + 服务名/关键词走通用查短信接口
+          const phone = url.searchParams.get('phone') || order.luban_phone || '';
+          if (!phone) return jsonError('缺少 request_id 和 phone（取号可能未成功）', 400, env, request);
+          const keyword = url.searchParams.get('keyword') || order.luban_service_name || order.luban_keyword || '';
+          r = await fetch(buildUrl(apikey, 'getKeywordSms', { phone, keyword }));
+        }
       } else {
         const phone = url.searchParams.get('phone') || order.luban_phone || '';
         const keyword = url.searchParams.get('keyword') || order.luban_keyword || '';
@@ -228,7 +235,7 @@ export async function onRequest(context) {
     // —— 取号代理（前端兜底取号，之前缺失导致 400） ——
     if (action === 'request_number' || action === 'common_request') {
       // 已有号码直接返回
-      if (order.luban_phone) {
+      if (order.luban_phone || order.luban_request_id) {
         return jsonOk({ ok: true, code: 0, data: { phone: order.luban_phone, request_id: order.luban_request_id || '' }, msg: 'already_have' }, env, request);
       }
       const { phone, requestId } = await fetchNumberFromLuban(env, order);
@@ -326,7 +333,7 @@ export async function processOrderLuban(env, orderNo) {
     const state = JSON.parse(raw);
     const order = (state.db.orders || []).find(o => String(o.order_no) === String(orderNo));
     if (!order || order.source !== 'luban') return { ok: false, msg: 'INVALID_ORDER' };
-    if (order.luban_phone) return { ok: true, msg: 'ALREADY_HAVE_NUMBER' };
+    if (order.luban_phone || order.luban_request_id) return { ok: true, msg: 'ALREADY_HAVE_NUMBER' };
 
     const { phone, requestId } = await fetchNumberFromLuban(env, order);
     applyNumberToOrder(order, phone, requestId);

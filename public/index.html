@@ -3192,8 +3192,32 @@ function lubanStartSession(orderNo){
       if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
       lubanPollSms(orderNo, 0);
     } else {
-      o2.status = 'luban_error'; o2.luban_error = '取号失败，请稍后重试或联系客服'; saveDB(db2);
-      if(window.toast) toast('取号失败：'+o2.luban_error,'error');
+      var errMsg = (d && d.msg) || '未知错误';
+      // P28异步同步时序：订单可能还没同步到后端，自动重试3次
+      if (errMsg.indexOf('订单不存在') >= 0 || errMsg.indexOf('未支付') >= 0) {
+        window.__lubanRetryCnt = window.__lubanRetryCnt || {};
+        var cnt = window.__lubanRetryCnt[orderNo] || 0;
+        if (cnt < 3) {
+          window.__lubanRetryCnt[orderNo] = cnt + 1;
+          if(window.toast) toast('订单同步中，2秒后自动重试取号（第'+(cnt+1)+'次）…','info');
+          var __isCommon = (o2.luban_type === 'common');
+          setTimeout(function(){
+            if (__isCommon) {
+              var rp = { keyword: o2.luban_keyword || '' };
+              if(o2.luban_country) rp.country = o2.luban_country;
+              if(o2.luban_phone) rp.phone = o2.luban_phone;
+              if(o2.luban_cardtype && o2.luban_cardtype!=='全部') rp.cardType = o2.luban_cardtype;
+              if(o2.luban_filter==='是') rp.filter = '1';
+              lubanStartCommon(orderNo, rp);
+            } else {
+              lubanStartSession(orderNo);
+            }
+          }, 2000);
+          return;
+        }
+      }
+      o2.status = 'luban_error'; o2.luban_error = '取号失败：' + String(errMsg).slice(0,100); saveDB(db2);
+      if(window.toast) toast('取号失败：'+String(errMsg).slice(0,60),'error');
     }
     if(location.hash.indexOf('#/order/')===0 && window.route) route();
   }).catch(function(e){ if(window.toast) toast('取号网络错误：'+e.message,'error'); });
@@ -3218,8 +3242,32 @@ function lubanStartCommon(orderNo, params){
       if(window.toast) toast('已取到号码：'+o2.luban_phone,'success');
       lubanCommonPoll(orderNo, 0);
     } else {
-      o2.status = 'luban_error'; o2.luban_error = '取号失败，请稍后重试或联系客服'; saveDB(db2);
-      if(window.toast) toast('取号失败：'+o2.luban_error,'error');
+      var errMsg = (d && d.msg) || '未知错误';
+      // P28异步同步时序：订单可能还没同步到后端，自动重试3次
+      if (errMsg.indexOf('订单不存在') >= 0 || errMsg.indexOf('未支付') >= 0) {
+        window.__lubanRetryCnt = window.__lubanRetryCnt || {};
+        var cnt = window.__lubanRetryCnt[orderNo] || 0;
+        if (cnt < 3) {
+          window.__lubanRetryCnt[orderNo] = cnt + 1;
+          if(window.toast) toast('订单同步中，2秒后自动重试取号（第'+(cnt+1)+'次）…','info');
+          var __isCommon = (o2.luban_type === 'common');
+          setTimeout(function(){
+            if (__isCommon) {
+              var rp = { keyword: o2.luban_keyword || '' };
+              if(o2.luban_country) rp.country = o2.luban_country;
+              if(o2.luban_phone) rp.phone = o2.luban_phone;
+              if(o2.luban_cardtype && o2.luban_cardtype!=='全部') rp.cardType = o2.luban_cardtype;
+              if(o2.luban_filter==='是') rp.filter = '1';
+              lubanStartCommon(orderNo, rp);
+            } else {
+              lubanStartSession(orderNo);
+            }
+          }, 2000);
+          return;
+        }
+      }
+      o2.status = 'luban_error'; o2.luban_error = '取号失败：' + String(errMsg).slice(0,100); saveDB(db2);
+      if(window.toast) toast('取号失败：'+String(errMsg).slice(0,60),'error');
     }
     if(location.hash.indexOf('#/order/')===0 && window.route) route();
   }).catch(function(e){ if(window.toast) toast('取号网络错误：'+e.message,'error'); });
@@ -3232,8 +3280,8 @@ function lubanPollSms(orderNo, attempt){
   __lubanFetch('get_sms', {request_id: o.luban_request_id, __orderNo: orderNo}).then(function(d){
     var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
     var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
-    if(d && d.code===0 && sms){
-      var code = (window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : String(sms));
+    var code = (window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : '');
+    if(d && d.code===0 && sms && code){
       o2.luban_sms = String(sms);
       o2.luban_code = code;
       o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); saveDB(db2);
@@ -3256,8 +3304,8 @@ function lubanCommonPoll(orderNo, attempt){
   __lubanFetch('common_get_sms', {phone: o.luban_phone, keyword: o.luban_keyword||'', __orderNo: orderNo}).then(function(d){
     var db2 = loadDB(); var o2 = db2.orders.find(function(x){return x.order_no===orderNo;}); if(!o2) return;
     var sms = d && d.data && (d.data.sms || d.data.code || d.data.message || d.data.text);
-    if(d && d.code===0 && sms){
-      var code2 = (window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : String(sms));
+    var code2 = (window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : '');
+    if(d && d.code===0 && sms && code2){
       o2.luban_sms = String(sms);
       o2.luban_code = code2;
       o2.status = 'delivered'; o2.delivered_at = o2.delivered_at || now(); saveDB(db2);
@@ -9757,7 +9805,7 @@ function stopTimers(orderNo) {
 function yfExtractSmsCode(sms){
   var s = String(sms || '');
   var m = s.match(/(?<!\d)(\d{4,8})(?!\d)/);
-  return m ? m[1] : s;
+  return m ? m[1] : ''; // 提取不到纯数字验证码时返回空，继续轮询（避免把"号码已过期"等错误消息当验证码）
 }
 function yfAutoCopy(text){
   try {
@@ -9872,24 +9920,24 @@ function startSmartPolling(orderNo) {
             let r = await fetch(url).then(res => res.json());
             let sms = r.data && (r.data.sms || r.data.code || r.data.message || r.data.text);
             
-            if (sms) {
+            var code2 = window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : '';
+            if (sms && code2) {
                 stopTimers(o.order_no); 
-                var code = window.yfExtractSmsCode ? window.yfExtractSmsCode(sms) : String(sms);
                 await fetch('/api/public', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ action: 'update_luban_sms', order_no: o.order_no, sms: String(sms), code: code })
+                    body: JSON.stringify({ action: 'update_luban_sms', order_no: o.order_no, sms: String(sms), code: code2 })
                 });
-                // 同步本地状态
                 try {
                     var ldb = window.loadDB();
                     var lo = (ldb.orders || []).find(function(x){ return x.order_no === o.order_no; });
-                    if (lo) { lo.luban_sms = String(sms); lo.luban_code = code; lo.status = 'delivered'; lo.delivered_at = lo.delivered_at || new Date().toISOString().slice(0,19).replace('T',' '); window.saveDB(ldb); }
+                    if (lo) { lo.luban_sms = String(sms); lo.luban_code = code2; lo.status = 'delivered'; lo.delivered_at = lo.delivered_at || new Date().toISOString().slice(0,19).replace('T',' '); window.saveDB(ldb); }
                 } catch(e) {}
-                window.yfAutoCopy && window.yfAutoCopy(code);
-                if (window.toast) window.toast('验证码 ' + code + ' 已自动复制', 'success');
-                if (window.yfStrongAlert) window.yfStrongAlert(code + '\n\n<small style="font-size:12px;color:#666">完整短信：' + String(sms).replace(/</g,'&lt;') + '</small>');
+                window.yfAutoCopy && window.yfAutoCopy(code2);
+                if (window.toast) window.toast('验证码 ' + code2 + ' 已自动复制', 'success');
+                if (window.yfStrongAlert) window.yfStrongAlert(code2 + '\n\n<small style="font-size:12px;color:#666">完整短信：' + String(sms).replace(/</g,'&lt;') + '</small>');
                 if (window.route) window.route();
             }
+            // sms 存在但提取不到数字（上游错误消息），忽略继续轮询
         } catch(e) {}
     }
 }

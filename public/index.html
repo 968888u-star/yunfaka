@@ -9858,6 +9858,31 @@ function startSmartPolling(orderNo) {
                 }
                 return;
             }
+            // —— 兜底超时清理（旧订单可能无 luban_deadline 字段）——
+            if (o.status === 'processing') {
+                var ctime = o.created_at ? new Date(String(o.created_at).replace(' ', 'T')).getTime() : 0;
+                var ageMin = ctime ? (Date.now() - ctime) / 60000 : 0;
+                if (!nowHasNum && ageMin > 10 && !window._p50TimedOut) { window._p50TimedOut = {}; }
+                if (!nowHasNum && ageMin > 10 && !window._p50TimedOut[orderNo]) {
+                    window._p50TimedOut[orderNo] = true;
+                    if (window.toast) window.toast('取号超时，订单已标记失败，请重新下单', 'error');
+                    try {
+                        var tdb = window.loadDB();
+                        var to = (tdb.orders || []).find(function(x){ return x.order_no === orderNo; });
+                        if (to) { to.status = 'luban_error'; to.luban_error = '取号超时（超过10分钟未分配到号码）'; window.saveDB(tdb); }
+                    } catch(e) {}
+                    stopTimers(orderNo);
+                    if (location.hash === '#/order/' + orderNo && window.route) window.route();
+                    return;
+                }
+                if (nowHasNum && ageMin > 30 && !window._p50AutoReleased) { window._p50AutoReleased = {}; }
+                if (nowHasNum && ageMin > 30 && !window._p50AutoReleased[orderNo]) {
+                    window._p50AutoReleased[orderNo] = true;
+                    if (window.toast) window.toast('接码超时，号码已自动释放', 'warn');
+                    if (window.lubanReleaseSilent) window.lubanReleaseSilent(orderNo);
+                    return;
+                }
+            }
             // —— 号码从无到有：提示 + 自动复制 ——
             var nowHasNum = !!(o.luban_phone || o.luban_number);
             if (nowHasNum && !window._p50NotifiedNum) {

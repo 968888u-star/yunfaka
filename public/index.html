@@ -3273,13 +3273,42 @@ function lubanCommonPoll(orderNo, attempt){
   });
 }
 function lubanRelease(orderNo){
-  if(!confirm('确定释放该号码？释放后无法继续接收验证码。')) return;
+  // 两步确认防误触（替代 confirm，移动端 confirm 常被拦截导致"点击没反应"）
+  if(!window._releaseConfirm || window._releaseConfirm !== orderNo){
+    window._releaseConfirm = orderNo;
+    if(window.toast) toast('再次点击「释放号码」确认释放','warn');
+    setTimeout(function(){ if(window._releaseConfirm === orderNo) window._releaseConfirm = null; }, 3000);
+    return;
+  }
+  window._releaseConfirm = null;
   var db = loadDB(); var o = db.orders.find(function(x){return x.order_no===orderNo;}); if(!o) return;
-  if(o.luban_type==='common'){ __lubanFetch('common_release', {phone: o.luban_phone||'', __orderNo: orderNo}); }
-  else { __lubanFetch('change_status', {request_id: o.luban_request_id||'', status: 'reject', __orderNo: orderNo}); }
+  // 调用后端释放（catch 兜底，即使上游失败后端也会同步状态）
+  try {
+    if(o.luban_type==='common'){ __lubanFetch('common_release', {phone: o.luban_phone||'', __orderNo: orderNo}).catch(function(){}); }
+    else { __lubanFetch('change_status', {request_id: o.luban_request_id||'', status: 'reject', __orderNo: orderNo}).catch(function(){}); }
+  } catch(e) {}
+  // 立即更新本地状态
   o.status = 'rejected'; o.luban_released = true; saveDB(db);
   if(window.toast) toast('已释放号码','success');
-  if(__lubanPollTimers[orderNo]){ clearTimeout(__lubanPollTimers[orderNo]); delete __lubanPollTimers[orderNo]; }
+  // 停止所有轮询
+  if(__lubanPollTimers && __lubanPollTimers[orderNo]){ clearTimeout(__lubanPollTimers[orderNo]); delete __lubanPollTimers[orderNo]; }
+  if(window._p50Timers && window._p50Timers[orderNo]){
+    if(window._p50Timers[orderNo].stateTimer) clearInterval(window._p50Timers[orderNo].stateTimer);
+    if(window._p50Timers[orderNo].smsTimer) clearInterval(window._p50Timers[orderNo].smsTimer);
+    delete window._p50Timers[orderNo];
+  }
+  // 2秒后强制拉取后端状态确认同步（防止 P50 覆盖）
+  setTimeout(function(){
+    try {
+      fetch('/api/state?t=' + Date.now(), {cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+        if(d && d.ok && d.db){
+          window.__DB = d.db;
+          try { localStorage.setItem('yunfaka_db_v15', JSON.stringify(d.db)); } catch(e){}
+          if(location.hash.indexOf('#/order/')===0 && window.route) window.route();
+        }
+      }).catch(function(){});
+    } catch(e) {}
+  }, 1500);
   if(location.hash.indexOf('#/order/')===0 && window.route) route();
 }
 function lubanReceiveAgain(orderNo){

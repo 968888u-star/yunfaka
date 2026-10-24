@@ -248,16 +248,20 @@ export async function onRequest(context) {
     if (action === 'change_status') {
       const requestId = url.searchParams.get('request_id') || order.luban_request_id || '';
       const status = url.searchParams.get('status') || 'reject';
-      if (!requestId) return jsonError('缺少 request_id', 400, env, request);
-      const r = await fetch(buildUrl(apikey, 'setStatus', { request_id: requestId, status }));
-      const upstream = await r.json();
-      // 释放成功后同步订单状态，避免前端刷新后回到 processing
+      // 无论上游释放是否成功，都同步订单状态为 rejected（号码最多超时自动释放，状态不同步会导致前端覆盖）
+      let upstream = { ok: true, msg: 'released' };
+      if (requestId) {
+        try {
+          const r = await fetch(buildUrl(apikey, 'setStatus', { request_id: requestId, status }));
+          upstream = await r.json();
+        } catch (e) { upstream = { ok: true, msg: 'upstream_failed_but_state_updated' }; }
+      }
       try {
         const raw3 = await env.YUNFAKA_KV.get('state');
         if (raw3) {
           const st3 = JSON.parse(raw3);
           const o3 = (st3.db.orders || []).find(x => String(x.order_no) === String(orderNo));
-          if (o3 && o3.status !== 'delivered') {
+          if (o3 && o3.status !== 'rejected') {
             o3.status = 'rejected';
             o3.luban_released = true;
             o3.luban_error = o3.luban_error || '客户主动释放号码';
@@ -276,13 +280,13 @@ export async function onRequest(context) {
         const r = await fetch(buildUrl(apikey, 'releaseNumber', { phone }));
         upstream = await r.json();
       } catch (e) {}
-      // 同步订单状态
+      // 同步订单状态（无论当前状态，释放后统一 rejected）
       try {
         const raw3 = await env.YUNFAKA_KV.get('state');
         if (raw3) {
           const st3 = JSON.parse(raw3);
           const o3 = (st3.db.orders || []).find(x => String(x.order_no) === String(orderNo));
-          if (o3 && o3.status !== 'delivered') {
+          if (o3 && o3.status !== 'rejected') {
             o3.status = 'rejected';
             o3.luban_released = true;
             o3.luban_error = o3.luban_error || '客户主动释放号码';

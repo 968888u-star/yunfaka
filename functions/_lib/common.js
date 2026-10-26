@@ -171,7 +171,9 @@ export function sanitizeDbForPublic(db) {
       'home_entry_luban_title', 'home_entry_luban_sub',
       'home_entry_smm_title', 'home_entry_smm_sub',
       'smm_categories', 'smm_usage_text', 'smm_hero_title', 'smm_hero_subtitle',
-      'luban_usage_text', 'luban_markup', 'luban_common_cost'
+      'luban_usage_text', 'luban_markup', 'luban_common_cost',
+      'smm_auto_sync', 'smm_sync_interval_hours', 'smm_last_sync', 'smm_cost_currency',
+      'luban_auto_sync', 'luban_sync_interval_hours', 'luban_last_sync'
     ];
     publicKeys.forEach(k => { if (d.config[k] !== undefined) pub[k] = d.config[k]; });
     if (d.config.pay_usdt_address) pub.pay_usdt_address = d.config.pay_usdt_address;
